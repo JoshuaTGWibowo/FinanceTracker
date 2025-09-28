@@ -1,4 +1,4 @@
-import { memo, useMemo } from "react";
+import { Fragment, memo, useMemo } from "react";
 import { View, ViewStyle } from "react-native";
 import Svg, { Circle, Defs, LinearGradient, Path, Stop, Text as SvgText } from "react-native-svg";
 
@@ -160,7 +160,7 @@ const TrendLineChartComponent = ({ incomeSeries, expenseSeries, style }: TrendLi
         ))}
 
         {pointsMeta.map((meta) => (
-          <>
+          <Fragment key={`points-${meta.label}`}>
             {meta.income && (
               <Circle
                 key={`income-${meta.label}`}
@@ -183,7 +183,7 @@ const TrendLineChartComponent = ({ incomeSeries, expenseSeries, style }: TrendLi
                 strokeWidth={1.5}
               />
             )}
-          </>
+          </Fragment>
         ))}
       </Svg>
     </View>
