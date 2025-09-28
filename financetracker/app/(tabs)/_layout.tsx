@@ -1,10 +1,12 @@
-import { Tabs } from "expo-router";
+import { Tabs, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import { Platform } from "react-native";
+import { Platform, Pressable, StyleSheet, View } from "react-native";
 
 import { colors } from "../../theme";
 
 export default function TabsLayout() {
+  const router = useRouter();
+
   return (
     <Tabs
       screenOptions={{
@@ -17,10 +19,10 @@ export default function TabsLayout() {
           borderTopWidth: 0,
           elevation: 0,
           shadowOpacity: 0,
-          height: Platform.select({ ios: 90, default: 70 }),
-          paddingHorizontal: 24,
-          paddingTop: 14,
-          paddingBottom: Platform.select({ ios: 26, default: 16 }),
+          height: Platform.select({ ios: 82, default: 64 }),
+          paddingHorizontal: 16,
+          paddingTop: 10,
+          paddingBottom: Platform.select({ ios: 20, default: 12 }),
         },
         tabBarLabelStyle: {
           fontSize: 12,
@@ -48,6 +50,29 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
+        name="add"
+        options={{
+          href: null,
+          tabBarButton: ({ accessibilityState, ...rest }) => (
+            <Pressable
+              {...rest}
+              accessibilityRole="button"
+              accessibilityLabel="Add transaction"
+              accessibilityState={accessibilityState}
+              style={({ pressed }) => [
+                styles.addButton,
+                pressed && styles.addButtonPressed,
+              ]}
+              onPress={() => router.push("/transactions/new")}
+            >
+              <View style={styles.addButtonInner}>
+                <Ionicons name="add" size={24} color={colors.text} />
+              </View>
+            </Pressable>
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="leaderboard"
         options={{
           title: "Leaderboard",
@@ -68,3 +93,26 @@ export default function TabsLayout() {
     </Tabs>
   );
 }
+
+const styles = StyleSheet.create({
+  addButton: {
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  addButtonPressed: {
+    transform: [{ scale: 0.95 }],
+  },
+  addButtonInner: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: colors.primary,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: colors.primary,
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 5,
+  },
+});

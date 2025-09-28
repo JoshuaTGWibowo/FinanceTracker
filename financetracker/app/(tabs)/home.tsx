@@ -1,7 +1,6 @@
 import { useMemo, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import dayjs from "dayjs";
 
@@ -22,7 +21,6 @@ const formatCurrency = (
   }).format(value);
 
 export default function HomeScreen() {
-  const router = useRouter();
   const transactions = useFinanceStore((state) => state.transactions);
   const profile = useFinanceStore((state) => state.profile);
   const [spendingPeriod, setSpendingPeriod] = useState<"week" | "month">("week");
@@ -36,13 +34,16 @@ export default function HomeScreen() {
     [transactions],
   );
 
-  const { incomeThisMonth, expenseThisMonth } = useMemo(() => {
+  const { incomeThisMonth, expenseThisMonth, currentMonthTransactions } = useMemo(() => {
     const startOfMonth = dayjs().startOf("month");
     return transactions.reduce(
       (acc, transaction) => {
-        if (dayjs(transaction.date).isBefore(startOfMonth)) {
+        const date = dayjs(transaction.date);
+        if (date.isBefore(startOfMonth)) {
           return acc;
         }
+
+        acc.currentMonthTransactions.push(transaction);
 
         if (transaction.type === "income") {
           acc.incomeThisMonth += transaction.amount;
@@ -52,7 +53,7 @@ export default function HomeScreen() {
 
         return acc;
       },
-      { incomeThisMonth: 0, expenseThisMonth: 0 },
+      { incomeThisMonth: 0, expenseThisMonth: 0, currentMonthTransactions: [] as typeof transactions },
     );
   }, [transactions]);
 
@@ -134,6 +135,31 @@ export default function HomeScreen() {
 
   const spendingLabel = spendingPeriod === "week" ? "week" : "month";
 
+  const financialSnapshot = useMemo(() => {
+    const daysInPeriod = Math.max(dayjs().diff(dayjs().startOf("month"), "day") + 1, 1);
+    const averageDailySpend = expenseThisMonth / daysInPeriod;
+
+    const largestExpense = currentMonthTransactions
+      .filter((transaction) => transaction.type === "expense")
+      .reduce<null | { amount: number; category: string }>((acc, transaction) => {
+        if (!acc || transaction.amount > acc.amount) {
+          return { amount: transaction.amount, category: transaction.category };
+        }
+        return acc;
+      }, null);
+
+    const savingsRate = incomeThisMonth
+      ? Math.round(((incomeThisMonth - expenseThisMonth) / incomeThisMonth) * 100)
+      : 0;
+
+    return {
+      transactionsThisMonth: currentMonthTransactions.length,
+      averageDailySpend,
+      largestExpense,
+      savingsRate,
+    };
+  }, [currentMonthTransactions, expenseThisMonth, incomeThisMonth]);
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
@@ -163,6 +189,57 @@ export default function HomeScreen() {
             <View>
               <Text style={styles.label}>Spending</Text>
               <Text style={styles.labelValueNegative}>{formattedExpenses}</Text>
+            </View>
+          </View>
+        </View>
+
+        <View style={[components.surface, styles.snapshotCard]}>
+          <Text style={styles.snapshotTitle}>Financial snapshot</Text>
+          <View style={styles.snapshotGrid}>
+            <View style={styles.snapshotItem}>
+              <Text style={styles.snapshotLabel}>Transactions</Text>
+              <Text style={styles.snapshotValue}>{financialSnapshot.transactionsThisMonth}</Text>
+              <Text style={styles.snapshotCaption}>
+                logged in {dayjs().format("MMMM")}
+              </Text>
+            </View>
+            <View style={styles.snapshotItem}>
+              <Text style={styles.snapshotLabel}>Avg daily spend</Text>
+              <Text style={[styles.snapshotValue, styles.snapshotExpense]}>
+                {formatCurrency(financialSnapshot.averageDailySpend || 0, currency, {
+                  maximumFractionDigits: 0,
+                })}
+              </Text>
+              <Text style={styles.snapshotCaption}>so far this month</Text>
+            </View>
+            <View style={styles.snapshotItem}>
+              <Text style={styles.snapshotLabel}>Savings rate</Text>
+              <Text
+                style={[
+                  styles.snapshotValue,
+                  financialSnapshot.savingsRate >= 0
+                    ? styles.snapshotIncome
+                    : styles.snapshotExpense,
+                ]}
+              >
+                {financialSnapshot.savingsRate}%
+              </Text>
+              <Text style={styles.snapshotCaption}>of income kept</Text>
+            </View>
+            <View style={styles.snapshotItem}>
+              <Text style={styles.snapshotLabel}>Largest expense</Text>
+              {financialSnapshot.largestExpense ? (
+                <>
+                  <Text style={[styles.snapshotValue, styles.snapshotExpense]}>
+                    {formatCurrency(financialSnapshot.largestExpense.amount, currency)}
+                  </Text>
+                  <Text style={styles.snapshotCaption}>
+                    {financialSnapshot.largestExpense.category}
+                  </Text>
+                </>
+              ) : (
+                <Text style={[styles.snapshotCaption, styles.snapshotMuted]}>None logged yet</Text>
+              )}
             </View>
           </View>
         </View>
@@ -232,10 +309,6 @@ export default function HomeScreen() {
           </ScrollView>
         </View>
       </ScrollView>
-
-      <Pressable accessibilityRole="button" style={styles.fab} onPress={() => router.push("/transactions/new")}>
-        <Ionicons name="add" size={28} color={colors.text} />
-      </Pressable>
     </SafeAreaView>
   );
 }
@@ -246,9 +319,10 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
   },
   content: {
-    padding: spacing.xl,
-    paddingBottom: 140,
-    gap: spacing.xl,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.xl,
+    paddingBottom: spacing.xxl,
+    gap: spacing.lg,
   },
   header: {
     gap: spacing.sm,
@@ -353,21 +427,47 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     paddingRight: spacing.xl,
   },
-  fab: {
-    position: "absolute",
-    right: spacing.xl,
-    bottom: spacing.xl * 1.2,
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: colors.primary,
-    alignItems: "center",
-    justifyContent: "center",
-    shadowColor: colors.primary,
-    shadowOpacity: 0.35,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 6,
+  snapshotCard: {
+    gap: spacing.lg,
+  },
+  snapshotTitle: {
+    ...typography.body,
+    fontSize: 18,
+    fontWeight: "600",
+  },
+  snapshotGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.lg,
+  },
+  snapshotItem: {
+    width: "48%",
+    gap: spacing.xs,
+  },
+  snapshotLabel: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: colors.textMuted,
+    letterSpacing: 1,
+    textTransform: "uppercase",
+  },
+  snapshotValue: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: colors.text,
+  },
+  snapshotCaption: {
+    ...typography.subtitle,
+    fontSize: 13,
+  },
+  snapshotMuted: {
+    color: colors.textMuted,
+  },
+  snapshotIncome: {
+    color: colors.success,
+  },
+  snapshotExpense: {
+    color: colors.danger,
   },
   topSpendingCard: {
     gap: spacing.lg,
