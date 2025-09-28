@@ -30,7 +30,6 @@ export default function NewTransactionModal() {
   const [amount, setAmount] = useState("");
   const [note, setNote] = useState("");
   const [category, setCategory] = useState(() => categories[0] ?? "");
-  const [tags, setTags] = useState("");
   const [date, setDate] = useState(new Date());
   const [showPicker, setShowPicker] = useState(Platform.OS === "ios");
 
@@ -49,18 +48,12 @@ export default function NewTransactionModal() {
       return;
     }
 
-    const parsedTags = tags
-      .split(",")
-      .map((tag) => tag.trim())
-      .filter(Boolean);
-
     addTransaction({
       amount: parsedAmount,
       note: note.trim() || (type === "expense" ? "Expense" : "Income"),
       category,
       type,
       date: date.toISOString(),
-      tags: parsedTags,
     });
 
     router.back();
@@ -146,17 +139,6 @@ export default function NewTransactionModal() {
                 })}
               </View>
             </ScrollView>
-          </View>
-
-          <View style={styles.fieldGroup}>
-            <Text style={styles.label}>Tags (comma separated)</Text>
-            <TextInput
-              value={tags}
-              onChangeText={setTags}
-              placeholder="coffee, friends"
-              placeholderTextColor={theme.colors.textMuted}
-              style={styles.input}
-            />
           </View>
 
           <View style={styles.fieldGroup}>

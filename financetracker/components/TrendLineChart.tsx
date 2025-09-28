@@ -1,5 +1,5 @@
-import { Fragment, memo, useMemo } from "react";
-import { View, ViewStyle } from "react-native";
+import { Fragment, memo, useCallback, useMemo, useState } from "react";
+import { LayoutChangeEvent, View, ViewStyle } from "react-native";
 import Svg, { Circle, Defs, LinearGradient, Path, Stop, Text as SvgText } from "react-native-svg";
 
 import { useAppTheme } from "../theme";
@@ -16,7 +16,7 @@ interface TrendLineChartProps {
 }
 
 const CHART_HEIGHT = 180;
-const CHART_WIDTH = 320;
+const MIN_CHART_WIDTH = 280;
 
 const buildPath = (points: { x: number; y: number }[]) => {
   if (!points.length) {
@@ -30,8 +30,19 @@ const buildPath = (points: { x: number; y: number }[]) => {
 
 const TrendLineChartComponent = ({ incomeSeries, expenseSeries, style }: TrendLineChartProps) => {
   const theme = useAppTheme();
+  const [containerWidth, setContainerWidth] = useState(MIN_CHART_WIDTH);
   const seriesLength = Math.max(incomeSeries.length, expenseSeries.length);
-  const chartWidth = Math.max(CHART_WIDTH, seriesLength > 1 ? seriesLength * 48 : CHART_WIDTH);
+  const chartWidth = Math.max(containerWidth, MIN_CHART_WIDTH);
+
+  const handleLayout = useCallback(
+    (event: LayoutChangeEvent) => {
+      const width = event.nativeEvent.layout.width;
+      if (width && Math.round(width) !== Math.round(containerWidth)) {
+        setContainerWidth(width);
+      }
+    },
+    [containerWidth],
+  );
 
   const { incomePath, expensePath, pointsMeta } = useMemo(() => {
     if (!seriesLength) {
@@ -105,8 +116,8 @@ const TrendLineChartComponent = ({ incomeSeries, expenseSeries, style }: TrendLi
   }, [chartWidth, expenseSeries, incomeSeries, seriesLength]);
 
   return (
-    <View style={style}>
-      <Svg width={chartWidth} height={CHART_HEIGHT}>
+    <View style={[{ width: "100%" }, style]} onLayout={handleLayout}>
+      <Svg width={chartWidth} height={CHART_HEIGHT} viewBox={`0 0 ${chartWidth} ${CHART_HEIGHT}`}>
         <Defs>
           <LinearGradient id="incomeGradient" x1="0" x2="0" y1="0" y2="1">
             <Stop offset="0" stopColor={theme.colors.success} stopOpacity={0.45} />

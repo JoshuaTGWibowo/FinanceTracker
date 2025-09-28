@@ -361,9 +361,9 @@ export default function HomeScreen() {
               </View>
             </View>
           </View>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chartContent}>
+          <View style={styles.chartContainer}>
             <TrendLineChart incomeSeries={incomeSeries} expenseSeries={expenseSeries} style={styles.chart} />
-          </ScrollView>
+          </View>
         </View>
 
         <View style={[theme.components.surface, styles.topSpendingCard]}>
@@ -415,7 +415,8 @@ export default function HomeScreen() {
                   <View style={styles.recurringCopy}>
                     <Text style={styles.recurringNote}>{item.note}</Text>
                     <Text style={styles.recurringMeta}>
-                      {dayjs(item.nextOccurrence).format("MMM D")} • {item.frequency}
+                      {dayjs(item.nextOccurrence).format("MMM D")} •
+                      {` ${item.frequency.charAt(0).toUpperCase()}${item.frequency.slice(1)}`}
                     </Text>
                   </View>
                   <Pressable
@@ -691,11 +692,11 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>) =>
       fontSize: 16,
       fontWeight: "600",
     },
-    chartContent: {
-      paddingRight: theme.spacing.lg,
+    chartContainer: {
+      marginTop: theme.spacing.md,
     },
     chart: {
-      minWidth: 320,
+      width: "100%",
     },
     topSpendingCard: {
       gap: theme.spacing.lg,

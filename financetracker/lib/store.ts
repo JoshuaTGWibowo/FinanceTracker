@@ -9,7 +9,6 @@ export interface Transaction {
   type: TransactionType;
   category: string;
   date: string; // ISO string
-  tags?: string[];
 }
 
 export type ThemeMode = "light" | "dark";
@@ -23,7 +22,6 @@ export interface RecurringTransaction {
   frequency: "weekly" | "biweekly" | "monthly";
   nextOccurrence: string;
   isActive: boolean;
-  tags?: string[];
 }
 
 export interface BudgetGoal {
@@ -82,7 +80,6 @@ const seedTransactions: Transaction[] = [
     type: "expense",
     category: "Food",
     date: daysAgo(0),
-    tags: ["coffee", "friends"],
   },
   {
     id: "t-2",
@@ -91,7 +88,6 @@ const seedTransactions: Transaction[] = [
     type: "expense",
     category: "Groceries",
     date: daysAgo(1),
-    tags: ["essentials"],
   },
   {
     id: "t-3",
@@ -100,7 +96,6 @@ const seedTransactions: Transaction[] = [
     type: "income",
     category: "Side Hustle",
     date: daysAgo(1),
-    tags: ["consulting"],
   },
   {
     id: "t-4",
@@ -109,7 +104,6 @@ const seedTransactions: Transaction[] = [
     type: "expense",
     category: "Food",
     date: daysAgo(2),
-    tags: ["dining"],
   },
   {
     id: "t-5",
@@ -118,7 +112,6 @@ const seedTransactions: Transaction[] = [
     type: "income",
     category: "Work",
     date: daysAgo(3),
-    tags: ["retainer"],
   },
   {
     id: "t-6",
@@ -127,7 +120,6 @@ const seedTransactions: Transaction[] = [
     type: "expense",
     category: "Creativity",
     date: daysAgo(4),
-    tags: ["supplies"],
   },
   {
     id: "t-7",
@@ -136,7 +128,6 @@ const seedTransactions: Transaction[] = [
     type: "expense",
     category: "Lifestyle",
     date: daysAgo(5),
-    tags: ["events"],
   },
   {
     id: "t-8",
@@ -145,7 +136,6 @@ const seedTransactions: Transaction[] = [
     type: "income",
     category: "Salary",
     date: daysAgo(6),
-    tags: ["payday"],
   },
   {
     id: "t-9",
@@ -154,7 +144,6 @@ const seedTransactions: Transaction[] = [
     type: "expense",
     category: "Food",
     date: daysAgo(7),
-    tags: ["coffee"],
   },
   {
     id: "t-10",
@@ -163,7 +152,6 @@ const seedTransactions: Transaction[] = [
     type: "expense",
     category: "Fitness",
     date: daysAgo(8),
-    tags: ["membership"],
   },
   {
     id: "t-11",
@@ -172,7 +160,6 @@ const seedTransactions: Transaction[] = [
     type: "income",
     category: "Resale",
     date: daysAgo(9),
-    tags: ["photography"],
   },
   {
     id: "t-12",
@@ -181,7 +168,6 @@ const seedTransactions: Transaction[] = [
     type: "expense",
     category: "Dining",
     date: daysAgo(11),
-    tags: ["dining"],
   },
   {
     id: "t-13",
@@ -190,7 +176,6 @@ const seedTransactions: Transaction[] = [
     type: "income",
     category: "Consulting",
     date: daysAgo(13),
-    tags: ["education"],
   },
   {
     id: "t-14",
@@ -199,7 +184,6 @@ const seedTransactions: Transaction[] = [
     type: "expense",
     category: "Work",
     date: daysAgo(14),
-    tags: ["workspace"],
   },
   {
     id: "t-15",
@@ -208,7 +192,6 @@ const seedTransactions: Transaction[] = [
     type: "expense",
     category: "Bills",
     date: daysAgo(17),
-    tags: ["insurance"],
   },
   {
     id: "t-16",
@@ -217,7 +200,6 @@ const seedTransactions: Transaction[] = [
     type: "income",
     category: "Side Hustle",
     date: daysAgo(18),
-    tags: ["shop"],
   },
   {
     id: "t-17",
@@ -226,7 +208,6 @@ const seedTransactions: Transaction[] = [
     type: "expense",
     category: "Food",
     date: daysAgo(20),
-    tags: ["outdoors", "brunch"],
   },
   {
     id: "t-18",
@@ -235,7 +216,6 @@ const seedTransactions: Transaction[] = [
     type: "expense",
     category: "Home",
     date: daysAgo(23),
-    tags: ["home"],
   },
   {
     id: "t-19",
@@ -244,7 +224,6 @@ const seedTransactions: Transaction[] = [
     type: "expense",
     category: "Gear",
     date: daysAgo(26),
-    tags: ["rental"],
   },
   {
     id: "t-20",
@@ -253,7 +232,6 @@ const seedTransactions: Transaction[] = [
     type: "income",
     category: "Salary",
     date: daysAgo(34),
-    tags: ["payday"],
   },
   {
     id: "t-21",
@@ -262,7 +240,6 @@ const seedTransactions: Transaction[] = [
     type: "income",
     category: "Work",
     date: daysAgo(37),
-    tags: ["bonus"],
   },
   {
     id: "t-22",
@@ -271,7 +248,6 @@ const seedTransactions: Transaction[] = [
     type: "expense",
     category: "Outdoors",
     date: daysAgo(39),
-    tags: ["outdoors"],
   },
   {
     id: "t-23",
@@ -280,7 +256,6 @@ const seedTransactions: Transaction[] = [
     type: "expense",
     category: "Groceries",
     date: daysAgo(43),
-    tags: ["essentials"],
   },
   {
     id: "t-24",
@@ -289,7 +264,6 @@ const seedTransactions: Transaction[] = [
     type: "income",
     category: "Creative Sales",
     date: daysAgo(46),
-    tags: ["art"],
   },
   {
     id: "t-25",
@@ -298,7 +272,6 @@ const seedTransactions: Transaction[] = [
     type: "expense",
     category: "Food",
     date: daysAgo(49),
-    tags: ["team"],
   },
   {
     id: "t-26",
@@ -307,7 +280,6 @@ const seedTransactions: Transaction[] = [
     type: "expense",
     category: "Gear",
     date: daysAgo(52),
-    tags: ["photography"],
   },
   {
     id: "t-27",
@@ -316,7 +288,6 @@ const seedTransactions: Transaction[] = [
     type: "income",
     category: "Consulting",
     date: daysAgo(55),
-    tags: ["mentoring"],
   },
   {
     id: "t-28",
@@ -325,7 +296,6 @@ const seedTransactions: Transaction[] = [
     type: "expense",
     category: "Transport",
     date: daysAgo(58),
-    tags: ["commute"],
   },
 ];
 
@@ -374,7 +344,6 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
       frequency: "monthly",
       nextOccurrence: daysAgo(-5),
       isActive: true,
-      tags: ["workspace"],
     },
     {
       id: "r-2",
@@ -385,7 +354,6 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
       frequency: "monthly",
       nextOccurrence: daysAgo(-2),
       isActive: true,
-      tags: ["payday"],
     },
     {
       id: "r-3",
@@ -396,7 +364,6 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
       frequency: "monthly",
       nextOccurrence: daysAgo(6),
       isActive: true,
-      tags: ["entertainment"],
     },
   ],
   budgetGoals: [
@@ -465,7 +432,6 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
           type: recurring.type,
           category: recurring.category,
           date: recurring.nextOccurrence,
-          tags: recurring.tags,
         },
         ...state.transactions,
       ],

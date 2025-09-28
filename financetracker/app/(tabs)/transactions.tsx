@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import {
+  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -65,40 +66,113 @@ export default function TransactionsScreen() {
   const [selectedPeriod, setSelectedPeriod] = useState(() => periodOptions[0]?.key ?? "");
   const [reportExpanded, setReportExpanded] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
+  const [searchVisible, setSearchVisible] = useState(false);
+  const [draftSearchTerm, setDraftSearchTerm] = useState("");
+  const [filtersExpanded, setFiltersExpanded] = useState(false);
   const [minAmount, setMinAmount] = useState("");
   const [maxAmount, setMaxAmount] = useState("");
-  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [startDate, setStartDate] = useState<Dayjs | null>(null);
   const [endDate, setEndDate] = useState<Dayjs | null>(null);
   const [showStartPicker, setShowStartPicker] = useState(false);
   const [showEndPicker, setShowEndPicker] = useState(false);
+  const [searchHistory, setSearchHistory] = useState<string[]>([]);
 
   const styles = useMemo(() => createStyles(theme), [theme]);
 
-  const availableTags = useMemo(
-    () =>
-      Array.from(
-        new Set(
-          transactions.flatMap((transaction) => transaction.tags ?? []).filter((tag) => tag && tag.length > 0),
-        ),
-      ),
-    [transactions],
-  );
-
-  const toggleTag = (tag: string) => {
-    setSelectedTags((prev) =>
-      prev.includes(tag) ? prev.filter((item) => item !== tag) : [...prev, tag],
+  const toggleCategory = (category: string) => {
+    setSelectedCategories((prev) =>
+      prev.includes(category) ? prev.filter((item) => item !== category) : [...prev, category],
     );
   };
 
   const clearFilters = () => {
     setSearchTerm("");
+    setDraftSearchTerm("");
     setMinAmount("");
     setMaxAmount("");
-    setSelectedTags([]);
+    setSelectedCategories([]);
     setStartDate(null);
     setEndDate(null);
+    setShowStartPicker(false);
+    setShowEndPicker(false);
   };
+
+  const openSearch = (showFilters = false) => {
+    setDraftSearchTerm(searchTerm);
+    setFiltersExpanded(showFilters);
+    setSearchVisible(true);
+  };
+
+  const closeSearch = () => {
+    setSearchVisible(false);
+    setDraftSearchTerm(searchTerm);
+    setShowStartPicker(false);
+    setShowEndPicker(false);
+  };
+
+  const handleSearchSubmit = (term: string) => {
+    const nextTerm = term.trim();
+    setSearchTerm(nextTerm);
+    if (nextTerm.length) {
+      setSearchHistory((prev) => [nextTerm, ...prev.filter((item) => item !== nextTerm)].slice(0, 6));
+    }
+    setSearchVisible(false);
+    setShowStartPicker(false);
+    setShowEndPicker(false);
+  };
+
+  const removeFilter = (type: "search" | "min" | "max" | "start" | "end" | "category", value?: string) => {
+    if (type === "search") {
+      setSearchTerm("");
+      setDraftSearchTerm("");
+      return;
+    }
+    if (type === "min") {
+      setMinAmount("");
+      return;
+    }
+    if (type === "max") {
+      setMaxAmount("");
+      return;
+    }
+    if (type === "start") {
+      setStartDate(null);
+      return;
+    }
+    if (type === "end") {
+      setEndDate(null);
+      return;
+    }
+    if (type === "category" && value) {
+      setSelectedCategories((prev) => prev.filter((item) => item !== value));
+    }
+  };
+
+  const activeFilters = useMemo(() => {
+    const filters: { key: string; label: string; type: Parameters<typeof removeFilter>[0]; value?: string }[] = [];
+    if (searchTerm) {
+      filters.push({ key: `search-${searchTerm}`, label: `“${searchTerm}”`, type: "search" });
+    }
+    if (minAmount.trim()) {
+      filters.push({ key: "min", label: `Min ${minAmount}`, type: "min" });
+    }
+    if (maxAmount.trim()) {
+      filters.push({ key: "max", label: `Max ${maxAmount}`, type: "max" });
+    }
+    if (startDate) {
+      filters.push({ key: "start", label: `From ${startDate.format("MMM D")}`, type: "start" });
+    }
+    if (endDate) {
+      filters.push({ key: "end", label: `To ${endDate.format("MMM D")}`, type: "end" });
+    }
+    selectedCategories.forEach((category) => {
+      filters.push({ key: `category-${category}`, label: category, type: "category", value: category });
+    });
+    return filters;
+  }, [endDate, maxAmount, minAmount, searchTerm, selectedCategories, startDate]);
+
+  const hasActiveFilters = activeFilters.length > 0;
 
   const { sections, summary, expenseBreakdown, periodLabel, filteredRecurring } = useMemo(() => {
     const fallback = {
@@ -133,7 +207,7 @@ export default function TransactionsScreen() {
         return false;
       }
 
-      if (selectedTags.length && !selectedTags.some((tag) => transaction.tags?.includes(tag))) {
+      if (selectedCategories.length && !selectedCategories.includes(transaction.category)) {
         return false;
       }
 
@@ -141,8 +215,11 @@ export default function TransactionsScreen() {
         const query = searchTerm.trim().toLowerCase();
         const matchesNote = transaction.note.toLowerCase().includes(query);
         const matchesCategory = transaction.category.toLowerCase().includes(query);
-        const matchesTags = (transaction.tags ?? []).some((tag) => tag.toLowerCase().includes(query));
-        if (!matchesNote && !matchesCategory && !matchesTags) {
+        const numericQuery = query.replace(/[^0-9.]/g, "");
+        const matchesAmount = numericQuery
+          ? transaction.amount.toString().includes(numericQuery)
+          : false;
+        if (!matchesNote && !matchesCategory && !matchesAmount) {
           return false;
         }
       }
@@ -245,7 +322,7 @@ export default function TransactionsScreen() {
     recurringTransactions,
     searchTerm,
     selectedPeriod,
-    selectedTags,
+    selectedCategories,
     startDate,
     transactions,
   ]);
@@ -290,126 +367,63 @@ export default function TransactionsScreen() {
               </ScrollView>
             </View>
 
-            <View style={styles.filtersCard}>
-              <Text style={styles.filterTitle}>Quick filters</Text>
-              <View style={styles.filterRow}>
-                <View style={styles.filterColumn}>
-                  <Text style={styles.filterLabel}>Search</Text>
-                  <TextInput
-                    value={searchTerm}
-                    onChangeText={setSearchTerm}
-                    placeholder="Note, category, or tag"
-                    placeholderTextColor={theme.colors.textMuted}
-                    style={styles.filterInput}
-                  />
+            <View style={styles.searchRow}>
+              <Pressable
+                style={styles.searchTrigger}
+                onPress={() => openSearch(false)}
+                accessibilityRole="button"
+              >
+                <Ionicons name="search" size={20} color={theme.colors.textMuted} />
+                <View style={styles.searchCopy}>
+                  <Text style={styles.searchTitle}>Search</Text>
+                  <Text style={styles.searchSubtitle}>
+                    {searchTerm ? `“${searchTerm}”` : "Search transactions"}
+                  </Text>
                 </View>
-              </View>
-
-              <View style={styles.filterRow}>
-                <View style={styles.filterColumn}>
-                  <Text style={styles.filterLabel}>Min amount</Text>
-                  <TextInput
-                    value={minAmount}
-                    onChangeText={setMinAmount}
-                    keyboardType="numeric"
-                    placeholder="0"
-                    placeholderTextColor={theme.colors.textMuted}
-                    style={styles.filterInput}
-                  />
-                </View>
-                <View style={styles.filterColumn}>
-                  <Text style={styles.filterLabel}>Max amount</Text>
-                  <TextInput
-                    value={maxAmount}
-                    onChangeText={setMaxAmount}
-                    keyboardType="numeric"
-                    placeholder="Any"
-                    placeholderTextColor={theme.colors.textMuted}
-                    style={styles.filterInput}
-                  />
-                </View>
-              </View>
-
-              <View style={styles.filterRow}>
-                <View style={styles.filterColumn}>
-                  <Text style={styles.filterLabel}>Start date</Text>
-                  <Pressable
-                    onPress={() => setShowStartPicker(true)}
-                    style={styles.dateButton}
-                    accessibilityRole="button"
-                  >
-                    <Text style={styles.dateButtonText}>
-                      {startDate ? startDate.format("MMM D, YYYY") : "Any"}
-                    </Text>
-                    <Ionicons name="calendar" size={16} color={theme.colors.textMuted} />
-                  </Pressable>
-                </View>
-                <View style={styles.filterColumn}>
-                  <Text style={styles.filterLabel}>End date</Text>
-                  <Pressable
-                    onPress={() => setShowEndPicker(true)}
-                    style={styles.dateButton}
-                    accessibilityRole="button"
-                  >
-                    <Text style={styles.dateButtonText}>
-                      {endDate ? endDate.format("MMM D, YYYY") : "Any"}
-                    </Text>
-                    <Ionicons name="calendar" size={16} color={theme.colors.textMuted} />
-                  </Pressable>
-                </View>
-              </View>
-
-              <View style={styles.filterColumn}>
-                <Text style={styles.filterLabel}>Tags</Text>
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.tagsRow}
-                >
-                  {availableTags.map((tag) => {
-                    const active = selectedTags.includes(tag);
-                    return (
-                      <Pressable
-                        key={tag}
-                        onPress={() => toggleTag(tag)}
-                        style={[styles.tagChip, active && styles.tagChipActive]}
-                      >
-                        <Text style={[styles.tagText, active && styles.tagTextActive]}>{tag}</Text>
-                      </Pressable>
-                    );
-                  })}
-                </ScrollView>
-              </View>
-
-              <View style={styles.filterColumn}>
-                <Text style={styles.filterLabel}>Categories</Text>
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.tagsRow}
-                >
-                  {categories.map((category) => {
-                    const active = selectedTags.includes(category);
-                    return (
-                      <Pressable
-                        key={category}
-                        onPress={() => toggleTag(category)}
-                        style={[styles.tagChip, active && styles.tagChipActive]}
-                      >
-                        <Text style={[styles.tagText, active && styles.tagTextActive]}>{category}</Text>
-                      </Pressable>
-                    );
-                  })}
-                </ScrollView>
-              </View>
-
-              {(searchTerm || minAmount || maxAmount || selectedTags.length || startDate || endDate) && (
-                <Pressable style={styles.clearFiltersButton} onPress={clearFilters}>
-                  <Ionicons name="close-circle" size={16} color={theme.colors.text} />
-                  <Text style={styles.clearFiltersText}>Clear filters</Text>
-                </Pressable>
-              )}
+              </Pressable>
+              <Pressable
+                style={[styles.filterButton, hasActiveFilters && styles.filterButtonActive]}
+                onPress={() => openSearch(true)}
+                accessibilityRole="button"
+                accessibilityLabel="Open filters"
+              >
+                <Ionicons
+                  name="options-outline"
+                  size={20}
+                  color={hasActiveFilters ? theme.colors.primary : theme.colors.text}
+                />
+              </Pressable>
             </View>
+
+            {hasActiveFilters && (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.activeFiltersRow}
+              >
+                {activeFilters.map((filter) => (
+                  <Pressable
+                    key={filter.key}
+                    style={styles.activeFilterChip}
+                    onPress={() => removeFilter(filter.type, filter.value)}
+                    accessibilityRole="button"
+                    accessibilityHint="Remove filter"
+                  >
+                    <Text style={styles.activeFilterText}>{filter.label}</Text>
+                    <Ionicons name="close" size={14} color={theme.colors.textMuted} />
+                  </Pressable>
+                ))}
+                <Pressable
+                  style={styles.resetFiltersButton}
+                  onPress={() => {
+                    clearFilters();
+                    setFiltersExpanded(false);
+                  }}
+                >
+                  <Text style={styles.resetFiltersText}>Reset</Text>
+                </Pressable>
+              </ScrollView>
+            )}
 
             <View style={[theme.components.card, styles.summaryCard]}>
               <View style={styles.summaryHeader}>
@@ -524,7 +538,8 @@ export default function TransactionsScreen() {
                       <View style={styles.recurringCopy}>
                         <Text style={styles.recurringNote}>{item.note}</Text>
                         <Text style={styles.recurringMeta}>
-                          {dayjs(item.nextOccurrence).format("MMM D")} • {item.frequency}
+                          {dayjs(item.nextOccurrence).format("MMM D")} •
+                          {` ${item.frequency.charAt(0).toUpperCase()}${item.frequency.slice(1)}`}
                         </Text>
                       </View>
                       <Pressable
@@ -540,6 +555,13 @@ export default function TransactionsScreen() {
                 </View>
               </View>
             )}
+          </View>
+        }
+        ListEmptyComponent={
+          <View style={styles.emptyState}>
+            <Ionicons name="search-outline" size={20} color={theme.colors.textMuted} />
+            <Text style={styles.emptyTitle}>No transactions found</Text>
+            <Text style={styles.emptySubtitle}>Try adjusting your filters or logging a new one.</Text>
           </View>
         }
         renderSectionHeader={({ section }) => (
@@ -561,15 +583,6 @@ export default function TransactionsScreen() {
                 <Text style={styles.transactionMeta}>
                   {item.category} • {dayjs(item.date).format("h:mm A")}
                 </Text>
-                {item.tags?.length ? (
-                  <View style={styles.tagList}>
-                    {item.tags.map((tag) => (
-                      <View key={tag} style={styles.tagPill}>
-                        <Text style={styles.tagPillText}>{tag}</Text>
-                      </View>
-                    ))}
-                  </View>
-                ) : null}
               </View>
             </View>
             <View style={styles.transactionAmountBlock}>
@@ -587,16 +600,185 @@ export default function TransactionsScreen() {
         )}
         ItemSeparatorComponent={() => <View style={styles.itemSeparator} />}
         SectionSeparatorComponent={() => <View style={styles.sectionSeparator} />}
-        ListEmptyComponent={
-          <View style={styles.emptyState}>
-            <Ionicons name="documents-outline" size={24} color={theme.colors.textMuted} />
-            <Text style={styles.emptyTitle}>No activity yet</Text>
-            <Text style={styles.emptySubtitle}>
-              Transactions that match your selected filters will appear here.
-            </Text>
-          </View>
-        }
       />
+
+      <Modal
+        visible={searchVisible}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={closeSearch}
+      >
+        <SafeAreaView style={styles.searchModal}>
+          <View style={styles.searchModalHeader}>
+            <Pressable
+              onPress={closeSearch}
+              style={styles.modalCloseButton}
+              accessibilityRole="button"
+              accessibilityLabel="Close search"
+            >
+              <Ionicons name="chevron-down" size={20} color={theme.colors.text} />
+              <Text style={styles.modalCloseText}>Close</Text>
+            </Pressable>
+            <Text style={styles.searchModalTitle}>Search for transaction</Text>
+            <Pressable
+              onPress={() => setFiltersExpanded((prev) => !prev)}
+              style={[styles.modalIconButton, filtersExpanded && styles.modalIconButtonActive]}
+              accessibilityRole="button"
+              accessibilityLabel="Toggle advanced filters"
+            >
+              <Ionicons
+                name="options-outline"
+                size={20}
+                color={filtersExpanded ? theme.colors.primary : theme.colors.text}
+              />
+            </Pressable>
+          </View>
+
+          <View style={styles.searchInputRow}>
+            <Ionicons name="search" size={18} color={theme.colors.textMuted} />
+            <TextInput
+              value={draftSearchTerm}
+              onChangeText={setDraftSearchTerm}
+              placeholder="Search by note, category, or amount"
+              placeholderTextColor={theme.colors.textMuted}
+              style={styles.searchTextInput}
+              returnKeyType="search"
+              onSubmitEditing={() => handleSearchSubmit(draftSearchTerm)}
+              autoFocus
+            />
+            {draftSearchTerm.length > 0 && (
+              <Pressable
+                onPress={() => setDraftSearchTerm("")}
+                style={styles.clearSearchButton}
+                accessibilityRole="button"
+                accessibilityLabel="Clear search"
+              >
+                <Ionicons name="close-circle" size={18} color={theme.colors.textMuted} />
+              </Pressable>
+            )}
+          </View>
+
+          {searchHistory.length > 0 && (
+            <View style={styles.historySection}>
+              <Text style={styles.historyTitle}>Recent searches</Text>
+              {searchHistory.map((entry) => (
+                <Pressable
+                  key={entry}
+                  style={styles.historyRow}
+                  onPress={() => handleSearchSubmit(entry)}
+                  accessibilityRole="button"
+                >
+                  <Ionicons name="time-outline" size={18} color={theme.colors.textMuted} />
+                  <Text style={styles.historyText}>{entry}</Text>
+                </Pressable>
+              ))}
+            </View>
+          )}
+
+          {filtersExpanded && (
+            <ScrollView
+              style={styles.filtersSheet}
+              contentContainerStyle={styles.filtersSheetContent}
+              showsVerticalScrollIndicator={false}
+            >
+              <View style={styles.sheetRow}>
+                <View style={styles.sheetColumn}>
+                  <Text style={styles.sheetLabel}>Min amount</Text>
+                  <TextInput
+                    value={minAmount}
+                    onChangeText={setMinAmount}
+                    keyboardType="numeric"
+                    placeholder="0"
+                    placeholderTextColor={theme.colors.textMuted}
+                    style={styles.sheetInput}
+                  />
+                </View>
+                <View style={styles.sheetColumn}>
+                  <Text style={styles.sheetLabel}>Max amount</Text>
+                  <TextInput
+                    value={maxAmount}
+                    onChangeText={setMaxAmount}
+                    keyboardType="numeric"
+                    placeholder="Any"
+                    placeholderTextColor={theme.colors.textMuted}
+                    style={styles.sheetInput}
+                  />
+                </View>
+              </View>
+
+              <View style={styles.sheetRow}>
+                <View style={styles.sheetColumn}>
+                  <Text style={styles.sheetLabel}>Start date</Text>
+                  <Pressable
+                    onPress={() => setShowStartPicker(true)}
+                    style={styles.sheetDateButton}
+                    accessibilityRole="button"
+                  >
+                    <Text style={styles.sheetDateText}>
+                      {startDate ? startDate.format("MMM D, YYYY") : "Any"}
+                    </Text>
+                    <Ionicons name="calendar" size={16} color={theme.colors.textMuted} />
+                  </Pressable>
+                </View>
+                <View style={styles.sheetColumn}>
+                  <Text style={styles.sheetLabel}>End date</Text>
+                  <Pressable
+                    onPress={() => setShowEndPicker(true)}
+                    style={styles.sheetDateButton}
+                    accessibilityRole="button"
+                  >
+                    <Text style={styles.sheetDateText}>
+                      {endDate ? endDate.format("MMM D, YYYY") : "Any"}
+                    </Text>
+                    <Ionicons name="calendar" size={16} color={theme.colors.textMuted} />
+                  </Pressable>
+                </View>
+              </View>
+
+              <View style={styles.sheetColumn}>
+                <Text style={styles.sheetLabel}>Categories</Text>
+                <View style={styles.sheetCategoryRow}>
+                  {categories.map((category) => {
+                    const active = selectedCategories.includes(category);
+                    return (
+                      <Pressable
+                        key={category}
+                        onPress={() => toggleCategory(category)}
+                        style={[styles.sheetCategoryChip, active && styles.sheetCategoryChipActive]}
+                      >
+                        <Text
+                          style={[styles.sheetCategoryText, active && styles.sheetCategoryTextActive]}
+                        >
+                          {category}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
+            </ScrollView>
+          )}
+
+          <View style={styles.searchModalFooter}>
+            <Pressable
+              style={styles.modalSecondaryButton}
+              onPress={() => {
+                clearFilters();
+                setDraftSearchTerm("");
+                setFiltersExpanded(true);
+              }}
+            >
+              <Text style={styles.modalSecondaryText}>Clear all</Text>
+            </Pressable>
+            <Pressable
+              style={styles.modalPrimaryButton}
+              onPress={() => handleSearchSubmit(draftSearchTerm)}
+            >
+              <Text style={styles.modalPrimaryText}>Search</Text>
+            </Pressable>
+          </View>
+        </SafeAreaView>
+      </Modal>
 
       {showStartPicker && (
         <DateTimePicker
@@ -685,80 +867,255 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>) =>
     periodTextActive: {
       color: theme.colors.text,
     },
-    filtersCard: {
-      ...theme.components.surface,
-      gap: theme.spacing.md,
-    },
-    filterTitle: {
-      ...theme.typography.subtitle,
-      fontSize: 12,
-      textTransform: "uppercase",
-      letterSpacing: 1.2,
-    },
-    filterRow: {
-      flexDirection: "row",
-      gap: theme.spacing.md,
-    },
-    filterColumn: {
-      flex: 1,
-      gap: theme.spacing.xs,
-    },
-    filterLabel: {
-      ...theme.typography.subtitle,
-      fontSize: 12,
-      textTransform: "uppercase",
-      letterSpacing: 1.2,
-    },
-    filterInput: {
-      ...theme.components.input,
-      fontSize: 14,
-    },
-    dateButton: {
-      ...theme.components.input,
+    searchRow: {
       flexDirection: "row",
       alignItems: "center",
-      justifyContent: "space-between",
-    },
-    dateButtonText: {
-      color: theme.colors.text,
-      fontSize: 14,
-    },
-    tagsRow: {
-      flexDirection: "row",
       gap: theme.spacing.sm,
-      paddingVertical: theme.spacing.xs,
     },
-    tagChip: {
-      ...theme.components.chip,
+    searchTrigger: {
+      flex: 1,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: theme.spacing.sm,
+      paddingVertical: theme.spacing.sm,
+      paddingHorizontal: theme.spacing.md,
+      borderRadius: theme.radii.lg,
+      backgroundColor: theme.colors.surface,
+    },
+    searchCopy: {
+      flex: 1,
+      gap: 2,
+    },
+    searchTitle: {
+      ...theme.typography.subtitle,
+      fontSize: 12,
+      textTransform: "uppercase",
+      letterSpacing: 1.2,
+      color: theme.colors.textMuted,
+    },
+    searchSubtitle: {
+      ...theme.typography.body,
+      fontWeight: "600",
+      color: theme.colors.text,
+    },
+    filterButton: {
+      width: 48,
+      height: 48,
+      borderRadius: 16,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: theme.colors.surface,
       borderWidth: 1,
       borderColor: theme.colors.border,
     },
-    tagChipActive: {
-      backgroundColor: theme.colors.primary,
+    filterButtonActive: {
       borderColor: theme.colors.primary,
+      backgroundColor: theme.colors.primaryMuted,
     },
-    tagText: {
-      fontSize: 12,
-      fontWeight: "600",
-      color: theme.colors.textMuted,
-    },
-    tagTextActive: {
-      color: theme.colors.text,
-    },
-    clearFiltersButton: {
-      alignSelf: "flex-start",
+    activeFiltersRow: {
       flexDirection: "row",
       alignItems: "center",
-      gap: theme.spacing.xs,
+      gap: theme.spacing.sm,
+      paddingTop: theme.spacing.sm,
+    },
+    activeFilterChip: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+      paddingHorizontal: theme.spacing.md,
+      paddingVertical: theme.spacing.xs,
+      borderRadius: 999,
+      backgroundColor: theme.colors.surface,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+    },
+    activeFilterText: {
+      fontSize: 12,
+      fontWeight: "600",
+      color: theme.colors.text,
+    },
+    resetFiltersButton: {
       paddingHorizontal: theme.spacing.md,
       paddingVertical: theme.spacing.xs,
       borderRadius: 999,
       backgroundColor: theme.colors.primaryMuted,
     },
-    clearFiltersText: {
+    resetFiltersText: {
       fontSize: 12,
       fontWeight: "600",
+      color: theme.colors.primary,
+    },
+    searchModal: {
+      flex: 1,
+      backgroundColor: theme.colors.background,
+      paddingHorizontal: theme.spacing.lg,
+      paddingBottom: theme.spacing.xl,
+      gap: theme.spacing.lg,
+    },
+    searchModalHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: theme.spacing.sm,
+      paddingTop: theme.spacing.lg,
+    },
+    modalCloseButton: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+    },
+    modalCloseText: {
+      ...theme.typography.subtitle,
+      fontSize: 14,
       color: theme.colors.text,
+    },
+    searchModalTitle: {
+      ...theme.typography.subtitle,
+      fontSize: 16,
+      fontWeight: "700",
+      color: theme.colors.text,
+      flex: 1,
+      textAlign: "center",
+    },
+    modalIconButton: {
+      width: 40,
+      height: 40,
+      borderRadius: 12,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: theme.colors.surface,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+    },
+    modalIconButtonActive: {
+      borderColor: theme.colors.primary,
+      backgroundColor: theme.colors.primaryMuted,
+    },
+    searchInputRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: theme.spacing.sm,
+      paddingHorizontal: theme.spacing.md,
+      paddingVertical: theme.spacing.sm,
+      borderRadius: theme.radii.md,
+      backgroundColor: theme.colors.surface,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+    },
+    searchTextInput: {
+      flex: 1,
+      color: theme.colors.text,
+      fontSize: 16,
+    },
+    clearSearchButton: {
+      padding: 4,
+    },
+    historySection: {
+      gap: theme.spacing.sm,
+    },
+    historyTitle: {
+      ...theme.typography.label,
+      color: theme.colors.textMuted,
+    },
+    historyRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: theme.spacing.sm,
+      paddingHorizontal: theme.spacing.md,
+      paddingVertical: theme.spacing.sm,
+      borderRadius: theme.radii.md,
+      backgroundColor: theme.colors.surface,
+    },
+    historyText: {
+      ...theme.typography.body,
+      fontWeight: "600",
+    },
+    filtersSheet: {
+      flex: 1,
+    },
+    filtersSheetContent: {
+      gap: theme.spacing.lg,
+      paddingBottom: theme.spacing.xl,
+    },
+    sheetRow: {
+      flexDirection: "row",
+      gap: theme.spacing.md,
+    },
+    sheetColumn: {
+      flex: 1,
+      gap: theme.spacing.xs,
+    },
+    sheetLabel: {
+      ...theme.typography.subtitle,
+      fontSize: 12,
+      textTransform: "uppercase",
+      letterSpacing: 1.2,
+    },
+    sheetInput: {
+      ...theme.components.input,
+      fontSize: 14,
+    },
+    sheetDateButton: {
+      ...theme.components.input,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+    },
+    sheetDateText: {
+      fontSize: 14,
+      color: theme.colors.text,
+    },
+    sheetCategoryRow: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: theme.spacing.sm,
+    },
+    sheetCategoryChip: {
+      paddingHorizontal: theme.spacing.md,
+      paddingVertical: theme.spacing.sm,
+      borderRadius: theme.radii.pill,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      backgroundColor: theme.colors.surface,
+    },
+    sheetCategoryChipActive: {
+      borderColor: theme.colors.primary,
+      backgroundColor: theme.colors.primaryMuted,
+    },
+    sheetCategoryText: {
+      fontSize: 13,
+      fontWeight: "600",
+      color: theme.colors.text,
+    },
+    sheetCategoryTextActive: {
+      color: theme.colors.primary,
+    },
+    searchModalFooter: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      gap: theme.spacing.md,
+    },
+    modalSecondaryButton: {
+      flex: 1,
+      paddingVertical: theme.spacing.md,
+      borderRadius: theme.radii.md,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    modalSecondaryText: {
+      fontSize: 15,
+      fontWeight: "600",
+      color: theme.colors.text,
+    },
+    modalPrimaryButton: {
+      flex: 1,
+      ...theme.components.buttonPrimary,
+    },
+    modalPrimaryText: {
+      ...theme.components.buttonPrimaryText,
     },
     sectionHeader: {
       ...theme.typography.label,
@@ -916,26 +1273,6 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>) =>
       ...theme.typography.subtitle,
       fontSize: 12,
     },
-    tagList: {
-      flexDirection: "row",
-      flexWrap: "wrap",
-      gap: theme.spacing.xs,
-    },
-    tagPill: {
-      paddingHorizontal: theme.spacing.sm,
-      paddingVertical: 4,
-      borderRadius: 999,
-      backgroundColor: theme.colors.surface,
-      borderWidth: 1,
-      borderColor: theme.colors.border,
-    },
-    tagPillText: {
-      fontSize: 11,
-      fontWeight: "600",
-      color: theme.colors.textMuted,
-      textTransform: "uppercase",
-      letterSpacing: 1,
-    },
     transactionAmountBlock: {
       justifyContent: "center",
     },
@@ -945,7 +1282,7 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>) =>
       textAlign: "right",
     },
     itemSeparator: {
-      height: theme.spacing.md,
+      height: theme.spacing.sm,
     },
     sectionSeparator: {
       height: theme.spacing.lg,
