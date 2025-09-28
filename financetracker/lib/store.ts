@@ -9,6 +9,29 @@ export interface Transaction {
   type: TransactionType;
   category: string;
   date: string; // ISO string
+  tags?: string[];
+}
+
+export type ThemeMode = "light" | "dark";
+
+export interface RecurringTransaction {
+  id: string;
+  amount: number;
+  note: string;
+  type: TransactionType;
+  category: string;
+  frequency: "weekly" | "biweekly" | "monthly";
+  nextOccurrence: string;
+  isActive: boolean;
+  tags?: string[];
+}
+
+export interface BudgetGoal {
+  id: string;
+  name: string;
+  target: number;
+  period: "week" | "month";
+  category?: string | null;
 }
 
 interface Profile {
@@ -16,11 +39,31 @@ interface Profile {
   currency: string;
 }
 
+interface Preferences {
+  themeMode: ThemeMode;
+  categories: string[];
+}
+
 interface FinanceState {
   profile: Profile;
+  preferences: Preferences;
   transactions: Transaction[];
+  recurringTransactions: RecurringTransaction[];
+  budgetGoals: BudgetGoal[];
   addTransaction: (transaction: Omit<Transaction, "id">) => void;
+  addRecurringTransaction: (
+    transaction: Omit<RecurringTransaction, "id" | "nextOccurrence"> & {
+      nextOccurrence: string;
+    },
+  ) => void;
+  toggleRecurringTransaction: (id: string, active?: boolean) => void;
+  logRecurringTransaction: (id: string) => void;
+  addBudgetGoal: (goal: Omit<BudgetGoal, "id">) => void;
+  updateBudgetGoal: (id: string, updates: Partial<Omit<BudgetGoal, "id">>) => void;
+  removeBudgetGoal: (id: string) => void;
   updateProfile: (payload: Partial<Profile>) => void;
+  setThemeMode: (mode: ThemeMode) => void;
+  addCategory: (category: string) => void;
 }
 
 const now = new Date();
@@ -39,6 +82,7 @@ const seedTransactions: Transaction[] = [
     type: "expense",
     category: "Food",
     date: daysAgo(0),
+    tags: ["coffee", "friends"],
   },
   {
     id: "t-2",
@@ -47,6 +91,7 @@ const seedTransactions: Transaction[] = [
     type: "expense",
     category: "Groceries",
     date: daysAgo(1),
+    tags: ["essentials"],
   },
   {
     id: "t-3",
@@ -55,6 +100,7 @@ const seedTransactions: Transaction[] = [
     type: "income",
     category: "Side Hustle",
     date: daysAgo(1),
+    tags: ["consulting"],
   },
   {
     id: "t-4",
@@ -63,6 +109,7 @@ const seedTransactions: Transaction[] = [
     type: "expense",
     category: "Food",
     date: daysAgo(2),
+    tags: ["dining"],
   },
   {
     id: "t-5",
@@ -71,6 +118,7 @@ const seedTransactions: Transaction[] = [
     type: "income",
     category: "Work",
     date: daysAgo(3),
+    tags: ["retainer"],
   },
   {
     id: "t-6",
@@ -79,6 +127,7 @@ const seedTransactions: Transaction[] = [
     type: "expense",
     category: "Creativity",
     date: daysAgo(4),
+    tags: ["supplies"],
   },
   {
     id: "t-7",
@@ -87,6 +136,7 @@ const seedTransactions: Transaction[] = [
     type: "expense",
     category: "Lifestyle",
     date: daysAgo(5),
+    tags: ["events"],
   },
   {
     id: "t-8",
@@ -95,6 +145,7 @@ const seedTransactions: Transaction[] = [
     type: "income",
     category: "Salary",
     date: daysAgo(6),
+    tags: ["payday"],
   },
   {
     id: "t-9",
@@ -103,6 +154,7 @@ const seedTransactions: Transaction[] = [
     type: "expense",
     category: "Food",
     date: daysAgo(7),
+    tags: ["coffee"],
   },
   {
     id: "t-10",
@@ -111,6 +163,7 @@ const seedTransactions: Transaction[] = [
     type: "expense",
     category: "Fitness",
     date: daysAgo(8),
+    tags: ["membership"],
   },
   {
     id: "t-11",
@@ -119,6 +172,7 @@ const seedTransactions: Transaction[] = [
     type: "income",
     category: "Resale",
     date: daysAgo(9),
+    tags: ["photography"],
   },
   {
     id: "t-12",
@@ -127,6 +181,7 @@ const seedTransactions: Transaction[] = [
     type: "expense",
     category: "Dining",
     date: daysAgo(11),
+    tags: ["dining"],
   },
   {
     id: "t-13",
@@ -135,6 +190,7 @@ const seedTransactions: Transaction[] = [
     type: "income",
     category: "Consulting",
     date: daysAgo(13),
+    tags: ["education"],
   },
   {
     id: "t-14",
@@ -143,6 +199,7 @@ const seedTransactions: Transaction[] = [
     type: "expense",
     category: "Work",
     date: daysAgo(14),
+    tags: ["workspace"],
   },
   {
     id: "t-15",
@@ -151,6 +208,7 @@ const seedTransactions: Transaction[] = [
     type: "expense",
     category: "Bills",
     date: daysAgo(17),
+    tags: ["insurance"],
   },
   {
     id: "t-16",
@@ -159,6 +217,7 @@ const seedTransactions: Transaction[] = [
     type: "income",
     category: "Side Hustle",
     date: daysAgo(18),
+    tags: ["shop"],
   },
   {
     id: "t-17",
@@ -167,6 +226,7 @@ const seedTransactions: Transaction[] = [
     type: "expense",
     category: "Food",
     date: daysAgo(20),
+    tags: ["outdoors", "brunch"],
   },
   {
     id: "t-18",
@@ -175,6 +235,7 @@ const seedTransactions: Transaction[] = [
     type: "expense",
     category: "Home",
     date: daysAgo(23),
+    tags: ["home"],
   },
   {
     id: "t-19",
@@ -183,6 +244,7 @@ const seedTransactions: Transaction[] = [
     type: "expense",
     category: "Gear",
     date: daysAgo(26),
+    tags: ["rental"],
   },
   {
     id: "t-20",
@@ -191,6 +253,7 @@ const seedTransactions: Transaction[] = [
     type: "income",
     category: "Salary",
     date: daysAgo(34),
+    tags: ["payday"],
   },
   {
     id: "t-21",
@@ -199,6 +262,7 @@ const seedTransactions: Transaction[] = [
     type: "income",
     category: "Work",
     date: daysAgo(37),
+    tags: ["bonus"],
   },
   {
     id: "t-22",
@@ -207,6 +271,7 @@ const seedTransactions: Transaction[] = [
     type: "expense",
     category: "Outdoors",
     date: daysAgo(39),
+    tags: ["outdoors"],
   },
   {
     id: "t-23",
@@ -215,6 +280,7 @@ const seedTransactions: Transaction[] = [
     type: "expense",
     category: "Groceries",
     date: daysAgo(43),
+    tags: ["essentials"],
   },
   {
     id: "t-24",
@@ -223,6 +289,7 @@ const seedTransactions: Transaction[] = [
     type: "income",
     category: "Creative Sales",
     date: daysAgo(46),
+    tags: ["art"],
   },
   {
     id: "t-25",
@@ -231,6 +298,7 @@ const seedTransactions: Transaction[] = [
     type: "expense",
     category: "Food",
     date: daysAgo(49),
+    tags: ["team"],
   },
   {
     id: "t-26",
@@ -239,6 +307,7 @@ const seedTransactions: Transaction[] = [
     type: "expense",
     category: "Gear",
     date: daysAgo(52),
+    tags: ["photography"],
   },
   {
     id: "t-27",
@@ -247,6 +316,7 @@ const seedTransactions: Transaction[] = [
     type: "income",
     category: "Consulting",
     date: daysAgo(55),
+    tags: ["mentoring"],
   },
   {
     id: "t-28",
@@ -255,17 +325,96 @@ const seedTransactions: Transaction[] = [
     type: "expense",
     category: "Transport",
     date: daysAgo(58),
+    tags: ["commute"],
   },
 ];
 
 let uid = seedTransactions.length + 1;
 
-export const useFinanceStore = create<FinanceState>((set) => ({
+const nextOccurrenceForFrequency = (fromDate: string, frequency: RecurringTransaction["frequency"]) => {
+  const base = new Date(fromDate);
+  if (frequency === "weekly") {
+    base.setDate(base.getDate() + 7);
+  } else if (frequency === "biweekly") {
+    base.setDate(base.getDate() + 14);
+  } else {
+    base.setMonth(base.getMonth() + 1);
+  }
+  return base.toISOString();
+};
+
+export const useFinanceStore = create<FinanceState>((set, get) => ({
   profile: {
     name: "Alicia Jeanelly",
     currency: "USD",
   },
+  preferences: {
+    themeMode: "dark",
+    categories: [
+      "Food",
+      "Travel",
+      "Lifestyle",
+      "Work",
+      "Salary",
+      "Investing",
+      "Groceries",
+      "Consulting",
+      "Home",
+      "Fitness",
+    ],
+  },
   transactions: seedTransactions,
+  recurringTransactions: [
+    {
+      id: "r-1",
+      amount: 72,
+      note: "Coworking membership",
+      type: "expense",
+      category: "Work",
+      frequency: "monthly",
+      nextOccurrence: daysAgo(-5),
+      isActive: true,
+      tags: ["workspace"],
+    },
+    {
+      id: "r-2",
+      amount: 3200,
+      note: "Product design salary",
+      type: "income",
+      category: "Salary",
+      frequency: "monthly",
+      nextOccurrence: daysAgo(-2),
+      isActive: true,
+      tags: ["payday"],
+    },
+    {
+      id: "r-3",
+      amount: 45,
+      note: "Streaming subscriptions",
+      type: "expense",
+      category: "Lifestyle",
+      frequency: "monthly",
+      nextOccurrence: daysAgo(6),
+      isActive: true,
+      tags: ["entertainment"],
+    },
+  ],
+  budgetGoals: [
+    {
+      id: "g-1",
+      name: "Save $500 this month",
+      target: 500,
+      period: "month",
+      category: null,
+    },
+    {
+      id: "g-2",
+      name: "Limit dining out to $250",
+      target: 250,
+      period: "month",
+      category: "Dining",
+    },
+  ],
   addTransaction: (transaction) =>
     set((state) => ({
       transactions: [
@@ -276,6 +425,85 @@ export const useFinanceStore = create<FinanceState>((set) => ({
         ...state.transactions,
       ],
     })),
+  addRecurringTransaction: (transaction) =>
+    set((state) => ({
+      recurringTransactions: [
+        ...state.recurringTransactions,
+        {
+          id: `r-${state.recurringTransactions.length + 1}`,
+          ...transaction,
+          isActive: true,
+        },
+      ],
+    })),
+  toggleRecurringTransaction: (id, active) =>
+    set((state) => ({
+      recurringTransactions: state.recurringTransactions.map((item) =>
+        item.id === id
+          ? {
+              ...item,
+              isActive: typeof active === "boolean" ? active : !item.isActive,
+            }
+          : item,
+      ),
+    })),
+  logRecurringTransaction: (id) => {
+    const store = get();
+    const recurring = store.recurringTransactions.find((item) => item.id === id);
+    if (!recurring) {
+      return;
+    }
+
+    const nextOccurrence = nextOccurrenceForFrequency(recurring.nextOccurrence, recurring.frequency);
+
+    set((state) => ({
+      transactions: [
+        {
+          id: `t-${uid++}`,
+          amount: recurring.amount,
+          note: recurring.note,
+          type: recurring.type,
+          category: recurring.category,
+          date: recurring.nextOccurrence,
+          tags: recurring.tags,
+        },
+        ...state.transactions,
+      ],
+      recurringTransactions: state.recurringTransactions.map((item) =>
+        item.id === id
+          ? {
+              ...item,
+              nextOccurrence,
+            }
+          : item,
+      ),
+    }));
+  },
+  addBudgetGoal: (goal) =>
+    set((state) => ({
+      budgetGoals: [
+        ...state.budgetGoals,
+        {
+          id: `g-${state.budgetGoals.length + 1}`,
+          ...goal,
+        },
+      ],
+    })),
+  updateBudgetGoal: (id, updates) =>
+    set((state) => ({
+      budgetGoals: state.budgetGoals.map((goal) =>
+        goal.id === id
+          ? {
+              ...goal,
+              ...updates,
+            }
+          : goal,
+      ),
+    })),
+  removeBudgetGoal: (id) =>
+    set((state) => ({
+      budgetGoals: state.budgetGoals.filter((goal) => goal.id !== id),
+    })),
   updateProfile: (payload) =>
     set((state) => ({
       profile: {
@@ -283,4 +511,26 @@ export const useFinanceStore = create<FinanceState>((set) => ({
         ...payload,
       },
     })),
+  setThemeMode: (mode) =>
+    set((state) => ({
+      preferences: {
+        ...state.preferences,
+        themeMode: mode,
+      },
+    })),
+  addCategory: (category) => {
+    const value = category.trim();
+    if (!value) {
+      return;
+    }
+
+    set((state) => ({
+      preferences: {
+        ...state.preferences,
+        categories: state.preferences.categories.includes(value)
+          ? state.preferences.categories
+          : [...state.preferences.categories, value],
+      },
+    }));
+  },
 }));
