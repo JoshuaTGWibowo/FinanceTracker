@@ -3,6 +3,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import dayjs from "dayjs";
+import { useRouter } from "expo-router";
 
 import { MiniBarChart } from "../../components/MiniBarChart";
 import { colors, components, spacing, typography } from "../../theme";
@@ -23,7 +24,9 @@ const formatCurrency = (
 export default function HomeScreen() {
   const transactions = useFinanceStore((state) => state.transactions);
   const profile = useFinanceStore((state) => state.profile);
+  const router = useRouter();
   const [spendingPeriod, setSpendingPeriod] = useState<"week" | "month">("month");
+  const [showBalance, setShowBalance] = useState(true);
 
   const balance = useMemo(
     () =>
@@ -64,29 +67,98 @@ export default function HomeScreen() {
     [endOfMonth, startOfMonth, transactions],
   );
 
-  const chartData = useMemo(() => {
+  const { periodIncome, periodExpense, chartData, topSpending } = useMemo(() => {
     const today = dayjs();
+    const periodStart =
+      spendingPeriod === "week" ? today.startOf("week") : today.startOf("month");
+    const periodEnd = spendingPeriod === "week" ? today.endOf("week") : today.endOf("month");
 
-    return Array.from({ length: 7 }).map((_, index) => {
-      const day = today.subtract(6 - index, "day");
-      const totalForDay = transactions
-        .filter((transaction) => dayjs(transaction.date).isSame(day, "day"))
-        .reduce((acc, transaction) => {
-          const multiplier = transaction.type === "income" ? 1 : -1;
-          return acc + transaction.amount * multiplier;
-        }, 0);
-
-      return {
-        label: day.format("dd"),
-        value: totalForDay,
-      };
+    const filtered = transactions.filter((transaction) => {
+      const date = dayjs(transaction.date);
+      return !date.isBefore(periodStart) && !date.isAfter(periodEnd);
     });
-  }, [transactions]);
+
+    const totals = filtered.reduce(
+      (acc, transaction) => {
+        if (transaction.type === "income") {
+          acc.income += transaction.amount;
+        } else {
+          acc.expense += transaction.amount;
+        }
+        return acc;
+      },
+      { income: 0, expense: 0 },
+    );
+
+    const periodChartData =
+      spendingPeriod === "week"
+        ? Array.from({ length: 7 }).map((_, index) => {
+            const day = periodStart.add(index, "day");
+            const netForDay = filtered
+              .filter((transaction) => dayjs(transaction.date).isSame(day, "day"))
+              .reduce(
+                (acc, transaction) =>
+                  acc + (transaction.type === "income" ? transaction.amount : -transaction.amount),
+                0,
+              );
+
+            return {
+              label: day.format("dd"),
+              value: netForDay,
+            };
+          })
+        : (() => {
+            const daysInMonth = periodEnd.diff(periodStart, "day") + 1;
+            return Array.from({ length: daysInMonth }).map((_, index) => {
+              const day = periodStart.add(index, "day");
+              const netForDay = filtered
+                .filter((transaction) => dayjs(transaction.date).isSame(day, "day"))
+                .reduce(
+                  (acc, transaction) =>
+                    acc + (transaction.type === "income" ? transaction.amount : -transaction.amount),
+                  0,
+                );
+
+              return {
+                label: day.format("D"),
+                value: netForDay,
+              };
+            });
+          })();
+
+    const totalsByCategory = filtered.reduce((acc, transaction) => {
+      if (transaction.type !== "expense") {
+        return acc;
+      }
+      const previous = acc.get(transaction.category) ?? 0;
+      acc.set(transaction.category, previous + transaction.amount);
+      return acc;
+    }, new Map<string, number>());
+
+    const entries = Array.from(totalsByCategory.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 3)
+      .map(([category, amount]) => ({
+        category,
+        amount,
+        percentage: totals.expense ? Math.round((amount / totals.expense) * 100) : 0,
+      }));
+
+    return {
+      periodIncome: totals.income,
+      periodExpense: totals.expense,
+      chartData: periodChartData,
+      topSpending: {
+        entries,
+        totalSpent: totals.expense,
+      },
+    };
+  }, [spendingPeriod, transactions]);
 
   const currency = profile.currency || "USD";
   const formattedBalance = formatCurrency(balance, currency);
-  const formattedIncome = formatCurrency(summary.income, currency);
-  const formattedExpenses = formatCurrency(summary.expense, currency);
+  const formattedPeriodIncome = formatCurrency(periodIncome, currency);
+  const formattedPeriodExpenses = formatCurrency(periodExpense, currency);
 
   const netChangeThisMonth = summary.income - summary.expense;
   const netIsPositive = netChangeThisMonth >= 0;
@@ -96,40 +168,6 @@ export default function HomeScreen() {
     : "rgba(251,113,133,0.16)";
   const netIcon = netIsPositive ? "trending-up" : "trending-down";
   const netLabel = `${formatCurrency(netChangeThisMonth, currency, { signDisplay: "always" })} this month`;
-
-  const topSpending = useMemo(() => {
-    const today = dayjs();
-    const rangeStart = spendingPeriod === "week" ? today.startOf("week") : today.startOf("month");
-    const rangeEnd = spendingPeriod === "week" ? today.endOf("week") : today.endOf("month");
-
-    const expenses = transactions.filter((transaction) => {
-      if (transaction.type !== "expense") {
-        return false;
-      }
-
-      const date = dayjs(transaction.date);
-      return !date.isBefore(rangeStart) && !date.isAfter(rangeEnd);
-    });
-
-    const totalsByCategory = expenses.reduce((acc, transaction) => {
-      const previous = acc.get(transaction.category) ?? 0;
-      acc.set(transaction.category, previous + transaction.amount);
-      return acc;
-    }, new Map<string, number>());
-
-    const totalSpent = expenses.reduce((acc, transaction) => acc + transaction.amount, 0);
-
-    const entries = Array.from(totalsByCategory.entries())
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 3)
-      .map(([category, amount]) => ({
-        category,
-        amount,
-        percentage: totalSpent ? Math.round((amount / totalSpent) * 100) : 0,
-      }));
-
-    return { entries, totalSpent };
-  }, [spendingPeriod, transactions]);
 
   const recentTransactions = useMemo(
     () =>
@@ -150,13 +188,26 @@ export default function HomeScreen() {
         <View style={[components.card, styles.balanceCard]}>
           <View style={styles.balanceHeader}>
             <Text style={styles.balanceLabel}>Total balance</Text>
-            <Ionicons name="eye" size={18} color={colors.textMuted} />
+            <Pressable
+              onPress={() => setShowBalance((prev) => !prev)}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel={showBalance ? "Hide balance" : "Show balance"}
+            >
+              <Ionicons
+                name={showBalance ? "eye" : "eye-off"}
+                size={18}
+                color={colors.textMuted}
+              />
+            </Pressable>
           </View>
-          <Text style={styles.balanceValue}>{formattedBalance}</Text>
+          <Text style={styles.balanceValue}>{showBalance ? formattedBalance : "••••••"}</Text>
           <View style={styles.balanceMetaRow}>
             <View style={[styles.metaBadge, { backgroundColor: netBadgeBackground }]}>
               <Ionicons name={netIcon} size={16} color={netBadgeColor} />
-              <Text style={[styles.metaText, { color: netBadgeColor }]}>{netLabel}</Text>
+              <Text style={[styles.metaText, { color: netBadgeColor }]}>
+                {showBalance ? netLabel : "Balance hidden"}
+              </Text>
             </View>
             <Text style={styles.metaCaption}>{dayjs().format("MMMM YYYY")}</Text>
           </View>
@@ -164,17 +215,23 @@ export default function HomeScreen() {
             <View style={styles.balanceColumn}>
               <Text style={styles.breakdownLabel}>Opening balance</Text>
               <Text style={styles.breakdownValue}>
-                {formatCurrency(summary.openingBalance, currency)}
+                {showBalance ? formatCurrency(summary.openingBalance, currency) : "••••"}
               </Text>
             </View>
             <View style={styles.balanceColumn}>
               <Text style={styles.breakdownLabel}>Ending balance</Text>
               <Text style={styles.breakdownValue}>
-                {formatCurrency(summary.openingBalance + summary.monthNet, currency)}
+                {showBalance
+                  ? formatCurrency(summary.openingBalance + summary.monthNet, currency)
+                  : "••••"}
               </Text>
             </View>
           </View>
-          <Pressable style={styles.reportsLink} accessibilityRole="button">
+          <Pressable
+            style={styles.reportsLink}
+            accessibilityRole="button"
+            onPress={() => router.push("/(tabs)/transactions")}
+          >
             <Text style={styles.reportsText}>View reports</Text>
             <Ionicons name="chevron-forward" size={16} color={colors.primary} />
           </Pressable>
@@ -183,7 +240,9 @@ export default function HomeScreen() {
         <View style={[components.surface, styles.monthlyReport]}>
           <View style={styles.monthlyHeader}>
             <View>
-              <Text style={styles.monthlyTitle}>This month</Text>
+              <Text style={styles.monthlyTitle}>
+                {spendingPeriod === "week" ? "This week" : "This month"}
+              </Text>
               <Text style={styles.monthlyCaption}>Income vs spending</Text>
             </View>
             <View style={styles.periodSwitch}>
@@ -208,11 +267,15 @@ export default function HomeScreen() {
           <View style={styles.reportTotals}>
             <View>
               <Text style={styles.reportLabel}>Total spent</Text>
-              <Text style={[styles.reportValue, styles.reportValueNegative]}>{formattedExpenses}</Text>
+              <Text style={[styles.reportValue, styles.reportValueNegative]}>
+                {formattedPeriodExpenses}
+              </Text>
             </View>
             <View>
               <Text style={styles.reportLabel}>Total income</Text>
-              <Text style={[styles.reportValue, styles.reportValuePositive]}>{formattedIncome}</Text>
+              <Text style={[styles.reportValue, styles.reportValuePositive]}>
+                {formattedPeriodIncome}
+              </Text>
             </View>
           </View>
           <ScrollView

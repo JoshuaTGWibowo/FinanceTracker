@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Pressable, SectionList, StyleSheet, Text, View } from "react-native";
+import { Pressable, ScrollView, SectionList, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import dayjs, { type Dayjs } from "dayjs";
@@ -19,41 +19,45 @@ const formatCurrency = (
     ...options,
   }).format(value);
 
-type PeriodKey = "this_week" | "this_month" | "last_month";
-
-const periodOptions: {
-  key: PeriodKey;
+interface PeriodOption {
+  key: string;
   label: string;
   range: () => { start: Dayjs; end: Dayjs };
-}[] = [
-  {
-    key: "this_week",
-    label: "This Week",
-    range: () => ({ start: dayjs().startOf("week"), end: dayjs().endOf("week") }),
-  },
-  {
-    key: "this_month",
-    label: "This Month",
-    range: () => ({ start: dayjs().startOf("month"), end: dayjs().endOf("month") }),
-  },
-  {
-    key: "last_month",
-    label: "Last Month",
-    range: () => {
-      const previous = dayjs().subtract(1, "month");
-      return { start: previous.startOf("month"), end: previous.endOf("month") };
-    },
-  },
-];
+}
+
+const MONTHS_TO_DISPLAY = 12;
+
+const buildMonthlyPeriods = (): PeriodOption[] => {
+  const currentMonth = dayjs().startOf("month");
+
+  return Array.from({ length: MONTHS_TO_DISPLAY }).map((_, index) => {
+    const month = currentMonth.subtract(index, "month");
+    const start = month.startOf("month");
+    const end = month.endOf("month");
+
+    return {
+      key: month.format("YYYY-MM"),
+      label: month.format("MMM YYYY"),
+      range: () => ({ start, end }),
+    };
+  });
+};
 
 export default function TransactionsScreen() {
   const transactions = useFinanceStore((state) => state.transactions);
   const currency = useFinanceStore((state) => state.profile.currency);
-  const [selectedPeriod, setSelectedPeriod] = useState<PeriodKey>("this_month");
+  const periodOptions = useMemo(() => buildMonthlyPeriods(), []);
+  const [selectedPeriod, setSelectedPeriod] = useState(() => periodOptions[0]?.key ?? "");
   const [reportExpanded, setReportExpanded] = useState(false);
 
   const { sections, summary, expenseBreakdown, periodLabel } = useMemo(() => {
-    const period = periodOptions.find((option) => option.key === selectedPeriod) ?? periodOptions[0];
+    const fallback = {
+      key: dayjs().format("YYYY-MM"),
+      label: dayjs().format("MMM YYYY"),
+      range: () => ({ start: dayjs().startOf("month"), end: dayjs().endOf("month") }),
+    } satisfies PeriodOption;
+    const period =
+      periodOptions.find((option) => option.key === selectedPeriod) ?? fallback;
     const { start, end } = period.range();
 
     const withinRange = transactions.filter((transaction) => {
@@ -130,13 +134,6 @@ export default function TransactionsScreen() {
         percentage: totals.expense ? Math.round((amount / totals.expense) * 100) : 0,
       }));
 
-    const breakdownLabel =
-      period.key === "this_week"
-        ? "this week"
-        : period.key === "this_month"
-          ? "this month"
-          : "last month";
-
     return {
       sections: sectionData,
       summary: {
@@ -147,9 +144,9 @@ export default function TransactionsScreen() {
         closingBalance,
       },
       expenseBreakdown,
-      periodLabel: breakdownLabel,
+      periodLabel: period.label,
     };
-  }, [selectedPeriod, transactions]);
+  }, [periodOptions, selectedPeriod, transactions]);
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -167,22 +164,28 @@ export default function TransactionsScreen() {
               </Text>
             </View>
             <View style={styles.periodTabs}>
-              {periodOptions.map((option) => {
-                const active = option.key === selectedPeriod;
-                return (
-                  <Pressable
-                    key={option.key}
-                    style={[styles.periodTab, active && styles.periodTabActive]}
-                    onPress={() => setSelectedPeriod(option.key)}
-                    accessibilityRole="button"
-                    accessibilityState={{ selected: active }}
-                  >
-                    <Text style={[styles.periodText, active && styles.periodTextActive]}>
-                      {option.label}
-                    </Text>
-                  </Pressable>
-                );
-              })}
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.periodTabsContent}
+              >
+                {periodOptions.map((option) => {
+                  const active = option.key === selectedPeriod;
+                  return (
+                    <Pressable
+                      key={option.key}
+                      style={[styles.periodTab, active && styles.periodTabActive]}
+                      onPress={() => setSelectedPeriod(option.key)}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: active }}
+                    >
+                      <Text style={[styles.periodText, active && styles.periodTextActive]}>
+                        {option.label}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
             </View>
             <View style={[components.card, styles.summaryCard]}>
               <View style={styles.summaryHeader}>
@@ -319,7 +322,8 @@ export default function TransactionsScreen() {
             </View>
           </View>
         )}
-        ItemSeparatorComponent={() => <View style={styles.separator} />}
+        ItemSeparatorComponent={() => <View style={styles.itemSeparator} />}
+        SectionSeparatorComponent={() => <View style={styles.sectionSeparator} />}
         ListEmptyComponent={
           <View style={styles.emptyState}>
             <Ionicons name="documents-outline" size={24} color={colors.textMuted} />
@@ -358,12 +362,16 @@ const styles = StyleSheet.create({
     ...typography.subtitle,
   },
   periodTabs: {
-    flexDirection: "row",
-    gap: spacing.sm,
     backgroundColor: colors.surface,
     padding: spacing.xs,
     borderRadius: 999,
-    alignSelf: "flex-start",
+    alignSelf: "stretch",
+  },
+  periodTabsContent: {
+    flexDirection: "row",
+    gap: spacing.sm,
+    alignItems: "center",
+    paddingHorizontal: spacing.xs,
   },
   periodTab: {
     paddingHorizontal: spacing.lg,
@@ -424,10 +432,12 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     gap: spacing.md,
+    alignItems: "flex-start",
   },
   summaryStat: {
     flex: 1,
     gap: spacing.xs,
+    alignItems: "flex-start",
   },
   statLabel: {
     fontSize: 12,
@@ -439,6 +449,7 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "700",
     color: colors.text,
+    lineHeight: 22,
   },
   openingBalanceValue: {
     color: colors.primary,
@@ -510,7 +521,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingVertical: spacing.sm,
+    paddingVertical: spacing.xs,
     paddingHorizontal: spacing.md,
   },
   transactionMain: {
@@ -562,8 +573,11 @@ const styles = StyleSheet.create({
   expenseText: {
     color: colors.danger,
   },
-  separator: {
-    height: spacing.xs,
+  itemSeparator: {
+    height: spacing.xs / 2,
+  },
+  sectionSeparator: {
+    height: spacing.md,
   },
   emptyState: {
     paddingVertical: spacing.xxl,
