@@ -76,6 +76,7 @@ export default function TabsLayout() {
         tabBarInactiveTintColor: theme.colors.textMuted,
         tabBarStyle: styles.tabBar,
         tabBarLabelStyle: styles.tabLabel,
+        tabBarItemStyle: styles.tabItem,
       }}
     >
       <Tabs.Screen
@@ -166,7 +167,7 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>) =>
       shadowRadius: 16,
       shadowOffset: { width: 0, height: 10 },
       height: Platform.select({ ios: 80, default: 70 }),
-      paddingHorizontal: 24,
+      paddingHorizontal: 18,
       paddingTop: 10,
       paddingBottom: Platform.select({ ios: 22, default: 14 }),
     },
@@ -175,6 +176,10 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>) =>
       fontWeight: "600",
       letterSpacing: 0.4,
       marginBottom: -4,
+    },
+    tabItem: {
+      paddingHorizontal: 6,
+      minWidth: 72,
     },
     addButtonWrapper: {
       alignItems: "center",

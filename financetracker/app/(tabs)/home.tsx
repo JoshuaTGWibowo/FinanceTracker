@@ -6,7 +6,7 @@ import dayjs from "dayjs";
 import { useRouter } from "expo-router";
 
 import { DonutChart } from "../../components/DonutChart";
-import { TrendLineChart } from "../../components/TrendLineChart";
+import { SpendingBarChart, SpendingLineChart } from "../../components/SpendingCharts";
 import { useAppTheme } from "../../theme";
 import { BudgetGoal, useFinanceStore } from "../../lib/store";
 
@@ -75,7 +75,9 @@ export default function HomeScreen() {
   const recurringTransactions = useFinanceStore((state) => state.recurringTransactions);
   const logRecurringTransaction = useFinanceStore((state) => state.logRecurringTransaction);
 
-  const [spendingPeriod, setSpendingPeriod] = useState<"week" | "month">("month");
+  const [overviewPeriod, setOverviewPeriod] = useState<"week" | "month">("month");
+  const [overviewChart, setOverviewChart] = useState<"bar" | "line">("bar");
+  const [topSpendingPeriod, setTopSpendingPeriod] = useState<"week" | "month">("month");
   const [showBalance, setShowBalance] = useState(true);
 
   const styles = useMemo(() => createStyles(theme), [theme]);
@@ -122,14 +124,13 @@ export default function HomeScreen() {
   const {
     periodIncome,
     periodExpense,
-    incomeSeries,
-    expenseSeries,
-    netSeries,
-    topSpending,
+    dailySpending,
+    monthlyComparison,
+    previousExpense,
   } = useMemo(() => {
     const today = dayjs();
-    const periodStart = spendingPeriod === "week" ? today.startOf("week") : today.startOf("month");
-    const periodEnd = spendingPeriod === "week" ? today.endOf("week") : today.endOf("month");
+    const periodStart = overviewPeriod === "week" ? today.startOf("week") : today.startOf("month");
+    const periodEnd = overviewPeriod === "week" ? today.endOf("week") : today.endOf("month");
 
     const filtered = transactions.filter((transaction) => {
       const date = dayjs(transaction.date);
@@ -148,47 +149,89 @@ export default function HomeScreen() {
       { income: 0, expense: 0 },
     );
 
-    const bucketCount = spendingPeriod === "week" ? 7 : periodEnd.diff(periodStart, "day") + 1;
-    const labels = Array.from({ length: bucketCount }).map((_, index) => {
-      const day = periodStart.add(index, "day");
-      return spendingPeriod === "week" ? day.format("dd") : day.format("D");
-    });
-
-    const incomeSeries = labels.map((label, index) => {
-      const day = periodStart.add(index, "day");
-      const value = filtered
-        .filter((transaction) => transaction.type === "income" && dayjs(transaction.date).isSame(day, "day"))
-        .reduce((acc, transaction) => acc + transaction.amount, 0);
-      return { label, value };
-    });
-
-    const expenseSeries = labels.map((label, index) => {
+    const dayCount = periodEnd.diff(periodStart, "day") + 1;
+    const daily = Array.from({ length: dayCount }).map((_, index) => {
       const day = periodStart.add(index, "day");
       const value = filtered
         .filter((transaction) => transaction.type === "expense" && dayjs(transaction.date).isSame(day, "day"))
         .reduce((acc, transaction) => acc + transaction.amount, 0);
-      return { label, value };
+
+      return {
+        label: overviewPeriod === "week" ? day.format("dd") : day.format("D"),
+        value,
+      };
     });
 
-    const netSeries = labels.map((label, index) => {
-      const day = periodStart.add(index, "day");
-      const netForDay = filtered
-        .filter((transaction) => dayjs(transaction.date).isSame(day, "day"))
-        .reduce(
-          (acc, transaction) => acc + (transaction.type === "income" ? transaction.amount : -transaction.amount),
-          0,
-        );
-      return { label, value: netForDay };
-    });
+    const previousPeriodStart =
+      overviewPeriod === "week" ? periodStart.subtract(1, "week") : periodStart.subtract(1, "month");
+    const previousPeriodEnd =
+      overviewPeriod === "week" ? previousPeriodStart.endOf("week") : previousPeriodStart.endOf("month");
 
-    const totalsByCategory = filtered.reduce((acc, transaction) => {
+    const previousExpense = transactions.reduce((acc, transaction) => {
       if (transaction.type !== "expense") {
         return acc;
       }
+      const date = dayjs(transaction.date);
+      if (!date.isBefore(previousPeriodStart) && !date.isAfter(previousPeriodEnd)) {
+        return acc + transaction.amount;
+      }
+      return acc;
+    }, 0);
+
+    const monthlyComparison =
+      overviewPeriod === "month"
+        ? Array.from({ length: 5 }).map((_, index) => {
+            const offset = 4 - index;
+            const target = today.subtract(offset, "month");
+            const start = target.startOf("month");
+            const end = target.endOf("month");
+            const spent = transactions.reduce((acc, transaction) => {
+              if (transaction.type !== "expense") {
+                return acc;
+              }
+              const date = dayjs(transaction.date);
+              if (!date.isBefore(start) && !date.isAfter(end)) {
+                return acc + transaction.amount;
+              }
+              return acc;
+            }, 0);
+
+            return {
+              label: target.format("MMM"),
+              value: spent,
+            };
+          })
+        : [];
+
+    return {
+      periodIncome: totals.income,
+      periodExpense: totals.expense,
+      dailySpending: daily,
+      monthlyComparison,
+      previousExpense,
+    };
+  }, [overviewPeriod, transactions]);
+
+  const topSpending = useMemo(() => {
+    const today = dayjs();
+    const periodStart = topSpendingPeriod === "week" ? today.startOf("week") : today.startOf("month");
+    const periodEnd = topSpendingPeriod === "week" ? today.endOf("week") : today.endOf("month");
+
+    const filtered = transactions.filter((transaction) => {
+      if (transaction.type !== "expense") {
+        return false;
+      }
+      const date = dayjs(transaction.date);
+      return !date.isBefore(periodStart) && !date.isAfter(periodEnd);
+    });
+
+    const totalsByCategory = filtered.reduce((acc, transaction) => {
       const previous = acc.get(transaction.category) ?? 0;
       acc.set(transaction.category, previous + transaction.amount);
       return acc;
     }, new Map<string, number>());
+
+    const totalSpent = filtered.reduce((acc, transaction) => acc + transaction.amount, 0);
 
     const entries = Array.from(totalsByCategory.entries())
       .sort((a, b) => b[1] - a[1])
@@ -196,21 +239,11 @@ export default function HomeScreen() {
       .map(([category, amount]) => ({
         category,
         amount,
-        percentage: totals.expense ? Math.round((amount / totals.expense) * 100) : 0,
+        percentage: totalSpent ? Math.round((amount / totalSpent) * 100) : 0,
       }));
 
-    return {
-      periodIncome: totals.income,
-      periodExpense: totals.expense,
-      incomeSeries,
-      expenseSeries,
-      netSeries,
-      topSpending: {
-        entries,
-        totalSpent: totals.expense,
-      },
-    };
-  }, [spendingPeriod, transactions]);
+    return { entries, totalSpent };
+  }, [topSpendingPeriod, transactions]);
 
   const currency = profile.currency || "USD";
   const formattedBalance = formatCurrency(balance, currency);
@@ -232,10 +265,8 @@ export default function HomeScreen() {
     [transactions],
   );
 
-  const trendStart = netSeries[0]?.value ?? 0;
-  const trendEnd = netSeries[netSeries.length - 1]?.value ?? 0;
-  const trendDelta = trendEnd - trendStart;
-  const trendPositive = trendDelta >= 0;
+  const trendDelta = previousExpense - periodExpense;
+  const spentLess = trendDelta >= 0;
 
   const upcomingRecurring = useMemo(
     () =>
@@ -306,17 +337,25 @@ export default function HomeScreen() {
           <View style={styles.monthlyHeader}>
             <View>
               <Text style={styles.monthlyTitle}>
-                {spendingPeriod === "week" ? "This week" : "This month"}
+                {overviewPeriod === "week" ? "This week" : "This month"}
               </Text>
-              <Text style={styles.monthlyCaption}>Income vs spending</Text>
+              <Text style={styles.monthlyCaption}>Spending overview</Text>
             </View>
             <View style={styles.periodSwitch}>
               {["week", "month"].map((period) => {
-                const active = spendingPeriod === period;
+                const active = overviewPeriod === period;
+                const handlePress = () => {
+                  if (period === "week") {
+                    setOverviewPeriod("week");
+                    setOverviewChart("bar");
+                  } else {
+                    setOverviewPeriod("month");
+                  }
+                };
                 return (
                   <Pressable
                     key={period}
-                    onPress={() => setSpendingPeriod(period as typeof spendingPeriod)}
+                    onPress={handlePress}
                     style={[styles.periodPill, active && styles.periodPillActive]}
                     accessibilityRole="button"
                     accessibilityState={{ selected: active }}
@@ -346,32 +385,92 @@ export default function HomeScreen() {
               <Text style={styles.reportLabel}>Trend</Text>
               <View style={styles.trendRow}>
                 <Ionicons
-                  name={trendPositive ? "arrow-up" : "arrow-down"}
+                  name={spentLess ? "arrow-down" : "arrow-up"}
                   size={14}
-                  color={trendPositive ? theme.colors.success : theme.colors.danger}
+                  color={spentLess ? theme.colors.success : theme.colors.danger}
                 />
                 <Text
                   style={[
                     styles.trendValue,
-                    { color: trendPositive ? theme.colors.success : theme.colors.danger },
+                    { color: spentLess ? theme.colors.success : theme.colors.danger },
                   ]}
                 >
-                  {formatCurrency(trendDelta, currency, { signDisplay: "always", maximumFractionDigits: 0 })}
+                  {`${formatCurrency(Math.abs(trendDelta), currency, { maximumFractionDigits: 0 })} ${
+                    spentLess ? "less" : "more"
+                  }`}
                 </Text>
               </View>
+              <Text style={styles.trendCaption}>
+                than {overviewPeriod === "week" ? "last week" : "last month"}
+              </Text>
             </View>
           </View>
+          <View style={styles.chartSwitch}>
+            {["bar", "line"].map((type) => {
+              const disabled = type === "line" && overviewPeriod !== "month";
+              const active = overviewChart === type && !disabled;
+              return (
+                <Pressable
+                  key={type}
+                  onPress={() => setOverviewChart(type as typeof overviewChart)}
+                  disabled={disabled}
+                  style={[
+                    styles.chartPill,
+                    active && styles.chartPillActive,
+                    disabled && styles.chartPillDisabled,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.chartLabel,
+                      active && styles.chartLabelActive,
+                      disabled && styles.chartLabelDisabled,
+                    ]}
+                  >
+                    {type === "bar" ? "Bar" : "Line"}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
           <View style={styles.chartContainer}>
-            <TrendLineChart incomeSeries={incomeSeries} expenseSeries={expenseSeries} style={styles.chart} />
+            {overviewChart === "line" ? (
+              <SpendingLineChart data={dailySpending} style={styles.chart} />
+            ) : (
+              <SpendingBarChart
+                data={overviewPeriod === "month" ? monthlyComparison : dailySpending}
+                style={styles.chart}
+              />
+            )}
           </View>
         </View>
 
         <View style={[theme.components.surface, styles.topSpendingCard]}>
           <View style={styles.sectionHeaderRow}>
-            <Text style={styles.sectionTitle}>Top spending</Text>
-            <Text style={styles.sectionCaption}>
-              {topSpending.totalSpent ? formatCurrency(topSpending.totalSpent, currency) : "No spend"}
-            </Text>
+            <View>
+              <Text style={styles.sectionTitle}>Top spending</Text>
+              <Text style={styles.sectionCaption}>
+                {topSpending.totalSpent ? formatCurrency(topSpending.totalSpent, currency) : "No spend"}
+              </Text>
+            </View>
+            <View style={styles.periodSwitch}>
+              {["week", "month"].map((period) => {
+                const active = topSpendingPeriod === period;
+                return (
+                  <Pressable
+                    key={period}
+                    onPress={() => setTopSpendingPeriod(period as typeof topSpendingPeriod)}
+                    style={[styles.periodPill, active && styles.periodPillActive]}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: active }}
+                  >
+                    <Text style={[styles.periodLabel, active && styles.periodLabelActive]}>
+                      {period === "week" ? "Week" : "Month"}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
           </View>
           {topSpending.entries.length ? (
             <View style={styles.topSpendingContent}>
@@ -538,7 +637,7 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>) =>
       backgroundColor: theme.colors.background,
     },
     content: {
-      paddingHorizontal: theme.spacing.lg,
+      paddingHorizontal: theme.spacing.md,
       paddingTop: theme.spacing.lg,
       paddingBottom: theme.spacing.xxl,
       gap: theme.spacing.lg,
@@ -691,6 +790,43 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>) =>
     trendValue: {
       fontSize: 16,
       fontWeight: "600",
+    },
+    trendCaption: {
+      ...theme.typography.subtitle,
+      fontSize: 12,
+      marginTop: 2,
+    },
+    chartSwitch: {
+      flexDirection: "row",
+      gap: theme.spacing.sm,
+      marginTop: theme.spacing.md,
+    },
+    chartPill: {
+      paddingHorizontal: 14,
+      paddingVertical: 6,
+      borderRadius: 999,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      backgroundColor: theme.colors.surface,
+    },
+    chartPillActive: {
+      borderColor: theme.colors.primary,
+      backgroundColor: `${theme.colors.primary}14`,
+    },
+    chartPillDisabled: {
+      opacity: 0.45,
+    },
+    chartLabel: {
+      ...theme.typography.subtitle,
+      fontSize: 13,
+      color: theme.colors.textMuted,
+    },
+    chartLabelActive: {
+      color: theme.colors.primary,
+      fontWeight: "600",
+    },
+    chartLabelDisabled: {
+      color: theme.colors.textMuted,
     },
     chartContainer: {
       marginTop: theme.spacing.md,
