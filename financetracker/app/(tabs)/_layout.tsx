@@ -155,8 +155,8 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>) =>
   StyleSheet.create({
     tabBar: {
       position: "absolute",
-      left: 16,
-      right: 16,
+      left: 12,
+      right: 12,
       bottom: Platform.select({ ios: 24, default: 16 }),
       backgroundColor: theme.colors.surface,
       borderTopWidth: 0,
@@ -166,10 +166,10 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>) =>
       shadowOpacity: Platform.OS === "ios" ? 0.18 : 0.2,
       shadowRadius: 16,
       shadowOffset: { width: 0, height: 10 },
-      height: Platform.select({ ios: 80, default: 70 }),
-      paddingHorizontal: 18,
-      paddingTop: 10,
-      paddingBottom: Platform.select({ ios: 22, default: 14 }),
+      height: Platform.select({ ios: 68, default: 64 }),
+      paddingHorizontal: 14,
+      paddingTop: 8,
+      paddingBottom: Platform.select({ ios: 18, default: 12 }),
     },
     tabLabel: {
       fontSize: 12,
@@ -178,8 +178,9 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>) =>
       marginBottom: -4,
     },
     tabItem: {
-      paddingHorizontal: 6,
-      minWidth: 72,
+      paddingHorizontal: 4,
+      minWidth: 84,
+      marginHorizontal: 4,
     },
     addButtonWrapper: {
       alignItems: "center",

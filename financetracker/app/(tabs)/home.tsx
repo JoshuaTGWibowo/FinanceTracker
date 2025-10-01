@@ -436,7 +436,7 @@ export default function HomeScreen() {
               <View style={styles.trendRow}>
                 <Ionicons
                   name={spentLess ? "arrow-down" : "arrow-up"}
-                  size={14}
+                  size={16}
                   color={spentLess ? theme.colors.success : theme.colors.danger}
                 />
                 <Text
@@ -684,7 +684,7 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>) =>
     content: {
       paddingHorizontal: theme.spacing.md,
       paddingTop: theme.spacing.lg,
-      paddingBottom: theme.spacing.xxl,
+      paddingBottom: theme.spacing.xxl + 96,
       gap: theme.spacing.lg,
     },
     header: {
@@ -809,7 +809,7 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>) =>
     reportTotals: {
       flexDirection: "row",
       justifyContent: "space-between",
-      alignItems: "center",
+      alignItems: "flex-start",
       gap: theme.spacing.lg,
     },
     reportStat: {
@@ -821,29 +821,33 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>) =>
     },
     reportLabel: {
       ...theme.typography.subtitle,
-      fontSize: 12,
+      fontSize: 13,
       textTransform: "uppercase",
-      letterSpacing: 1.2,
+      letterSpacing: 1.4,
     },
     reportValue: {
-      fontSize: 18,
+      fontSize: 24,
       fontWeight: "700",
+      letterSpacing: 0.3,
     },
     reportValueNegative: {
       color: theme.colors.danger,
     },
+    reportValuePositive: {
+      color: theme.colors.success,
+    },
     trendRow: {
       flexDirection: "row",
       alignItems: "center",
-      gap: 4,
+      gap: 6,
     },
     trendValue: {
-      fontSize: 16,
+      fontSize: 18,
       fontWeight: "600",
     },
     trendCaption: {
       ...theme.typography.subtitle,
-      fontSize: 12,
+      fontSize: 13,
       marginTop: 2,
       textAlign: "right",
     },
