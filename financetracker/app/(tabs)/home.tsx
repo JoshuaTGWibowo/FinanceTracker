@@ -317,7 +317,7 @@ export default function HomeScreen() {
     () =>
       [...transactions]
         .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-        .slice(0, 4),
+        .slice(0, 5),
     [transactions],
   );
 
@@ -768,7 +768,7 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>) =>
       color: theme.colors.primary,
     },
     monthlyReport: {
-      gap: theme.spacing.lg,
+      gap: theme.spacing.md,
     },
     monthlyHeader: {
       flexDirection: "row",
@@ -810,7 +810,7 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>) =>
       flexDirection: "row",
       justifyContent: "space-between",
       alignItems: "flex-start",
-      gap: theme.spacing.lg,
+      gap: theme.spacing.md,
     },
     reportStat: {
       gap: 6,
@@ -826,9 +826,9 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>) =>
       letterSpacing: 1.4,
     },
     reportValue: {
-      fontSize: 24,
+      fontSize: 18,
       fontWeight: "700",
-      letterSpacing: 0.3,
+      letterSpacing: 0.2,
     },
     reportValueNegative: {
       color: theme.colors.danger,
@@ -854,7 +854,7 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>) =>
     chartSwitch: {
       flexDirection: "row",
       gap: theme.spacing.sm,
-      marginTop: theme.spacing.md,
+      marginTop: theme.spacing.sm,
     },
     chartPill: {
       paddingHorizontal: 14,
