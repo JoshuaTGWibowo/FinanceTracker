@@ -1,17 +1,23 @@
-import { memo, useCallback, useMemo, useState } from "react";
-import { LayoutChangeEvent, View, ViewStyle } from "react-native";
-import Svg, { Defs, LinearGradient, Path, Rect, Stop, Text as SvgText, Circle } from "react-native-svg";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
+import { LayoutChangeEvent, StyleSheet, Text, View, ViewStyle } from "react-native";
+import Svg, { Circle, Defs, LinearGradient, Path, Rect, Stop, Text as SvgText } from "react-native-svg";
 
 import { useAppTheme } from "../theme";
 
 export interface SpendingPoint {
   label: string;
   value: number;
+  hint?: string;
 }
 
 interface SpendingChartProps {
   data: SpendingPoint[];
   style?: ViewStyle;
+}
+
+interface SpendingLineChartProps extends SpendingChartProps {
+  comparison?: SpendingPoint[];
+  formatValue?: (value: number) => string;
 }
 
 const CHART_HEIGHT = 180;
@@ -28,9 +34,10 @@ const buildPath = (points: { x: number; y: number }[]) => {
     .join(" ");
 };
 
-const SpendingLineChartComponent = ({ data, style }: SpendingChartProps) => {
+const SpendingLineChartComponent = ({ data, style, comparison, formatValue }: SpendingLineChartProps) => {
   const theme = useAppTheme();
   const [containerWidth, setContainerWidth] = useState(MIN_CHART_WIDTH);
+  const [activeIndex, setActiveIndex] = useState(() => (data.length ? data.length - 1 : 0));
   const chartWidth = Math.max(containerWidth, MIN_CHART_WIDTH);
 
   const handleLayout = useCallback(
@@ -43,31 +50,88 @@ const SpendingLineChartComponent = ({ data, style }: SpendingChartProps) => {
     [containerWidth],
   );
 
-  const { path, points } = useMemo(() => {
+  useEffect(() => {
     if (!data.length) {
-      return { path: "", points: [] as { x: number; y: number; label: string; value: number }[] };
+      setActiveIndex(0);
+      return;
     }
 
-    const maxValue = Math.max(...data.map((item) => item.value), 1);
+    setActiveIndex((previous) => Math.min(previous, data.length - 1));
+  }, [data]);
+
+  const {
+    primaryPath,
+    primaryPoints,
+    comparisonPath,
+    comparisonPoints,
+    step,
+  } = useMemo(() => {
+    if (!data.length) {
+      return {
+        primaryPath: "",
+        primaryPoints: [] as (SpendingPoint & { x: number; y: number })[],
+        comparisonPath: "",
+        comparisonPoints: [] as (SpendingPoint & { x: number; y: number })[],
+        step: chartWidth,
+      };
+    }
+
+    const maxValue = Math.max(
+      ...data.map((item) => item.value),
+      ...(comparison?.map((item) => item.value) ?? [0]),
+      1,
+    );
     const usableHeight = CHART_HEIGHT - VERTICAL_PADDING * 2;
-    const step = data.length > 1 ? chartWidth / (data.length - 1) : chartWidth / 2;
+    const stepValue = data.length > 1 ? chartWidth / (data.length - 1) : chartWidth / 2;
 
-    const pointsMeta = data.map((item, index) => {
-      const x = data.length > 1 ? index * step : chartWidth / 2;
-      const y =
-        CHART_HEIGHT - VERTICAL_PADDING - Math.max(0, Math.min(1, item.value / maxValue)) * usableHeight;
+    const toPoints = (series: SpendingPoint[] | undefined) =>
+      (series ?? []).map((item, index) => {
+        const x = data.length > 1 ? index * stepValue : chartWidth / 2;
+        const y =
+          CHART_HEIGHT - VERTICAL_PADDING - Math.max(0, Math.min(1, item.value / maxValue)) * usableHeight;
 
-      return { x, y, label: item.label, value: item.value };
-    });
+        return { ...item, x, y };
+      });
+
+    const primaryPointsMeta = toPoints(data);
+    const comparisonPointsMeta = toPoints(comparison);
 
     return {
-      path: buildPath(pointsMeta),
-      points: pointsMeta,
+      primaryPath: buildPath(primaryPointsMeta),
+      comparisonPath: buildPath(comparisonPointsMeta),
+      primaryPoints: primaryPointsMeta,
+      comparisonPoints: comparisonPointsMeta,
+      step: stepValue,
     };
-  }, [chartWidth, data]);
+  }, [chartWidth, comparison, data]);
+
+  const activePoint = primaryPoints[activeIndex];
+  const activeComparison = comparisonPoints[activeIndex];
+  const activeLabel = activePoint?.hint ?? activePoint?.label ?? "";
+  const format = formatValue ?? ((value: number) => `${value}`);
 
   return (
     <View style={[{ width: "100%" }, style]} onLayout={handleLayout}>
+      {activePoint && (
+        <View
+          pointerEvents="none"
+          style={[
+            styles.tooltip,
+            {
+              backgroundColor: theme.colors.surface,
+              borderColor: theme.colors.border,
+            },
+          ]}
+        >
+          <Text style={[styles.tooltipTitle, { color: theme.colors.text }]}>Day {activeLabel}</Text>
+          <Text style={[styles.tooltipValue, { color: theme.colors.primary }]}>{format(activePoint.value)}</Text>
+          {activeComparison ? (
+            <Text style={[styles.tooltipCaption, { color: theme.colors.textMuted }]}> 
+              Last month: {format(activeComparison.value)}
+            </Text>
+          ) : null}
+        </View>
+      )}
       <Svg width={chartWidth} height={CHART_HEIGHT} viewBox={`0 0 ${chartWidth} ${CHART_HEIGHT}`}>
         <Defs>
           <LinearGradient id="spendingLineGradient" x1="0" x2="0" y1="0" y2="1">
@@ -82,39 +146,79 @@ const SpendingLineChartComponent = ({ data, style }: SpendingChartProps) => {
           strokeDasharray="4,6"
         />
 
-        {path && (
+        {comparisonPath ? (
+          <Path d={comparisonPath} stroke={theme.colors.textMuted} strokeWidth={2} fill="none" strokeLinecap="round" />
+        ) : null}
+
+        {primaryPath && (
           <>
             <Path
-              d={`${path} L${chartWidth},${CHART_HEIGHT - VERTICAL_PADDING} L0,${CHART_HEIGHT - VERTICAL_PADDING} Z`}
+              d={`${primaryPath} L${chartWidth},${CHART_HEIGHT - VERTICAL_PADDING} L0,${CHART_HEIGHT - VERTICAL_PADDING} Z`}
               fill="url(#spendingLineGradient)"
               opacity={0.4}
             />
-            <Path d={path} stroke={theme.colors.primary} strokeWidth={3} fill="none" strokeLinecap="round" />
+            <Path d={primaryPath} stroke={theme.colors.primary} strokeWidth={3} fill="none" strokeLinecap="round" />
           </>
         )}
 
-        {points.map((point) => (
-          <SvgText
-            key={`label-${point.label}`}
-            x={point.x}
-            y={CHART_HEIGHT - VERTICAL_PADDING + 18}
-            fontSize={12}
-            fill={theme.colors.textMuted}
-            textAnchor="middle"
-          >
-            {point.label}
-          </SvgText>
-        ))}
+        {activePoint ? (
+          <Path
+            d={`M${activePoint.x},${VERTICAL_PADDING / 2} L${activePoint.x},${CHART_HEIGHT - VERTICAL_PADDING}`}
+            stroke={theme.colors.border}
+            strokeWidth={1}
+            strokeDasharray="6,6"
+          />
+        ) : null}
 
-        {points.map((point) => (
+        {primaryPoints.map((point) =>
+          point.label ? (
+            <SvgText
+              key={`label-${point.x}-${point.label}`}
+              x={point.x}
+              y={CHART_HEIGHT - VERTICAL_PADDING + 18}
+              fontSize={12}
+              fill={theme.colors.textMuted}
+              textAnchor="middle"
+            >
+              {point.label}
+            </SvgText>
+          ) : null,
+        )}
+
+        {comparisonPoints.map((point, index) => (
           <Circle
-            key={`point-${point.label}`}
+            key={`comparison-point-${index}`}
             cx={point.x}
             cy={point.y}
-            r={4}
+            r={3.5}
+            fill={theme.colors.surface}
+            stroke={theme.colors.textMuted}
+            strokeWidth={1.5}
+          />
+        ))}
+
+        {primaryPoints.map((point, index) => (
+          <Circle
+            key={`point-${index}`}
+            cx={point.x}
+            cy={point.y}
+            r={index === activeIndex ? 5 : 4}
             fill={theme.colors.primary}
             stroke={theme.colors.background}
-            strokeWidth={1.5}
+            strokeWidth={2}
+            onPress={() => setActiveIndex(index)}
+          />
+        ))}
+
+        {primaryPoints.map((point, index) => (
+          <Rect
+            key={`hit-${index}`}
+            x={Math.max(0, point.x - step / 2)}
+            y={0}
+            width={step || chartWidth}
+            height={CHART_HEIGHT}
+            fill="transparent"
+            onPress={() => setActiveIndex(index)}
           />
         ))}
       </Svg>
@@ -207,6 +311,33 @@ const SpendingBarChartComponent = ({ data, style }: SpendingChartProps) => {
     </View>
   );
 };
+
+const styles = StyleSheet.create({
+  tooltip: {
+    position: "absolute",
+    top: 8,
+    left: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    gap: 2,
+  },
+  tooltipTitle: {
+    fontSize: 12,
+    fontWeight: "600",
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+  },
+  tooltipValue: {
+    fontSize: 18,
+    fontWeight: "700",
+  },
+  tooltipCaption: {
+    fontSize: 12,
+    fontWeight: "500",
+  },
+});
 
 export const SpendingLineChart = memo(SpendingLineChartComponent);
 export const SpendingBarChart = memo(SpendingBarChartComponent);

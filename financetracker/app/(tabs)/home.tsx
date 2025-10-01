@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -82,6 +82,12 @@ export default function HomeScreen() {
 
   const styles = useMemo(() => createStyles(theme), [theme]);
 
+  useEffect(() => {
+    if (overviewPeriod === "week" && overviewChart === "line") {
+      setOverviewChart("bar");
+    }
+  }, [overviewChart, overviewPeriod]);
+
   const balance = useMemo(
     () =>
       transactions.reduce((acc, transaction) => {
@@ -122,11 +128,11 @@ export default function HomeScreen() {
   );
 
   const {
-    periodIncome,
     periodExpense,
-    dailySpending,
+    periodDailySpending,
     monthlyComparison,
     previousExpense,
+    monthlyLineSeries,
   } = useMemo(() => {
     const today = dayjs();
     const periodStart = overviewPeriod === "week" ? today.startOf("week") : today.startOf("month");
@@ -150,15 +156,25 @@ export default function HomeScreen() {
     );
 
     const dayCount = periodEnd.diff(periodStart, "day") + 1;
-    const daily = Array.from({ length: dayCount }).map((_, index) => {
+    const periodDailySpending = Array.from({ length: dayCount }).map((_, index) => {
       const day = periodStart.add(index, "day");
       const value = filtered
         .filter((transaction) => transaction.type === "expense" && dayjs(transaction.date).isSame(day, "day"))
         .reduce((acc, transaction) => acc + transaction.amount, 0);
 
+      if (overviewPeriod === "week") {
+        return {
+          label: day.format("dd"),
+          value,
+          hint: day.format("ddd"),
+        };
+      }
+
+      const label = index === 0 ? "1" : index === dayCount - 1 ? String(dayCount) : "";
       return {
-        label: overviewPeriod === "week" ? day.format("dd") : day.format("D"),
+        label,
         value,
+        hint: String(index + 1),
       };
     });
 
@@ -203,12 +219,53 @@ export default function HomeScreen() {
           })
         : [];
 
+    const monthStart = today.startOf("month");
+    const monthEnd = today.endOf("month");
+    const daysInMonth = monthEnd.diff(monthStart, "day") + 1;
+    const previousMonthStart = monthStart.subtract(1, "month");
+    const previousMonthEnd = previousMonthStart.endOf("month");
+    const previousMonthDayCount = previousMonthEnd.diff(previousMonthStart, "day") + 1;
+
+    const buildMonthlyPoint = (index: number, value: number) => ({
+      label: index === 0 ? "1" : index === daysInMonth - 1 ? String(daysInMonth) : "",
+      value,
+      hint: String(index + 1),
+    });
+
+    const currentMonthDaily = Array.from({ length: daysInMonth }).map((_, index) => {
+      const day = monthStart.add(index, "day");
+      const spent = transactions
+        .filter((transaction) => transaction.type === "expense" && dayjs(transaction.date).isSame(day, "day"))
+        .reduce((acc, transaction) => acc + transaction.amount, 0);
+
+      return buildMonthlyPoint(index, spent);
+    });
+
+    const previousMonthValues = Array.from({ length: previousMonthDayCount }).map((_, index) => {
+      const day = previousMonthStart.add(index, "day");
+      return transactions
+        .filter((transaction) => transaction.type === "expense" && dayjs(transaction.date).isSame(day, "day"))
+        .reduce((acc, transaction) => acc + transaction.amount, 0);
+    });
+
+    const lastPreviousValue = previousMonthValues.length
+      ? previousMonthValues[previousMonthValues.length - 1]
+      : 0;
+
+    const previousMonthDaily = Array.from({ length: daysInMonth }).map((_, index) => {
+      const value = index < previousMonthDayCount ? previousMonthValues[index] : lastPreviousValue;
+      return buildMonthlyPoint(index, value);
+    });
+
     return {
-      periodIncome: totals.income,
       periodExpense: totals.expense,
-      dailySpending: daily,
+      periodDailySpending,
       monthlyComparison,
       previousExpense,
+      monthlyLineSeries: {
+        current: currentMonthDaily,
+        previous: previousMonthDaily,
+      },
     };
   }, [overviewPeriod, transactions]);
 
@@ -247,7 +304,6 @@ export default function HomeScreen() {
 
   const currency = profile.currency || "USD";
   const formattedBalance = formatCurrency(balance, currency);
-  const formattedPeriodIncome = formatCurrency(periodIncome, currency);
   const formattedPeriodExpenses = formatCurrency(periodExpense, currency);
 
   const netChangeThisMonth = summary.income - summary.expense;
@@ -369,19 +425,13 @@ export default function HomeScreen() {
             </View>
           </View>
           <View style={styles.reportTotals}>
-            <View>
+            <View style={styles.reportStat}>
               <Text style={styles.reportLabel}>Total spent</Text>
               <Text style={[styles.reportValue, styles.reportValueNegative]}>
                 {formattedPeriodExpenses}
               </Text>
             </View>
-            <View>
-              <Text style={styles.reportLabel}>Total income</Text>
-              <Text style={[styles.reportValue, styles.reportValuePositive]}>
-                {formattedPeriodIncome}
-              </Text>
-            </View>
-            <View>
+            <View style={[styles.reportStat, styles.trendStat]}>
               <Text style={styles.reportLabel}>Trend</Text>
               <View style={styles.trendRow}>
                 <Ionicons
@@ -406,27 +456,15 @@ export default function HomeScreen() {
             </View>
           </View>
           <View style={styles.chartSwitch}>
-            {["bar", "line"].map((type) => {
-              const disabled = type === "line" && overviewPeriod !== "month";
-              const active = overviewChart === type && !disabled;
+            {(overviewPeriod === "month" ? ["bar", "line"] : ["bar"]).map((type) => {
+              const active = overviewChart === type;
               return (
                 <Pressable
                   key={type}
                   onPress={() => setOverviewChart(type as typeof overviewChart)}
-                  disabled={disabled}
-                  style={[
-                    styles.chartPill,
-                    active && styles.chartPillActive,
-                    disabled && styles.chartPillDisabled,
-                  ]}
+                  style={[styles.chartPill, active && styles.chartPillActive]}
                 >
-                  <Text
-                    style={[
-                      styles.chartLabel,
-                      active && styles.chartLabelActive,
-                      disabled && styles.chartLabelDisabled,
-                    ]}
-                  >
+                  <Text style={[styles.chartLabel, active && styles.chartLabelActive]}>
                     {type === "bar" ? "Bar" : "Line"}
                   </Text>
                 </Pressable>
@@ -435,10 +473,17 @@ export default function HomeScreen() {
           </View>
           <View style={styles.chartContainer}>
             {overviewChart === "line" ? (
-              <SpendingLineChart data={dailySpending} style={styles.chart} />
+              <SpendingLineChart
+                data={monthlyLineSeries.current}
+                comparison={monthlyLineSeries.previous}
+                formatValue={(value) =>
+                  formatCurrency(value, currency, { maximumFractionDigits: 0 })
+                }
+                style={styles.chart}
+              />
             ) : (
               <SpendingBarChart
-                data={overviewPeriod === "month" ? monthlyComparison : dailySpending}
+                data={overviewPeriod === "month" ? monthlyComparison : periodDailySpending}
                 style={styles.chart}
               />
             )}
@@ -764,6 +809,14 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>) =>
     reportTotals: {
       flexDirection: "row",
       justifyContent: "space-between",
+      alignItems: "center",
+      gap: theme.spacing.lg,
+    },
+    reportStat: {
+      gap: 6,
+      alignItems: "flex-start",
+    },
+    trendStat: {
       alignItems: "flex-end",
     },
     reportLabel: {
@@ -779,9 +832,6 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>) =>
     reportValueNegative: {
       color: theme.colors.danger,
     },
-    reportValuePositive: {
-      color: theme.colors.success,
-    },
     trendRow: {
       flexDirection: "row",
       alignItems: "center",
@@ -795,6 +845,7 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>) =>
       ...theme.typography.subtitle,
       fontSize: 12,
       marginTop: 2,
+      textAlign: "right",
     },
     chartSwitch: {
       flexDirection: "row",
@@ -813,9 +864,6 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>) =>
       borderColor: theme.colors.primary,
       backgroundColor: `${theme.colors.primary}14`,
     },
-    chartPillDisabled: {
-      opacity: 0.45,
-    },
     chartLabel: {
       ...theme.typography.subtitle,
       fontSize: 13,
@@ -824,9 +872,6 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>) =>
     chartLabelActive: {
       color: theme.colors.primary,
       fontWeight: "600",
-    },
-    chartLabelDisabled: {
-      color: theme.colors.textMuted,
     },
     chartContainer: {
       marginTop: theme.spacing.md,
