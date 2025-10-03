@@ -78,9 +78,11 @@ export default function TransactionsScreen() {
   
   // Auto-scroll to current month on mount
   useEffect(() => {
-    setTimeout(() => {
+    const timeout = setTimeout(() => {
       scrollViewRef.current?.scrollToEnd({ animated: false });
     }, 100);
+
+    return () => clearTimeout(timeout);
   }, []);
   
   const [searchTerm, setSearchTerm] = useState("");
@@ -139,7 +141,7 @@ export default function TransactionsScreen() {
   };
 
   const activeFilters = useMemo(() => {
-    const filters: Array<{ key: string; label: string; type: string; value?: string }> = [];
+    const filters: { key: string; label: string; type: string; value?: string }[] = [];
     if (searchTerm) {
       filters.push({ key: `search-${searchTerm}`, label: searchTerm, type: "search" });
     }
@@ -202,7 +204,14 @@ export default function TransactionsScreen() {
     });
 
     // Group by date with daily totals
-    const grouped = new Map<string, { transactions: Transaction[], dailyIncome: number, dailyExpense: number }>();
+    const grouped = new Map<
+      string,
+      {
+        transactions: Transaction[];
+        dailyIncome: number;
+        dailyExpense: number;
+      }
+    >();
     filtered
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
       .forEach((transaction) => {
@@ -219,7 +228,7 @@ export default function TransactionsScreen() {
 
     const sectionData = Array.from(grouped.entries()).map(([key, value]) => ({
       title: dayjs(key).format("dddd, MMM D"),
-      data: [value], // Wrap in array as SectionList expects array of items
+      data: [{ ...value, id: key }],
       dailyIncome: value.dailyIncome,
       dailyExpense: value.dailyExpense,
     }));
@@ -241,7 +250,7 @@ export default function TransactionsScreen() {
     let openingBalance = 0;
     let previousPeriodNet = 0;
     
-    transactions
+    [...transactions]
       .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
       .forEach((transaction) => {
         const value = transaction.type === "income" ? transaction.amount : -transaction.amount;
@@ -532,14 +541,18 @@ export default function TransactionsScreen() {
             <Text style={styles.sectionHeader}>{section.title}</Text>
             <View style={styles.sectionTotals}>
               {section.dailyIncome > 0 && (
-                <Text style={styles.dailyIncome}>
-                  +{formatCurrency(section.dailyIncome, currency || "USD")}
-                </Text>
+                <View style={styles.sectionTotalPill("income")}>
+                  <Text style={styles.sectionTotalText}>
+                    +{formatCurrency(section.dailyIncome, currency || "USD")}
+                  </Text>
+                </View>
               )}
               {section.dailyExpense > 0 && (
-                <Text style={styles.dailyExpense}>
-                  −{formatCurrency(section.dailyExpense, currency || "USD")}
-                </Text>
+                <View style={styles.sectionTotalPill("expense")}>
+                  <Text style={styles.sectionTotalText}>
+                    −{formatCurrency(section.dailyExpense, currency || "USD")}
+                  </Text>
+                </View>
               )}
             </View>
           </View>
@@ -1058,15 +1071,17 @@ const createStyles = (theme: any, insets: any) =>
       flexDirection: "row",
       gap: 8,
     },
-    dailyIncome: {
+    sectionTotalPill: (type: "income" | "expense") => ({
+      backgroundColor: type === "income" ? theme.colors.success : theme.colors.danger,
+      paddingHorizontal: 10,
+      paddingVertical: 4,
+      borderRadius: 999,
+    }),
+    sectionTotalText: {
       fontSize: 11,
-      fontWeight: "600",
-      color: theme.colors.success,
-    },
-    dailyExpense: {
-      fontSize: 11,
-      fontWeight: "600",
-      color: theme.colors.danger,
+      fontWeight: "700",
+      color: "#FFFFFF",
+      letterSpacing: 0.3,
     },
     dayCard: {
       backgroundColor: theme.colors.surface,
