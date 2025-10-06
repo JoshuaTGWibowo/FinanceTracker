@@ -9,6 +9,16 @@ export interface Transaction {
   type: TransactionType;
   category: string;
   date: string; // ISO string
+  participants?: string[];
+  location?: string;
+  photos?: string[];
+  excludeFromReports?: boolean;
+}
+
+export interface Category {
+  id: string;
+  name: string;
+  type: TransactionType;
 }
 
 export type ThemeMode = "light" | "dark";
@@ -39,7 +49,7 @@ interface Profile {
 
 interface Preferences {
   themeMode: ThemeMode;
-  categories: string[];
+  categories: Category[];
 }
 
 interface FinanceState {
@@ -49,6 +59,9 @@ interface FinanceState {
   recurringTransactions: RecurringTransaction[];
   budgetGoals: BudgetGoal[];
   addTransaction: (transaction: Omit<Transaction, "id">) => void;
+  updateTransaction: (id: string, updates: Partial<Omit<Transaction, "id">>) => void;
+  removeTransaction: (id: string) => void;
+  duplicateTransaction: (id: string) => void;
   addRecurringTransaction: (
     transaction: Omit<RecurringTransaction, "id" | "nextOccurrence"> & {
       nextOccurrence: string;
@@ -61,7 +74,7 @@ interface FinanceState {
   removeBudgetGoal: (id: string) => void;
   updateProfile: (payload: Partial<Profile>) => void;
   setThemeMode: (mode: ThemeMode) => void;
-  addCategory: (category: string) => void;
+  addCategory: (category: { name: string; type: TransactionType }) => void;
 }
 
 const now = new Date();
@@ -70,6 +83,64 @@ const daysAgo = (amount: number) => {
   const date = new Date(now);
   date.setDate(date.getDate() - amount);
   return date.toISOString();
+};
+
+const slugify = (value: string) =>
+  value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "");
+
+const defaultCategories: Category[] = [
+  { id: "food", name: "Food", type: "expense" },
+  { id: "travel", name: "Travel", type: "expense" },
+  { id: "lifestyle", name: "Lifestyle", type: "expense" },
+  { id: "work", name: "Work", type: "expense" },
+  { id: "home", name: "Home", type: "expense" },
+  { id: "fitness", name: "Fitness", type: "expense" },
+  { id: "groceries", name: "Groceries", type: "expense" },
+  { id: "dining", name: "Dining", type: "expense" },
+  { id: "creativity", name: "Creativity", type: "expense" },
+  { id: "gear", name: "Gear", type: "expense" },
+  { id: "outdoors", name: "Outdoors", type: "expense" },
+  { id: "transport", name: "Transport", type: "expense" },
+  { id: "entertainment", name: "Entertainment", type: "expense" },
+  { id: "pets", name: "Pets", type: "expense" },
+  { id: "family", name: "Family", type: "expense" },
+  { id: "bills", name: "Bills", type: "expense" },
+  { id: "salary", name: "Salary", type: "income" },
+  { id: "consulting", name: "Consulting", type: "income" },
+  { id: "side-hustle", name: "Side Hustle", type: "income" },
+  { id: "creative-sales", name: "Creative Sales", type: "income" },
+  { id: "investing", name: "Investing", type: "income" },
+  { id: "resale", name: "Resale", type: "income" },
+  { id: "client-work", name: "Client Work", type: "income" },
+];
+
+const toStartOfDayISO = (dateValue: string) => {
+  const date = new Date(dateValue);
+  if (Number.isNaN(date.getTime())) {
+    return new Date().toISOString();
+  }
+  const normalized = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  return normalized.toISOString();
+};
+
+const normalizeTransactionPayload = (
+  transaction: Omit<Transaction, "id">,
+): Omit<Transaction, "id"> => {
+  const participants = transaction.participants
+    ?.map((value) => value.trim())
+    .filter(Boolean);
+  const photos = transaction.photos?.filter(Boolean).slice(0, 3);
+
+  return {
+    ...transaction,
+    date: toStartOfDayISO(transaction.date),
+    participants: participants && participants.length ? participants : undefined,
+    photos: photos && photos.length ? photos : undefined,
+    excludeFromReports: transaction.excludeFromReports ?? false,
+  };
 };
 
 const seedTransactions: Transaction[] = [
@@ -110,7 +181,7 @@ const seedTransactions: Transaction[] = [
     amount: 2450,
     note: "Freelance design retainer",
     type: "income",
-    category: "Work",
+    category: "Client Work",
     date: daysAgo(3),
   },
   {
@@ -182,7 +253,7 @@ const seedTransactions: Transaction[] = [
     amount: 64,
     note: "Co-working day pass",
     type: "expense",
-    category: "Work",
+    category: "Client Work",
     date: daysAgo(14),
   },
   {
@@ -238,7 +309,7 @@ const seedTransactions: Transaction[] = [
     amount: 275,
     note: "Client milestone bonus",
     type: "income",
-    category: "Work",
+    category: "Client Work",
     date: daysAgo(37),
   },
   {
@@ -382,7 +453,7 @@ const seedTransactions: Transaction[] = [
     amount: 620,
     note: "Brand strategy workshop",
     type: "income",
-    category: "Work",
+    category: "Client Work",
     date: daysAgo(83),
   },
   {
@@ -424,18 +495,7 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
   },
   preferences: {
     themeMode: "dark",
-    categories: [
-      "Food",
-      "Travel",
-      "Lifestyle",
-      "Work",
-      "Salary",
-      "Investing",
-      "Groceries",
-      "Consulting",
-      "Home",
-      "Fitness",
-    ],
+    categories: defaultCategories,
   },
   transactions: seedTransactions,
   recurringTransactions: [
@@ -487,15 +547,54 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
     },
   ],
   addTransaction: (transaction) =>
+    set((state) => {
+      const payload = normalizeTransactionPayload(transaction);
+      return {
+        transactions: [
+          {
+            id: `t-${uid++}`,
+            ...payload,
+          },
+          ...state.transactions,
+        ],
+      };
+    }),
+  updateTransaction: (id, updates) =>
+    set((state) => ({
+      transactions: state.transactions.map((transaction) => {
+        if (transaction.id !== id) {
+          return transaction;
+        }
+
+        const { id: _ignore, ...rest } = transaction;
+        const merged = { ...rest, ...updates } as Omit<Transaction, "id">;
+        const normalized = normalizeTransactionPayload(merged);
+        return { id, ...normalized };
+      }),
+    })),
+  removeTransaction: (id) =>
+    set((state) => ({
+      transactions: state.transactions.filter((transaction) => transaction.id !== id),
+    })),
+  duplicateTransaction: (id) => {
+    const original = get().transactions.find((transaction) => transaction.id === id);
+    if (!original) {
+      return;
+    }
+
+    const { id: _omit, ...payload } = original;
+    const normalized = normalizeTransactionPayload(payload);
+
     set((state) => ({
       transactions: [
         {
           id: `t-${uid++}`,
-          ...transaction,
+          ...normalized,
         },
         ...state.transactions,
       ],
-    })),
+    }));
+  },
   addRecurringTransaction: (transaction) =>
     set((state) => ({
       recurringTransactions: [
@@ -531,11 +630,14 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
       transactions: [
         {
           id: `t-${uid++}`,
-          amount: recurring.amount,
-          note: recurring.note,
-          type: recurring.type,
-          category: recurring.category,
-          date: recurring.nextOccurrence,
+          ...normalizeTransactionPayload({
+            amount: recurring.amount,
+            note: recurring.note,
+            type: recurring.type,
+            category: recurring.category,
+            date: recurring.nextOccurrence,
+            excludeFromReports: false,
+          }),
         },
         ...state.transactions,
       ],
@@ -588,19 +690,47 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
         themeMode: mode,
       },
     })),
-  addCategory: (category) => {
-    const value = category.trim();
+  addCategory: ({ name, type }) => {
+    const value = name.trim();
     if (!value) {
       return;
     }
 
-    set((state) => ({
-      preferences: {
-        ...state.preferences,
-        categories: state.preferences.categories.includes(value)
-          ? state.preferences.categories
-          : [...state.preferences.categories, value],
-      },
-    }));
+    set((state) => {
+      const existing = state.preferences.categories.find(
+        (category) => category.name.toLowerCase() === value.toLowerCase(),
+      );
+
+      if (existing) {
+        if (existing.type === type) {
+          return state;
+        }
+
+        return {
+          preferences: {
+            ...state.preferences,
+            categories: state.preferences.categories.map((category) =>
+              category.id === existing.id ? { ...category, type } : category,
+            ),
+          },
+        };
+      }
+
+      const baseId = slugify(value) || `category-${state.preferences.categories.length + 1}`;
+      let candidateId = baseId;
+      let suffix = 1;
+      while (state.preferences.categories.some((category) => category.id === candidateId)) {
+        candidateId = `${baseId}-${suffix++}`;
+      }
+
+      const nextCategory: Category = { id: candidateId, name: value, type };
+
+      return {
+        preferences: {
+          ...state.preferences,
+          categories: [...state.preferences.categories, nextCategory],
+        },
+      };
+    });
   },
 }));

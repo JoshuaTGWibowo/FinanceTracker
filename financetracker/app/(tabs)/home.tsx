@@ -75,6 +75,11 @@ export default function HomeScreen() {
   const recurringTransactions = useFinanceStore((state) => state.recurringTransactions);
   const logRecurringTransaction = useFinanceStore((state) => state.logRecurringTransaction);
 
+  const reportingTransactions = useMemo(
+    () => transactions.filter((transaction) => !transaction.excludeFromReports),
+    [transactions],
+  );
+
   const [overviewPeriod, setOverviewPeriod] = useState<"week" | "month">("month");
   const [overviewChart, setOverviewChart] = useState<"bar" | "line">("bar");
   const [topSpendingPeriod, setTopSpendingPeriod] = useState<"week" | "month">("month");
@@ -91,11 +96,11 @@ export default function HomeScreen() {
 
   const balance = useMemo(
     () =>
-      transactions.reduce((acc, transaction) => {
+      reportingTransactions.reduce((acc, transaction) => {
         const multiplier = transaction.type === "income" ? 1 : -1;
         return acc + transaction.amount * multiplier;
       }, 0),
-    [transactions],
+    [reportingTransactions],
   );
 
   const startOfMonth = useMemo(() => dayjs().startOf("month"), []);
@@ -103,7 +108,7 @@ export default function HomeScreen() {
 
   const summary = useMemo(
     () =>
-      transactions.reduce(
+      reportingTransactions.reduce(
         (acc, transaction) => {
           const value = transaction.type === "income" ? transaction.amount : -transaction.amount;
           const date = dayjs(transaction.date);
@@ -125,7 +130,7 @@ export default function HomeScreen() {
         },
         { income: 0, expense: 0, openingBalance: 0, monthNet: 0 },
       ),
-    [endOfMonth, startOfMonth, transactions],
+    [endOfMonth, reportingTransactions, startOfMonth],
   );
 
   const {
@@ -139,7 +144,7 @@ export default function HomeScreen() {
     const periodStart = overviewPeriod === "week" ? today.startOf("week") : today.startOf("month");
     const periodEnd = overviewPeriod === "week" ? today.endOf("week") : today.endOf("month");
 
-    const filtered = transactions.filter((transaction) => {
+    const filtered = reportingTransactions.filter((transaction) => {
       const date = dayjs(transaction.date);
       return !date.isBefore(periodStart) && !date.isAfter(periodEnd);
     });
@@ -184,7 +189,7 @@ export default function HomeScreen() {
     const previousPeriodEnd =
       overviewPeriod === "week" ? previousPeriodStart.endOf("week") : previousPeriodStart.endOf("month");
 
-    const previousExpense = transactions.reduce((acc, transaction) => {
+    const previousExpense = reportingTransactions.reduce((acc, transaction) => {
       if (transaction.type !== "expense") {
         return acc;
       }
@@ -202,7 +207,7 @@ export default function HomeScreen() {
             const target = today.subtract(offset, "month");
             const start = target.startOf("month");
             const end = target.endOf("month");
-            const spent = transactions.reduce((acc, transaction) => {
+            const spent = reportingTransactions.reduce((acc, transaction) => {
               if (transaction.type !== "expense") {
                 return acc;
               }
@@ -236,7 +241,7 @@ export default function HomeScreen() {
 
     const currentMonthDaily = Array.from({ length: daysInMonth }).map((_, index) => {
       const day = monthStart.add(index, "day");
-      const spent = transactions
+      const spent = reportingTransactions
         .filter((transaction) => transaction.type === "expense" && dayjs(transaction.date).isSame(day, "day"))
         .reduce((acc, transaction) => acc + transaction.amount, 0);
 
@@ -245,7 +250,7 @@ export default function HomeScreen() {
 
     const previousMonthValues = Array.from({ length: previousMonthDayCount }).map((_, index) => {
       const day = previousMonthStart.add(index, "day");
-      return transactions
+      return reportingTransactions
         .filter((transaction) => transaction.type === "expense" && dayjs(transaction.date).isSame(day, "day"))
         .reduce((acc, transaction) => acc + transaction.amount, 0);
     });
@@ -269,14 +274,14 @@ export default function HomeScreen() {
         previous: previousMonthDaily,
       },
     };
-  }, [overviewPeriod, transactions]);
+  }, [overviewPeriod, reportingTransactions]);
 
   const topSpending = useMemo(() => {
     const today = dayjs();
     const periodStart = topSpendingPeriod === "week" ? today.startOf("week") : today.startOf("month");
     const periodEnd = topSpendingPeriod === "week" ? today.endOf("week") : today.endOf("month");
 
-    const filtered = transactions.filter((transaction) => {
+    const filtered = reportingTransactions.filter((transaction) => {
       if (transaction.type !== "expense") {
         return false;
       }
@@ -314,7 +319,7 @@ export default function HomeScreen() {
     }
 
     return { entries, totalSpent };
-  }, [topSpendingPeriod, transactions]);
+  }, [reportingTransactions, topSpendingPeriod]);
 
   const donutColors = useMemo(
     () => [
@@ -349,10 +354,10 @@ export default function HomeScreen() {
 
   const recentTransactions = useMemo(
     () =>
-      [...transactions]
+      [...reportingTransactions]
         .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
         .slice(0, 5),
-    [transactions],
+    [reportingTransactions],
   );
 
   const trendDelta = previousExpense - periodExpense;
@@ -629,7 +634,11 @@ export default function HomeScreen() {
             </View>
             <View style={styles.goalList}>
               {budgetGoals.map((goal) => {
-                const progress = summarizeGoalProgress(goal, currency, transactions);
+                const progress = summarizeGoalProgress(
+                  goal,
+                  currency,
+                  reportingTransactions,
+                );
                 const progressPercent = Math.round(progress.percentage * 100);
                 const goalComplete = progressPercent >= 100;
 
@@ -677,35 +686,38 @@ export default function HomeScreen() {
           </View>
           {recentTransactions.length ? (
             <View style={styles.recentList}>
-              {recentTransactions.map((transaction) => (
-                <View key={transaction.id} style={styles.recentRow}>
-                  <View
-                    style={[
-                      styles.recentAvatar,
-                      transaction.type === "income" ? styles.avatarIncome : styles.avatarExpense,
-                    ]}
-                  >
-                    <Text style={styles.avatarText}>{transaction.category.charAt(0)}</Text>
-                  </View>
-                  <View style={styles.recentCopy}>
-                    <Text style={styles.recentNote}>{transaction.note}</Text>
-                    <Text style={styles.recentMeta}>
-                      {dayjs(transaction.date).format("ddd, D MMM")} • {transaction.category}
+              {recentTransactions.map((transaction) => {
+                const recentNote = transaction.note.trim() || transaction.category;
+                return (
+                  <View key={transaction.id} style={styles.recentRow}>
+                    <View
+                      style={[
+                        styles.recentAvatar,
+                        transaction.type === "income" ? styles.avatarIncome : styles.avatarExpense,
+                      ]}
+                    >
+                      <Text style={styles.avatarText}>{transaction.category.charAt(0)}</Text>
+                    </View>
+                    <View style={styles.recentCopy}>
+                      <Text style={styles.recentNote}>{recentNote}</Text>
+                      <Text style={styles.recentMeta}>
+                        {dayjs(transaction.date).format("ddd, D MMM")} • {transaction.category}
+                      </Text>
+                    </View>
+                    <Text
+                      style={[
+                        styles.recentAmount,
+                        transaction.type === "income"
+                          ? styles.reportValuePositive
+                          : styles.reportValueNegative,
+                      ]}
+                    >
+                      {transaction.type === "income" ? "+" : "-"}
+                      {formatCurrency(transaction.amount, currency)}
                     </Text>
                   </View>
-                  <Text
-                    style={[
-                      styles.recentAmount,
-                      transaction.type === "income"
-                        ? styles.reportValuePositive
-                        : styles.reportValueNegative,
-                    ]}
-                  >
-                    {transaction.type === "income" ? "+" : "-"}
-                    {formatCurrency(transaction.amount, currency)}
-                  </Text>
-                </View>
-              ))}
+                );
+              })}
             </View>
           ) : (
             <View style={styles.emptyState}>

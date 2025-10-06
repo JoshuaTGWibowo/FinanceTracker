@@ -14,7 +14,7 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 import { Ionicons } from "@expo/vector-icons";
 
 import { useAppTheme } from "../../theme";
-import { ThemeMode, useFinanceStore } from "../../lib/store";
+import { ThemeMode, TransactionType, useFinanceStore } from "../../lib/store";
 
 const currencies = ["USD", "EUR", "GBP", "CAD", "AUD", "JPY"];
 const goalPeriods = ["month", "week"] as const;
@@ -34,6 +34,7 @@ export default function AccountScreen() {
   const [name, setName] = useState(profile.name);
   const [currency, setCurrency] = useState(profile.currency);
   const [newCategory, setNewCategory] = useState("");
+  const [newCategoryType, setNewCategoryType] = useState<TransactionType>("expense");
   const [goalName, setGoalName] = useState("");
   const [goalTarget, setGoalTarget] = useState("");
   const [goalPeriod, setGoalPeriod] = useState<(typeof goalPeriods)[number]>("month");
@@ -68,9 +69,11 @@ export default function AccountScreen() {
       return;
     }
 
-    addCategory(newCategory.trim());
-    setGoalCategory(newCategory.trim());
+    const value = newCategory.trim();
+    addCategory({ name: value, type: newCategoryType });
+    setGoalCategory(value);
     setNewCategory("");
+    setNewCategoryType("expense");
   };
 
   const handleCreateGoal = () => {
@@ -204,11 +207,35 @@ export default function AccountScreen() {
                   <Text style={styles.secondaryButtonText}>Add</Text>
                 </Pressable>
               </View>
+              <View style={styles.typeToggleRow}>
+                {(["expense", "income"] as TransactionType[]).map((option) => {
+                  const active = newCategoryType === option;
+                  return (
+                    <Pressable
+                      key={option}
+                      style={[styles.typeToggleChip, active && styles.typeToggleChipActive]}
+                      onPress={() => setNewCategoryType(option)}
+                    >
+                      <Text style={[styles.typeToggleText, active && styles.typeToggleTextActive]}>
+                        {option === "expense" ? "Expense" : "Income"}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
             </View>
             <View style={styles.chipCloud}>
               {categories.map((category) => (
-                <View key={category} style={styles.categoryPill}>
-                  <Text style={styles.categoryPillText}>{category}</Text>
+                <View key={category.id} style={styles.categoryPill}>
+                  <Text style={styles.categoryPillText}>{category.name}</Text>
+                  <Text
+                    style={[
+                      styles.categoryPillMeta,
+                      category.type === "income" && styles.categoryPillMetaIncome,
+                    ]}
+                  >
+                    {category.type === "expense" ? "Expense" : "Income"}
+                  </Text>
                 </View>
               ))}
             </View>
@@ -275,15 +302,15 @@ export default function AccountScreen() {
                   </Text>
                 </Pressable>
                 {categories.map((category) => {
-                  const active = goalCategory === category;
+                  const active = goalCategory === category.name;
                   return (
                     <Pressable
-                      key={category}
-                      onPress={() => setGoalCategory(category)}
+                      key={category.id}
+                      onPress={() => setGoalCategory(category.name)}
                       style={[styles.currencyChip, active && styles.currencyChipActive]}
                     >
                       <Text style={[styles.currencyChipText, active && styles.currencyChipTextActive]}>
-                        {category}
+                        {category.name}
                       </Text>
                     </Pressable>
                   );
@@ -456,6 +483,33 @@ const createStyles = (
       flexDirection: "row",
       gap: theme.spacing.sm,
     },
+    typeToggleRow: {
+      flexDirection: "row",
+      gap: theme.spacing.xs,
+      marginTop: theme.spacing.xs,
+    },
+    typeToggleChip: {
+      paddingHorizontal: theme.spacing.md,
+      paddingVertical: theme.spacing.xs,
+      borderRadius: theme.radii.pill,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      backgroundColor: theme.colors.surface,
+    },
+    typeToggleChipActive: {
+      backgroundColor: theme.colors.primary,
+      borderColor: theme.colors.primary,
+    },
+    typeToggleText: {
+      fontSize: 11,
+      fontWeight: "600",
+      letterSpacing: 1,
+      textTransform: "uppercase",
+      color: theme.colors.textMuted,
+    },
+    typeToggleTextActive: {
+      color: theme.colors.text,
+    },
     chipCloud: {
       flexDirection: "row",
       flexWrap: "wrap",
@@ -468,11 +522,22 @@ const createStyles = (
       backgroundColor: theme.colors.surface,
       borderWidth: 1,
       borderColor: theme.colors.border,
+      gap: 2,
     },
     categoryPillText: {
       fontSize: 12,
       fontWeight: "600",
       color: theme.colors.text,
+    },
+    categoryPillMeta: {
+      fontSize: 10,
+      fontWeight: "600",
+      textTransform: "uppercase",
+      color: theme.colors.textMuted,
+      letterSpacing: 0.8,
+    },
+    categoryPillMetaIncome: {
+      color: theme.colors.success,
     },
     periodField: {
       maxWidth: 150,

@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import dayjs, { type Dayjs } from "dayjs";
 
@@ -61,6 +62,7 @@ const buildMonthlyPeriods = (): PeriodOption[] => {
 
 export default function TransactionsScreen() {
   const theme = useAppTheme();
+  const router = useRouter();
   const transactions = useFinanceStore((state) => state.transactions);
   const currency = useFinanceStore((state) => state.profile.currency);
   const categories = useFinanceStore((state) => state.preferences.categories);
@@ -172,6 +174,10 @@ export default function TransactionsScreen() {
     const minAmountValue = Number(minAmount) || 0;
     const maxAmountValue = Number(maxAmount) || Number.POSITIVE_INFINITY;
 
+    const reportingTransactions = transactions.filter(
+      (transaction) => !transaction.excludeFromReports,
+    );
+
     const filtered = transactions.filter((transaction) => {
       const date = dayjs(transaction.date);
       
@@ -202,6 +208,10 @@ export default function TransactionsScreen() {
       
       return true;
     });
+
+    const reportingFiltered = filtered.filter(
+      (transaction) => !transaction.excludeFromReports,
+    );
 
     // Group by date with daily totals
     const grouped = new Map<
@@ -244,7 +254,7 @@ export default function TransactionsScreen() {
     }));
 
     // Calculate summary
-    const totals = filtered.reduce(
+    const totals = reportingFiltered.reduce(
       (acc, transaction) => {
         if (transaction.type === "income") {
           acc.income += transaction.amount;
@@ -259,7 +269,7 @@ export default function TransactionsScreen() {
     // Calculate balances
     let openingBalance = 0;
 
-    [...transactions]
+    [...reportingTransactions]
       .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
       .forEach((transaction) => {
         const value = transaction.type === "income" ? transaction.amount : -transaction.amount;
@@ -274,7 +284,7 @@ export default function TransactionsScreen() {
     const closingBalance = openingBalance + netChange;
 
     // Expense breakdown
-    const expenseMap = filtered.reduce((acc, transaction) => {
+    const expenseMap = reportingFiltered.reduce((acc, transaction) => {
       if (transaction.type !== "expense") return acc;
       const current = acc.get(transaction.category) ?? 0;
       acc.set(transaction.category, current + transaction.amount);
@@ -559,32 +569,71 @@ export default function TransactionsScreen() {
         }}
         renderItem={({ item }) => (
           <View style={styles.dayCard}>
-            {item.transactions.map((transaction, index) => (
-              <View key={transaction.id}>
-                {index > 0 && <View style={styles.transactionDivider} />}
-                <Pressable style={styles.transactionItem}>
-                  <View style={styles.transactionLeft}>
-                    <View style={styles.categoryIcon(transaction.type)}>
-                      <Text style={styles.categoryInitial}>
-                        {transaction.category.charAt(0).toUpperCase()}
-                      </Text>
+            {item.transactions.map((transaction, index) => {
+              const metaParts: string[] = [transaction.category];
+              if (transaction.location) {
+                metaParts.push(transaction.location);
+              }
+              if (transaction.participants?.length) {
+                const [first, ...rest] = transaction.participants;
+                metaParts.push(
+                  rest.length
+                    ? `With ${first} +${rest.length}`
+                    : `With ${first}`,
+                );
+              }
+              const noteDisplay = transaction.note.trim() || transaction.category;
+              return (
+                <View key={transaction.id}>
+                  {index > 0 && <View style={styles.transactionDivider} />}
+                  <Pressable
+                    style={styles.transactionItem}
+                    onPress={() => router.push(`/transactions/${transaction.id}`)}
+                  >
+                    <View style={styles.transactionLeft}>
+                      <View style={styles.categoryIcon(transaction.type)}>
+                        <Text style={styles.categoryInitial}>
+                          {transaction.category.charAt(0).toUpperCase()}
+                        </Text>
+                      </View>
+                      <View style={styles.transactionDetails}>
+                        <Text style={styles.transactionNote} numberOfLines={1}>
+                          {noteDisplay}
+                        </Text>
+                        <Text style={styles.transactionMeta} numberOfLines={1}>
+                          {metaParts.join(" • ")}
+                        </Text>
+                        {transaction.excludeFromReports && (
+                          <View style={styles.transactionTagExcluded}>
+                            <Text style={styles.transactionTagExcludedText}>
+                              Excluded from reports
+                            </Text>
+                          </View>
+                        )}
+                      </View>
                     </View>
-                    <View style={styles.transactionDetails}>
-                      <Text style={styles.transactionNote} numberOfLines={1}>
-                        {transaction.note}
+                    <View style={styles.transactionRight}>
+                      <Text style={styles.transactionAmount(transaction.type)}>
+                        {transaction.type === "income" ? "+" : "−"}
+                        {formatCurrency(transaction.amount, currency || "USD")}
                       </Text>
-                      <Text style={styles.transactionMeta}>
-                        {transaction.category} • {dayjs(transaction.date).format("h:mm A")}
-                      </Text>
+                      {transaction.photos?.length ? (
+                        <View style={styles.attachmentBadge}>
+                          <Ionicons
+                            name="image"
+                            size={14}
+                            color={theme.colors.textMuted}
+                          />
+                          <Text style={styles.attachmentBadgeText}>
+                            {transaction.photos.length}
+                          </Text>
+                        </View>
+                      ) : null}
                     </View>
-                  </View>
-                  <Text style={styles.transactionAmount(transaction.type)}>
-                    {transaction.type === "income" ? "+" : "−"}
-                    {formatCurrency(transaction.amount, currency || "USD")}
-                  </Text>
-                </Pressable>
-              </View>
-            ))}
+                  </Pressable>
+                </View>
+              );
+            })}
           </View>
         )}
         ItemSeparatorComponent={() => <View style={styles.separator} />}
@@ -666,15 +715,18 @@ export default function TransactionsScreen() {
                 <Text style={styles.filterSectionTitle}>Categories</Text>
                 <View style={styles.categoryGrid}>
                   {categories.map((category) => {
-                    const selected = selectedCategories.includes(category);
+                    const selected = selectedCategories.includes(category.name);
                     return (
                       <Pressable
-                        key={category}
-                        onPress={() => toggleCategory(category)}
+                        key={category.id}
+                        onPress={() => toggleCategory(category.name)}
                         style={styles.categoryOption(selected)}
                       >
                         <Text style={styles.categoryOptionText(selected)}>
-                          {category}
+                          {category.name}
+                        </Text>
+                        <Text style={styles.categoryOptionHint}>
+                          {category.type === "income" ? "Income" : "Expense"}
                         </Text>
                       </Pressable>
                     );
@@ -1132,6 +1184,7 @@ const createStyles = (theme: any, insets: any) =>
     },
     transactionDetails: {
       flex: 1,
+      gap: 4,
     },
     transactionNote: {
       fontSize: 14,
@@ -1143,11 +1196,46 @@ const createStyles = (theme: any, insets: any) =>
       fontSize: 11,
       color: theme.colors.textMuted,
     },
+    transactionTagExcluded: {
+      alignSelf: "flex-start",
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderRadius: 999,
+      backgroundColor: `${theme.colors.textMuted}20`,
+    },
+    transactionTagExcludedText: {
+      fontSize: 10,
+      fontWeight: "600",
+      letterSpacing: 0.5,
+      textTransform: "uppercase",
+      color: theme.colors.textMuted,
+    },
     transactionAmount: (type: string) => ({
       fontSize: 15,
       fontWeight: "700",
       color: type === "income" ? theme.colors.success : theme.colors.danger,
     }),
+    transactionRight: {
+      alignItems: "flex-end",
+      gap: 6,
+      minWidth: 80,
+    },
+    attachmentBadge: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 4,
+      backgroundColor: theme.colors.surface,
+      borderRadius: 999,
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+    },
+    attachmentBadgeText: {
+      fontSize: 11,
+      fontWeight: "600",
+      color: theme.colors.textMuted,
+    },
     separator: {
       height: 8,
     },
@@ -1274,12 +1362,21 @@ const createStyles = (theme: any, insets: any) =>
       backgroundColor: selected ? theme.colors.primary : theme.colors.surface,
       borderWidth: 1,
       borderColor: selected ? theme.colors.primary : theme.colors.border,
+      alignItems: "flex-start",
+      gap: 2,
     }),
     categoryOptionText: (selected: boolean) => ({
       fontSize: 13,
       fontWeight: "600",
       color: selected ? "#fff" : theme.colors.text,
     }),
+    categoryOptionHint: {
+      fontSize: 10,
+      fontWeight: "600",
+      textTransform: "uppercase",
+      color: theme.colors.textMuted,
+      letterSpacing: 0.8,
+    },
     toggleFilters: {
       flexDirection: "row",
       alignItems: "center",
