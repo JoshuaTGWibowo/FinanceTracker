@@ -112,6 +112,20 @@ const buildComponents = (colors: Colors) => ({
     fontSize: 16,
     fontWeight: "600" as const,
   },
+  buttonSecondary: {
+    backgroundColor: colors.surface,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingVertical: spacing.md,
+    alignItems: "center" as const,
+    justifyContent: "center" as const,
+  },
+  buttonSecondaryText: {
+    color: colors.text,
+    fontSize: 15,
+    fontWeight: "600" as const,
+  },
   input: {
     backgroundColor: colors.surface,
     borderRadius: radii.md,

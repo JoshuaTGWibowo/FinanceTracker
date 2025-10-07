@@ -20,14 +20,30 @@ import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useAppTheme } from "../../theme";
-import { Category, Transaction, TransactionType, useFinanceStore } from "../../lib/store";
+import {
+  Category,
+  RecurringTransaction,
+  Transaction,
+  TransactionType,
+  useFinanceStore,
+} from "../../lib/store";
+
+type RecurringFrequency = RecurringTransaction["frequency"];
+
+interface TransactionSubmitMeta {
+  recurring?: {
+    frequency: RecurringFrequency;
+    startDate: string;
+  };
+}
 
 interface TransactionFormProps {
   title: string;
   submitLabel: string;
   onCancel: () => void;
-  onSubmit: (transaction: Omit<Transaction, "id">) => void;
+  onSubmit: (transaction: Omit<Transaction, "id">, meta?: TransactionSubmitMeta) => void;
   initialValues?: Partial<Transaction>;
+  allowRecurring?: boolean;
 }
 
 const MAX_PHOTOS = 3;
@@ -38,6 +54,7 @@ export function TransactionForm({
   onCancel,
   onSubmit,
   initialValues,
+  allowRecurring = false,
 }: TransactionFormProps) {
   const theme = useAppTheme();
   const insets = useSafeAreaInsets();
@@ -85,6 +102,19 @@ export function TransactionForm({
   const [photos, setPhotos] = useState<string[]>(initialValues?.photos ?? []);
   const [excludeFromReports, setExcludeFromReports] = useState(
     Boolean(initialValues?.excludeFromReports),
+  );
+  const [recurringEnabled, setRecurringEnabled] = useState(false);
+  const [recurringFrequency, setRecurringFrequency] = useState<RecurringFrequency>(
+    "monthly",
+  );
+
+  const recurringOptions = useMemo(
+    () => [
+      { label: "Weekly", value: "weekly" as RecurringFrequency },
+      { label: "Bi-weekly", value: "biweekly" as RecurringFrequency },
+      { label: "Monthly", value: "monthly" as RecurringFrequency },
+    ],
+    [],
   );
 
   const noteWordCount = useMemo(() => {
@@ -192,7 +222,17 @@ export function TransactionForm({
       excludeFromReports,
     };
 
-    onSubmit(payload);
+    onSubmit(
+      payload,
+      allowRecurring && recurringEnabled
+        ? {
+            recurring: {
+              frequency: recurringFrequency,
+              startDate: date.toISOString(),
+            },
+          }
+        : undefined,
+    );
   };
 
   return (
@@ -301,6 +341,51 @@ export function TransactionForm({
               />
             )}
           </View>
+
+          {allowRecurring && (
+            <View style={styles.recurringCard}>
+              <View style={styles.recurringHeader}>
+                <View style={styles.flex}>
+                  <Text style={styles.recurringTitle}>Make this recurring</Text>
+                  <Text style={styles.helperText}>
+                    We’ll log it now and add it to your recurring schedule.
+                  </Text>
+                </View>
+                <Switch
+                  value={recurringEnabled}
+                  onValueChange={setRecurringEnabled}
+                  thumbColor={
+                    recurringEnabled ? theme.colors.primary : theme.colors.surface
+                  }
+                  trackColor={{ true: `${theme.colors.primary}55`, false: theme.colors.border }}
+                />
+              </View>
+
+              {recurringEnabled && (
+                <View style={styles.frequencySection}>
+                  <Text style={styles.helperLabel}>Frequency</Text>
+                  <View style={styles.frequencyOptions}>
+                    {recurringOptions.map(({ label, value }) => {
+                      const active = recurringFrequency === value;
+                      return (
+                        <Pressable
+                          key={value}
+                          style={styles.frequencyOption(active)}
+                          onPress={() => setRecurringFrequency(value)}
+                          accessibilityRole="button"
+                        >
+                          <Text style={styles.frequencyOptionText(active)}>{label}</Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                  <Text style={styles.helperText}>
+                    First occurrence will use {dayjs(date).format("MMM D, YYYY")}.
+                  </Text>
+                </View>
+              )}
+            </View>
+          )}
 
           <Pressable
             style={styles.detailsToggle}
@@ -414,59 +499,69 @@ export function TransactionForm({
 
       <Modal
         visible={categoryModalVisible}
-        animationType="slide"
+        animationType="fade"
+        transparent
         onRequestClose={() => setCategoryModalVisible(false)}
-        presentationStyle="pageSheet"
       >
-        <SafeAreaView style={styles.modal}>
-          <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Select category</Text>
-            <Pressable
-              onPress={() => setCategoryModalVisible(false)}
-              style={styles.modalClose}
-              accessibilityRole="button"
-            >
-              <Ionicons name="close" size={20} color={theme.colors.text} />
-            </Pressable>
+        <View style={styles.modalOverlay}>
+          <Pressable
+            style={styles.modalBackdrop}
+            onPress={() => setCategoryModalVisible(false)}
+            accessibilityRole="button"
+          />
+          <View style={styles.modalSheet}>
+            <SafeAreaView style={styles.modalSafeArea}>
+              <View style={styles.modalHandle} />
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Select category</Text>
+                <Pressable
+                  onPress={() => setCategoryModalVisible(false)}
+                  style={styles.modalClose}
+                  accessibilityRole="button"
+                >
+                  <Ionicons name="close" size={20} color={theme.colors.text} />
+                </Pressable>
+              </View>
+
+              <ScrollView
+                contentContainerStyle={styles.modalContent}
+                showsVerticalScrollIndicator={false}
+              >
+                {(["expense", "income"] as TransactionType[]).map((type) => {
+                  const entries = categories.filter((category) => category.type === type);
+                  if (!entries.length) {
+                    return null;
+                  }
+
+                  return (
+                    <View key={type} style={styles.modalSection}>
+                      <Text style={styles.modalSectionTitle}>
+                        {type === "expense" ? "Expenses" : "Income"}
+                      </Text>
+                      <View style={styles.modalGrid}>
+                        {entries.map((category) => {
+                          const active = selectedCategory?.id === category.id;
+                          return (
+                            <Pressable
+                              key={category.id}
+                              style={styles.modalOption(active)}
+                              onPress={() => {
+                                setSelectedCategory(category);
+                                setCategoryModalVisible(false);
+                              }}
+                            >
+                              <Text style={styles.modalOptionText(active)}>{category.name}</Text>
+                            </Pressable>
+                          );
+                        })}
+                      </View>
+                    </View>
+                  );
+                })}
+              </ScrollView>
+            </SafeAreaView>
           </View>
-
-          <ScrollView
-            contentContainerStyle={styles.modalContent}
-            showsVerticalScrollIndicator={false}
-          >
-            {(["expense", "income"] as TransactionType[]).map((type) => {
-              const entries = categories.filter((category) => category.type === type);
-              if (!entries.length) {
-                return null;
-              }
-
-              return (
-                <View key={type} style={styles.modalSection}>
-                  <Text style={styles.modalSectionTitle}>
-                    {type === "expense" ? "Expenses" : "Income"}
-                  </Text>
-                  <View style={styles.modalGrid}>
-                    {entries.map((category) => {
-                      const active = selectedCategory?.id === category.id;
-                      return (
-                        <Pressable
-                          key={category.id}
-                          style={styles.modalOption(active)}
-                          onPress={() => {
-                            setSelectedCategory(category);
-                            setCategoryModalVisible(false);
-                          }}
-                        >
-                          <Text style={styles.modalOptionText(active)}>{category.name}</Text>
-                        </Pressable>
-                      );
-                    })}
-                  </View>
-                </View>
-              );
-            })}
-          </ScrollView>
-        </SafeAreaView>
+        </View>
       </Modal>
     </SafeAreaView>
   );
@@ -564,6 +659,13 @@ const createStyles = (
       fontSize: 12,
       color: theme.colors.textMuted,
     },
+    helperLabel: {
+      fontSize: 12,
+      fontWeight: "600",
+      color: theme.colors.textMuted,
+      textTransform: "uppercase",
+      letterSpacing: 1,
+    },
     noteInput: {
       minHeight: 90,
       textAlignVertical: "top",
@@ -596,6 +698,43 @@ const createStyles = (
       color: theme.colors.textMuted,
       marginTop: 2,
     },
+    recurringCard: {
+      ...theme.components.surface,
+      padding: theme.spacing.lg,
+      gap: theme.spacing.md,
+    },
+    recurringHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: theme.spacing.md,
+    },
+    recurringTitle: {
+      fontSize: 16,
+      fontWeight: "600",
+      color: theme.colors.text,
+    },
+    frequencySection: {
+      gap: theme.spacing.sm,
+    },
+    frequencyOptions: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: theme.spacing.sm,
+    },
+    frequencyOption: (active: boolean) => ({
+      paddingHorizontal: theme.spacing.lg,
+      paddingVertical: theme.spacing.sm,
+      borderRadius: theme.radii.pill,
+      borderWidth: 1,
+      borderColor: active ? theme.colors.primary : theme.colors.border,
+      backgroundColor: active ? `${theme.colors.primary}22` : theme.colors.surface,
+    }),
+    frequencyOptionText: (active: boolean) => ({
+      fontSize: 13,
+      fontWeight: "600",
+      color: active ? theme.colors.text : theme.colors.textMuted,
+    }),
     detailsCard: {
       ...theme.components.surface,
       padding: theme.spacing.lg,
@@ -703,9 +842,38 @@ const createStyles = (
     submitButtonText: {
       ...theme.components.buttonPrimaryText,
     },
-    modal: {
+    modalOverlay: {
       flex: 1,
+      justifyContent: "flex-end",
+    },
+    modalBackdrop: {
+      ...StyleSheet.absoluteFillObject,
+      backgroundColor: "#00000088",
+    },
+    modalSheet: {
+      width: "100%",
+      maxHeight: "80%",
       backgroundColor: theme.colors.background,
+      borderTopLeftRadius: theme.radii.lg,
+      borderTopRightRadius: theme.radii.lg,
+      overflow: "hidden",
+      paddingTop: theme.spacing.lg,
+      paddingBottom: theme.spacing.xl + insets.bottom,
+      shadowColor: "#000",
+      shadowOpacity: 0.25,
+      shadowRadius: 12,
+      elevation: 12,
+    },
+    modalSafeArea: {
+      flex: 1,
+    },
+    modalHandle: {
+      alignSelf: "center",
+      width: 48,
+      height: 4,
+      borderRadius: 2,
+      backgroundColor: theme.colors.border,
+      marginBottom: theme.spacing.md,
     },
     modalHeader: {
       flexDirection: "row",
