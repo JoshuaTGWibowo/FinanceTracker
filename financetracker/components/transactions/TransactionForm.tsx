@@ -527,37 +527,47 @@ export function TransactionForm({
                 contentContainerStyle={styles.modalContent}
                 showsVerticalScrollIndicator={false}
               >
-                {(["expense", "income"] as TransactionType[]).map((type) => {
-                  const entries = categories.filter((category) => category.type === type);
-                  if (!entries.length) {
-                    return null;
-                  }
+                {categories.length === 0 ? (
+                  <View style={styles.modalEmptyState}>
+                    <Ionicons name="albums-outline" size={40} color={theme.colors.textMuted} />
+                    <Text style={styles.modalEmptyTitle}>No categories yet</Text>
+                    <Text style={styles.modalEmptyDescription}>
+                      Add categories from the Account tab to start organizing transactions.
+                    </Text>
+                  </View>
+                ) : (
+                  (["expense", "income"] as TransactionType[]).map((type) => {
+                    const entries = categories.filter((category) => category.type === type);
+                    if (!entries.length) {
+                      return null;
+                    }
 
-                  return (
-                    <View key={type} style={styles.modalSection}>
-                      <Text style={styles.modalSectionTitle}>
-                        {type === "expense" ? "Expenses" : "Income"}
-                      </Text>
-                      <View style={styles.modalGrid}>
-                        {entries.map((category) => {
-                          const active = selectedCategory?.id === category.id;
-                          return (
-                            <Pressable
-                              key={category.id}
-                              style={styles.modalOption(active)}
-                              onPress={() => {
-                                setSelectedCategory(category);
-                                setCategoryModalVisible(false);
-                              }}
-                            >
-                              <Text style={styles.modalOptionText(active)}>{category.name}</Text>
-                            </Pressable>
-                          );
-                        })}
+                    return (
+                      <View key={type} style={styles.modalSection}>
+                        <Text style={styles.modalSectionTitle}>
+                          {type === "expense" ? "Expenses" : "Income"}
+                        </Text>
+                        <View style={styles.modalGrid}>
+                          {entries.map((category) => {
+                            const active = selectedCategory?.id === category.id;
+                            return (
+                              <Pressable
+                                key={category.id}
+                                style={styles.modalOption(active)}
+                                onPress={() => {
+                                  setSelectedCategory(category);
+                                  setCategoryModalVisible(false);
+                                }}
+                              >
+                                <Text style={styles.modalOptionText(active)}>{category.name}</Text>
+                              </Pressable>
+                            );
+                          })}
+                        </View>
                       </View>
-                    </View>
-                  );
-                })}
+                    );
+                  })
+                )}
               </ScrollView>
             </SafeAreaView>
           </View>
@@ -899,6 +909,25 @@ const createStyles = (
       paddingHorizontal: theme.spacing.xl,
       paddingBottom: theme.spacing.xl,
       gap: theme.spacing.lg,
+      flexGrow: 1,
+    },
+    modalEmptyState: {
+      flex: 1,
+      alignItems: "center",
+      justifyContent: "center",
+      gap: theme.spacing.md,
+      paddingHorizontal: theme.spacing.xl,
+    },
+    modalEmptyTitle: {
+      fontSize: 16,
+      fontWeight: "600",
+      color: theme.colors.text,
+    },
+    modalEmptyDescription: {
+      fontSize: 13,
+      color: theme.colors.textMuted,
+      textAlign: "center",
+      lineHeight: 18,
     },
     modalSection: {
       gap: theme.spacing.sm,

@@ -21,6 +21,32 @@ export interface Category {
   type: TransactionType;
 }
 
+export const defaultCategories: Category[] = [
+  { id: "cat-food-expense", name: "Food", type: "expense" },
+  { id: "cat-groceries-expense", name: "Groceries", type: "expense" },
+  { id: "cat-dining-expense", name: "Dining", type: "expense" },
+  { id: "cat-lifestyle-expense", name: "Lifestyle", type: "expense" },
+  { id: "cat-fitness-expense", name: "Fitness", type: "expense" },
+  { id: "cat-travel-expense", name: "Travel", type: "expense" },
+  { id: "cat-transport-expense", name: "Transport", type: "expense" },
+  { id: "cat-home-expense", name: "Home", type: "expense" },
+  { id: "cat-bills-expense", name: "Bills", type: "expense" },
+  { id: "cat-gear-expense", name: "Gear", type: "expense" },
+  { id: "cat-creativity-expense", name: "Creativity", type: "expense" },
+  { id: "cat-outdoors-expense", name: "Outdoors", type: "expense" },
+  { id: "cat-work-expense", name: "Work Expenses", type: "expense" },
+  { id: "cat-entertainment-expense", name: "Entertainment", type: "expense" },
+  { id: "cat-pets-expense", name: "Pets", type: "expense" },
+  { id: "cat-family-expense", name: "Family", type: "expense" },
+  { id: "cat-side-hustle-income", name: "Side Hustle", type: "income" },
+  { id: "cat-client-work-income", name: "Client Work", type: "income" },
+  { id: "cat-salary-income", name: "Salary", type: "income" },
+  { id: "cat-consulting-income", name: "Consulting", type: "income" },
+  { id: "cat-resale-income", name: "Resale", type: "income" },
+  { id: "cat-creative-sales-income", name: "Creative Sales", type: "income" },
+  { id: "cat-investing-income", name: "Investing", type: "income" },
+];
+
 export type ThemeMode = "light" | "dark";
 
 export interface RecurringTransaction {
@@ -78,6 +104,7 @@ interface FinanceState {
   updateProfile: (payload: Partial<Profile>) => void;
   setThemeMode: (mode: ThemeMode) => void;
   addCategory: (category: Omit<Category, "id">) => void;
+  ensureDefaultCategories: () => void;
 }
 
 const now = new Date();
@@ -440,31 +467,7 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
   },
   preferences: {
     themeMode: "dark",
-    categories: [
-      { id: "cat-food-expense", name: "Food", type: "expense" },
-      { id: "cat-groceries-expense", name: "Groceries", type: "expense" },
-      { id: "cat-dining-expense", name: "Dining", type: "expense" },
-      { id: "cat-lifestyle-expense", name: "Lifestyle", type: "expense" },
-      { id: "cat-fitness-expense", name: "Fitness", type: "expense" },
-      { id: "cat-travel-expense", name: "Travel", type: "expense" },
-      { id: "cat-transport-expense", name: "Transport", type: "expense" },
-      { id: "cat-home-expense", name: "Home", type: "expense" },
-      { id: "cat-bills-expense", name: "Bills", type: "expense" },
-      { id: "cat-gear-expense", name: "Gear", type: "expense" },
-      { id: "cat-creativity-expense", name: "Creativity", type: "expense" },
-      { id: "cat-outdoors-expense", name: "Outdoors", type: "expense" },
-      { id: "cat-work-expense", name: "Work Expenses", type: "expense" },
-      { id: "cat-entertainment-expense", name: "Entertainment", type: "expense" },
-      { id: "cat-pets-expense", name: "Pets", type: "expense" },
-      { id: "cat-family-expense", name: "Family", type: "expense" },
-      { id: "cat-side-hustle-income", name: "Side Hustle", type: "income" },
-      { id: "cat-client-work-income", name: "Client Work", type: "income" },
-      { id: "cat-salary-income", name: "Salary", type: "income" },
-      { id: "cat-consulting-income", name: "Consulting", type: "income" },
-      { id: "cat-resale-income", name: "Resale", type: "income" },
-      { id: "cat-creative-sales-income", name: "Creative Sales", type: "income" },
-      { id: "cat-investing-income", name: "Investing", type: "income" },
-    ],
+    categories: defaultCategories.map((category) => ({ ...category })),
   },
   transactions: seedTransactions,
   recurringTransactions: [
@@ -704,4 +707,17 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
       },
     }));
   },
+  ensureDefaultCategories: () =>
+    set((state) => {
+      if (state.preferences.categories.length > 0) {
+        return undefined;
+      }
+
+      return {
+        preferences: {
+          ...state.preferences,
+          categories: defaultCategories.map((category) => ({ ...category })),
+        },
+      };
+    }),
 }));
