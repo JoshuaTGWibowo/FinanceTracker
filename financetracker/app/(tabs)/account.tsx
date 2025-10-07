@@ -14,7 +14,12 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 import { Ionicons } from "@expo/vector-icons";
 
 import { useAppTheme } from "../../theme";
-import { ThemeMode, TransactionType, useFinanceStore } from "../../lib/store";
+import {
+  ThemeMode,
+  TransactionType,
+  defaultCategories,
+  useFinanceStore,
+} from "../../lib/store";
 
 const currencies = ["USD", "EUR", "GBP", "CAD", "AUD", "JPY"];
 const goalPeriods = ["month", "week"] as const;
@@ -26,7 +31,12 @@ export default function AccountScreen() {
   const themeMode = useFinanceStore((state) => state.preferences.themeMode);
   const setThemeMode = useFinanceStore((state) => state.setThemeMode);
   const addCategory = useFinanceStore((state) => state.addCategory);
-  const categories = useFinanceStore((state) => state.preferences.categories);
+  const storedCategories = useFinanceStore(
+    (state) => state.preferences.categories,
+  );
+  const categories = storedCategories.length
+    ? storedCategories
+    : defaultCategories;
   const budgetGoals = useFinanceStore((state) => state.budgetGoals);
   const addBudgetGoal = useFinanceStore((state) => state.addBudgetGoal);
   const removeBudgetGoal = useFinanceStore((state) => state.removeBudgetGoal);

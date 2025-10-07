@@ -25,6 +25,7 @@ import {
   RecurringTransaction,
   Transaction,
   TransactionType,
+  defaultCategories,
   useFinanceStore,
 } from "../../lib/store";
 
@@ -60,7 +61,12 @@ export function TransactionForm({
   const insets = useSafeAreaInsets();
   const styles = useMemo(() => createStyles(theme, insets), [theme, insets]);
   const currency = useFinanceStore((state) => state.profile.currency);
-  const categories = useFinanceStore((state) => state.preferences.categories);
+  const storedCategories = useFinanceStore(
+    (state) => state.preferences.categories,
+  );
+  const categories = storedCategories.length
+    ? storedCategories
+    : defaultCategories;
 
   const findInitialCategory = () => {
     if (!initialValues?.category) {

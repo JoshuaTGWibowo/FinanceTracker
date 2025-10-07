@@ -162,7 +162,9 @@ const themeMap = {
 export type Theme = (typeof themeMap)[keyof typeof themeMap];
 
 export const useAppTheme = (): Theme => {
-  const mode = useFinanceStore((state) => state.preferences.themeMode);
+  const mode = useFinanceStore(
+    (state) => (state?.preferences?.themeMode ?? "dark") as ThemeMode,
+  );
   return useMemo(() => themeMap[mode], [mode]);
 };
 

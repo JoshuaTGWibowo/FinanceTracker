@@ -17,7 +17,7 @@ import { useRouter } from "expo-router";
 import dayjs, { type Dayjs } from "dayjs";
 
 import { useAppTheme } from "../../theme";
-import { Transaction, useFinanceStore } from "../../lib/store";
+import { Transaction, defaultCategories, useFinanceStore } from "../../lib/store";
 
 const formatCurrency = (
   value: number,
@@ -64,7 +64,12 @@ export default function TransactionsScreen() {
   const theme = useAppTheme();
   const transactions = useFinanceStore((state) => state.transactions);
   const currency = useFinanceStore((state) => state.profile.currency);
-  const categories = useFinanceStore((state) => state.preferences.categories);
+  const storedCategories = useFinanceStore(
+    (state) => state.preferences.categories,
+  );
+  const categories = storedCategories.length
+    ? storedCategories
+    : defaultCategories;
   const recurringTransactions = useFinanceStore((state) => state.recurringTransactions);
   const logRecurringTransaction = useFinanceStore((state) => state.logRecurringTransaction);
   const router = useRouter();
