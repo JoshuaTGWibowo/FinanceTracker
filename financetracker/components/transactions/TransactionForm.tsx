@@ -22,12 +22,17 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 import { useAppTheme } from "../../theme";
 import {
   Category,
+  DEFAULT_ACCOUNT_ID,
   DEFAULT_CATEGORIES,
   RecurringTransaction,
   Transaction,
   TransactionType,
+  TRANSFER_CATEGORY_NAME,
+  selectAccounts,
+  selectActiveAccounts,
   useFinanceStore,
 } from "../../lib/store";
+import { AccountPicker } from "../accounts/AccountPicker";
 
 interface TransactionFormProps {
   title: string;
@@ -212,8 +217,8 @@ export function TransactionForm({
   const categories = useFinanceStore((state) => state.preferences.categories);
   const availableCategories = categories.length ? categories : DEFAULT_CATEGORIES;
 
-  const findInitialCategory = () => {
-    if (!initialValues?.category) {
+  const initialCategory = useMemo(() => {
+    if (!initialValues?.category || initialValues?.type === "transfer") {
       return null;
     }
 
@@ -224,7 +229,7 @@ export function TransactionForm({
           (!initialValues.type || category.type === initialValues.type),
       ) ?? null
     );
-  };
+  }, [availableCategories, initialValues?.category, initialValues?.type]);
 
   const separators = useMemo(() => getLocaleSeparators(), []);
   const groupingFormatter = useMemo(
@@ -232,13 +237,40 @@ export function TransactionForm({
     [],
   );
 
+  const accounts = useFinanceStore(selectAccounts);
+  const activeAccounts = useFinanceStore(selectActiveAccounts);
+
+  const fallbackAccountId = useMemo(() => {
+    if (
+      initialValues?.accountId &&
+      accounts.some((account) => account.id === initialValues.accountId)
+    ) {
+      return initialValues.accountId;
+    }
+
+    return activeAccounts[0]?.id ?? accounts[0]?.id ?? DEFAULT_ACCOUNT_ID;
+  }, [accounts, activeAccounts, initialValues?.accountId]);
+
   const [amount, setAmount] = useState(() =>
     initialValues?.amount !== undefined
       ? formatNumberForInput(initialValues.amount, separators, groupingFormatter)
       : "",
   );
   const [note, setNote] = useState(initialValues?.note ?? "");
-  const [selectedCategory, setSelectedCategory] = useState<Category | null>(findInitialCategory);
+  const [transactionType, setTransactionType] = useState<TransactionType>(() => {
+    if (initialValues?.type) {
+      return initialValues.type;
+    }
+
+    if (initialCategory) {
+      return initialCategory.type;
+    }
+
+    return "expense";
+  });
+  const [selectedCategory, setSelectedCategory] = useState<Category | null>(initialCategory);
+  const [accountId, setAccountId] = useState<string>(fallbackAccountId);
+  const [toAccountId, setToAccountId] = useState<string | null>(initialValues?.toAccountId ?? null);
   const [categoryModalVisible, setCategoryModalVisible] = useState(false);
   const [date, setDate] = useState(() => {
     const base = initialValues?.date ? new Date(initialValues.date) : new Date();
@@ -265,6 +297,69 @@ export function TransactionForm({
   const [recurringFrequency, setRecurringFrequency] = useState<
     RecurringTransaction["frequency"]
   >("monthly");
+
+  useEffect(() => {
+    if (!accounts.some((account) => account.id === accountId)) {
+      setAccountId(fallbackAccountId);
+    }
+  }, [accountId, accounts, fallbackAccountId]);
+
+  useEffect(() => {
+    if (!toAccountId) {
+      return;
+    }
+    const exists = accounts.some((account) => account.id === toAccountId);
+    if (!exists) {
+      setToAccountId(null);
+    }
+  }, [accounts, toAccountId]);
+
+  useEffect(() => {
+    if (transactionType !== "transfer") {
+      if (toAccountId) {
+        setToAccountId(null);
+      }
+      return;
+    }
+
+    if (toAccountId && toAccountId === accountId) {
+      setToAccountId(null);
+    }
+  }, [accountId, toAccountId, transactionType]);
+
+  useEffect(() => {
+    if (transactionType === "transfer") {
+      if (selectedCategory) {
+        setSelectedCategory(null);
+      }
+      return;
+    }
+
+    if (!selectedCategory || selectedCategory.type !== transactionType) {
+      const next =
+        availableCategories.find((category) => category.type === transactionType) ?? null;
+      setSelectedCategory(next);
+    }
+  }, [availableCategories, selectedCategory, transactionType]);
+
+  useEffect(() => {
+    if (transactionType !== "transfer" || toAccountId) {
+      return;
+    }
+
+    const candidate = accounts.find(
+      (account) => !account.isArchived && account.id !== accountId,
+    );
+
+    if (candidate) {
+      setToAccountId(candidate.id);
+    }
+  }, [accounts, accountId, toAccountId, transactionType]);
+
+  const filteredCategories = useMemo(
+    () => availableCategories.filter((category) => category.type === transactionType),
+    [availableCategories, transactionType],
+  );
 
   useEffect(() => {
     if (initialValues?.amount !== undefined) {
@@ -375,21 +470,60 @@ export function TransactionForm({
       return;
     }
 
-    if (!selectedCategory) {
-      Alert.alert("Choose a category", "Pick a category to classify this transaction.");
+    if (!accountId) {
+      Alert.alert("Choose an account", "Select which account this transaction belongs to.");
       return;
+    }
+
+    if (transactionType === "transfer") {
+      const hasOtherAccounts = accounts.some((account) => account.id !== accountId);
+
+      if (!hasOtherAccounts) {
+        Alert.alert(
+          "Need another account",
+          "Create a second account before recording a transfer.",
+        );
+        return;
+      }
+
+      if (!toAccountId) {
+        Alert.alert("Select destination", "Pick where the transfer should land.");
+        return;
+      }
+
+      if (toAccountId === accountId) {
+        Alert.alert("Same account", "Transfers need a different destination account.");
+        return;
+      }
+    } else {
+      if (!selectedCategory || selectedCategory.type !== transactionType) {
+        Alert.alert("Choose a category", "Pick a category to classify this transaction.");
+        return;
+      }
     }
 
     const trimmedNote = note.trim();
     const cleanedParticipants = participants.map((person) => person.trim()).filter(Boolean);
     const cleanedPhotos = photos.filter(Boolean);
 
+    const fallbackNote =
+      transactionType === "transfer"
+        ? TRANSFER_CATEGORY_NAME
+        : transactionType === "expense"
+          ? "Expense"
+          : "Income";
+
     const payload: Omit<Transaction, "id"> = {
       amount: parsedAmount,
-      note: trimmedNote || (selectedCategory.type === "expense" ? "Expense" : "Income"),
-      category: selectedCategory.name,
-      type: selectedCategory.type,
+      note: trimmedNote || fallbackNote,
+      category:
+        transactionType === "transfer"
+          ? TRANSFER_CATEGORY_NAME
+          : selectedCategory?.name ?? TRANSFER_CATEGORY_NAME,
+      type: transactionType,
       date: date.toISOString(),
+      accountId,
+      toAccountId: transactionType === "transfer" ? toAccountId ?? null : undefined,
       participants: cleanedParticipants,
       location: location.trim() || undefined,
       photos: cleanedPhotos,
@@ -441,33 +575,95 @@ export function TransactionForm({
           </View>
 
           <View style={styles.fieldGroup}>
-            <Text style={styles.label}>Category</Text>
-            <Pressable
-              style={[styles.input, styles.categoryButton]}
-              onPress={() => setCategoryModalVisible(true)}
-            >
-              <Text
-                style={selectedCategory ? styles.categoryButtonText : styles.categoryButtonPlaceholder}
-              >
-                {selectedCategory ? selectedCategory.name : "Choose a category"}
-              </Text>
-              <Ionicons name="chevron-down" size={18} color={theme.colors.textMuted} />
-            </Pressable>
-            {selectedCategory ? (
-              <View style={styles.typeBadge(selectedCategory.type)}>
-                <Ionicons
-                  name={selectedCategory.type === "income" ? "arrow-down-circle" : "arrow-up-circle"}
-                  size={14}
-                  color={theme.colors.text}
-                />
-                <Text style={styles.typeBadgeText}>
-                  {selectedCategory.type === "expense" ? "Expense" : "Income"}
-                </Text>
-              </View>
-            ) : (
-              <Text style={styles.helperText}>Selecting a category sets whether this is income or expense.</Text>
-            )}
+            <Text style={styles.label}>Type</Text>
+            <View style={styles.typeOptionsRow}>
+              {(
+                [
+                  { value: "expense", label: "Expense", icon: "arrow-up-circle" },
+                  { value: "income", label: "Income", icon: "arrow-down-circle" },
+                  { value: "transfer", label: "Transfer", icon: "swap-horizontal" },
+                ] as { value: TransactionType; label: string; icon: keyof typeof Ionicons.glyphMap }[]
+              ).map((option) => {
+                const active = transactionType === option.value;
+                return (
+                  <Pressable
+                    key={option.value}
+                    style={styles.typeOption(active)}
+                    onPress={() => setTransactionType(option.value)}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: active }}
+                  >
+                    <Ionicons
+                      name={option.icon}
+                      size={16}
+                      color={active ? theme.colors.background : theme.colors.textMuted}
+                    />
+                    <Text style={styles.typeOptionText(active)}>{option.label}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
           </View>
+
+          <View style={styles.fieldGroup}>
+            <Text style={styles.label}>From account</Text>
+            <AccountPicker
+              currency={currency}
+              selectedAccountId={accountId}
+              onSelect={(value) => setAccountId(value)}
+              includeArchived
+              placeholder="Select an account"
+            />
+          </View>
+
+          {transactionType === "transfer" && (
+            <View style={styles.fieldGroup}>
+              <Text style={styles.label}>Destination account</Text>
+              <AccountPicker
+                currency={currency}
+                selectedAccountId={toAccountId ?? undefined}
+                onSelect={(value) => setToAccountId(value)}
+                includeArchived
+                placeholder="Select destination"
+                disabledAccountIds={[accountId]}
+              />
+              {accounts.filter((account) => account.id !== accountId).length === 0 && (
+                <Text style={styles.helperText}>Add another account to complete this transfer.</Text>
+              )}
+            </View>
+          )}
+
+          {transactionType !== "transfer" && (
+            <View style={styles.fieldGroup}>
+              <Text style={styles.label}>Category</Text>
+              <Pressable
+                style={[styles.input, styles.categoryButton]}
+                onPress={() => setCategoryModalVisible(true)}
+                accessibilityRole="button"
+              >
+                <Text
+                  style={selectedCategory ? styles.categoryButtonText : styles.categoryButtonPlaceholder}
+                >
+                  {selectedCategory ? selectedCategory.name : "Choose a category"}
+                </Text>
+                <Ionicons name="chevron-down" size={18} color={theme.colors.textMuted} />
+              </Pressable>
+              {selectedCategory ? (
+                <View style={styles.typeBadge(transactionType)}>
+                  <Ionicons
+                    name={transactionType === "income" ? "arrow-down-circle" : "arrow-up-circle"}
+                    size={14}
+                    color={theme.colors.text}
+                  />
+                  <Text style={styles.typeBadgeText}>
+                    {transactionType === "expense" ? "Expense" : "Income"}
+                  </Text>
+                </View>
+              ) : (
+                <Text style={styles.helperText}>Selecting a category helps classify this transaction.</Text>
+              )}
+            </View>
+          )}
 
           <View style={styles.fieldGroup}>
             <Text style={styles.label}>Note</Text>
@@ -687,26 +883,18 @@ export function TransactionForm({
             contentContainerStyle={styles.modalContent}
             showsVerticalScrollIndicator={false}
           >
-            {(["expense", "income"] as TransactionType[]).map((type) => {
-              const entries = availableCategories.filter((category) => category.type === type);
-              if (!entries.length) {
-                return (
-                  <View key={type} style={styles.modalSection}>
-                    <Text style={styles.modalSectionTitle}>
-                      {type === "expense" ? "Expenses" : "Income"}
-                    </Text>
-                    <Text style={styles.helperText}>No categories available yet.</Text>
-                  </View>
-                );
-              }
-
-              return (
-                <View key={type} style={styles.modalSection}>
-                  <Text style={styles.modalSectionTitle}>
-                    {type === "expense" ? "Expenses" : "Income"}
-                  </Text>
+            {transactionType === "transfer" ? (
+              <View style={styles.modalSection}>
+                <Text style={styles.helperText}>Transfers don’t use categories.</Text>
+              </View>
+            ) : (
+              <View style={styles.modalSection}>
+                <Text style={styles.modalSectionTitle}>
+                  {transactionType === "expense" ? "Expenses" : "Income"}
+                </Text>
+                {filteredCategories.length ? (
                   <View style={styles.modalGrid}>
-                    {entries.map((category) => {
+                    {filteredCategories.map((category) => {
                       const active = selectedCategory?.id === category.id;
                       return (
                         <Pressable
@@ -714,6 +902,7 @@ export function TransactionForm({
                           style={styles.modalOption(active)}
                           onPress={() => {
                             setSelectedCategory(category);
+                            setTransactionType(category.type);
                             setCategoryModalVisible(false);
                           }}
                         >
@@ -722,9 +911,11 @@ export function TransactionForm({
                       );
                     })}
                   </View>
-                </View>
-              );
-            })}
+                ) : (
+                  <Text style={styles.helperText}>No categories available yet.</Text>
+                )}
+              </View>
+            )}
           </ScrollView>
         </SafeAreaView>
       </Modal>
@@ -797,6 +988,27 @@ const createStyles = (
       color: theme.colors.textMuted,
       fontWeight: "500",
     },
+    typeOptionsRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      flexWrap: "wrap",
+      gap: theme.spacing.sm,
+    },
+    typeOption: (active: boolean) => ({
+      flexDirection: "row",
+      alignItems: "center",
+      gap: theme.spacing.xs,
+      paddingHorizontal: theme.spacing.lg,
+      paddingVertical: theme.spacing.sm,
+      borderRadius: theme.radii.pill,
+      backgroundColor: active ? theme.colors.primary : theme.colors.surface,
+      borderWidth: active ? 0 : 1,
+      borderColor: active ? "transparent" : theme.colors.border,
+    }),
+    typeOptionText: (active: boolean) => ({
+      fontWeight: "600",
+      color: active ? theme.colors.background : theme.colors.textMuted,
+    }),
     typeBadge: (type: TransactionType) => ({
       flexDirection: "row",
       alignItems: "center",
@@ -806,7 +1018,11 @@ const createStyles = (
       paddingVertical: theme.spacing.xs,
       borderRadius: theme.radii.pill,
       backgroundColor:
-        type === "income" ? `${theme.colors.success}22` : `${theme.colors.danger}22`,
+        type === "income"
+          ? `${theme.colors.success}22`
+          : type === "expense"
+            ? `${theme.colors.danger}22`
+            : `${theme.colors.primary}22`,
     }),
     typeBadgeText: {
       fontSize: 12,

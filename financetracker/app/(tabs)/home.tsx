@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -8,7 +8,8 @@ import { Link, useRouter } from "expo-router";
 import { DonutChart } from "../../components/DonutChart";
 import { SpendingBarChart, SpendingLineChart } from "../../components/SpendingCharts";
 import { useAppTheme } from "../../theme";
-import { BudgetGoal, useFinanceStore } from "../../lib/store";
+import { BudgetGoal, Transaction, selectAccounts, useFinanceStore } from "../../lib/store";
+import { AccountPicker } from "../../components/accounts/AccountPicker";
 import { truncateWords } from "../../lib/text";
 
 const formatCurrency = (
@@ -23,24 +24,35 @@ const formatCurrency = (
     ...options,
   }).format(value);
 
+type LedgerTransaction = {
+  transaction: Transaction;
+  effectiveType: "income" | "expense" | "transfer";
+  signedAmount: number;
+};
+
 const summarizeGoalProgress = (
   goal: BudgetGoal,
   currency: string,
-  transactions: ReturnType<typeof useFinanceStore.getState>["transactions"],
+  transactions: LedgerTransaction[],
 ) => {
   const now = dayjs();
   const start = goal.period === "week" ? now.startOf("week") : now.startOf("month");
   const end = goal.period === "week" ? now.endOf("week") : now.endOf("month");
 
   const withinPeriod = transactions.filter((transaction) => {
-    const date = dayjs(transaction.date);
+    const date = dayjs(transaction.transaction.date);
     return !date.isBefore(start) && !date.isAfter(end);
   });
 
   if (goal.category) {
     const spent = withinPeriod
-      .filter((transaction) => transaction.type === "expense" && transaction.category === goal.category)
-      .reduce((acc, transaction) => acc + transaction.amount, 0);
+      .filter(
+        (transaction) =>
+          transaction.effectiveType === "expense" &&
+          transaction.transaction.type !== "transfer" &&
+          transaction.transaction.category === goal.category,
+      )
+      .reduce((acc, transaction) => acc + transaction.transaction.amount, 0);
 
     return {
       label: `${goal.category} spend`,
@@ -52,8 +64,11 @@ const summarizeGoalProgress = (
   }
 
   const netSavings = withinPeriod.reduce((acc, transaction) => {
-    const delta = transaction.type === "income" ? transaction.amount : -transaction.amount;
-    return acc + delta;
+    if (transaction.transaction.type === "transfer") {
+      return acc;
+    }
+
+    return acc + transaction.signedAmount;
   }, 0);
 
   const savingsValue = Math.max(0, netSavings);
@@ -75,6 +90,7 @@ export default function HomeScreen() {
   const budgetGoals = useFinanceStore((state) => state.budgetGoals);
   const recurringTransactions = useFinanceStore((state) => state.recurringTransactions);
   const logRecurringTransaction = useFinanceStore((state) => state.logRecurringTransaction);
+  const accounts = useFinanceStore(selectAccounts);
 
   const reportableTransactions = useMemo(
     () => transactions.filter((transaction) => !transaction.excludeFromReports),
@@ -85,9 +101,163 @@ export default function HomeScreen() {
   const [overviewChart, setOverviewChart] = useState<"bar" | "line">("bar");
   const [topSpendingPeriod, setTopSpendingPeriod] = useState<"week" | "month">("month");
   const [showBalance, setShowBalance] = useState(true);
+  const [selectedAccountId, setSelectedAccountId] = useState<string>("all");
 
   const insets = useSafeAreaInsets();
   const styles = useMemo(() => createStyles(theme, insets), [theme, insets]);
+  const accountsMap = useMemo(
+    () => new Map(accounts.map((account) => [account.id, account])),
+    [accounts],
+  );
+  const selectedAccount = selectedAccountId === "all" ? null : accountsMap.get(selectedAccountId);
+  const activeAccountCount = useMemo(
+    () => accounts.filter((account) => !account.isArchived).length,
+    [accounts],
+  );
+
+  useEffect(() => {
+    if (selectedAccountId === "all") {
+      return;
+    }
+
+    const exists = accounts.some((account) => account.id === selectedAccountId);
+    if (!exists) {
+      setSelectedAccountId("all");
+    }
+  }, [accounts, selectedAccountId]);
+
+  const getEffectiveType = useCallback(
+    (transaction: Transaction): "income" | "expense" | "transfer" | "ignore" => {
+      if (selectedAccountId === "all") {
+        return transaction.type;
+      }
+
+      if (transaction.type === "transfer") {
+        if (transaction.accountId === selectedAccountId) {
+          return "expense";
+        }
+        if (transaction.toAccountId === selectedAccountId) {
+          return "income";
+        }
+        return "ignore";
+      }
+
+      return transaction.accountId === selectedAccountId ? transaction.type : "ignore";
+    },
+    [selectedAccountId],
+  );
+
+  const filteredTransactions = useMemo(() => {
+    if (selectedAccountId === "all") {
+      return reportableTransactions;
+    }
+
+    return reportableTransactions.filter(
+      (transaction) =>
+        transaction.accountId === selectedAccountId || transaction.toAccountId === selectedAccountId,
+    );
+  }, [reportableTransactions, selectedAccountId]);
+
+  const scopedTransactions = useMemo(() => {
+    if (selectedAccountId === "all") {
+      return transactions;
+    }
+
+    return transactions.filter(
+      (transaction) =>
+        transaction.accountId === selectedAccountId || transaction.toAccountId === selectedAccountId,
+    );
+  }, [selectedAccountId, transactions]);
+
+  const ledgerTransactions = useMemo(() => {
+    return filteredTransactions.reduce<LedgerTransaction[]>((acc, transaction) => {
+      const effectiveType = getEffectiveType(transaction);
+      if (effectiveType === "ignore") {
+        return acc;
+      }
+
+      const signedAmount =
+        effectiveType === "income"
+          ? transaction.amount
+          : effectiveType === "expense"
+            ? -transaction.amount
+            : 0;
+
+      acc.push({ transaction, effectiveType, signedAmount });
+      return acc;
+    }, []);
+  }, [filteredTransactions, getEffectiveType]);
+
+  const allAccountsDescription = useMemo(() => {
+    if (accounts.length <= 1) {
+      return accounts.length === 1 ? "Single account" : undefined;
+    }
+
+    const parts = [`${activeAccountCount} active`];
+    if (activeAccountCount !== accounts.length) {
+      parts.push(`${accounts.length} total`);
+    }
+
+    return parts.join(" • ");
+  }, [accounts, activeAccountCount]);
+
+  const accountPickerOptions = useMemo(
+    () => [
+      {
+        id: "all",
+        label: "Combined overview",
+        description: allAccountsDescription,
+      },
+    ],
+    [allAccountsDescription],
+  );
+
+  const getDisplaySign = useCallback(
+    (transaction: Transaction) => {
+      const effectiveType = getEffectiveType(transaction);
+      if (effectiveType === "income") {
+        return "+";
+      }
+      if (effectiveType === "expense") {
+        return "−";
+      }
+      return "↔";
+    },
+    [getEffectiveType],
+  );
+
+  const getTransactionAccountLine = useCallback(
+    (transaction: Transaction) => {
+      const sourceName = accountsMap.get(transaction.accountId)?.name ?? "Unknown account";
+
+      if (transaction.type === "transfer") {
+        const destinationName = transaction.toAccountId
+          ? accountsMap.get(transaction.toAccountId)?.name ?? "Unspecified"
+          : "Unspecified";
+
+        if (selectedAccountId === "all") {
+          return `${sourceName} → ${destinationName}`;
+        }
+
+        if (transaction.accountId === selectedAccountId) {
+          return `→ ${destinationName}`;
+        }
+
+        if (transaction.toAccountId === selectedAccountId) {
+          return `← ${sourceName}`;
+        }
+
+        return `${sourceName} → ${destinationName}`;
+      }
+
+      if (selectedAccountId === "all") {
+        return sourceName;
+      }
+
+      return null;
+    },
+    [accountsMap, selectedAccountId],
+  );
 
   useEffect(() => {
     if (overviewPeriod === "week" && overviewChart === "line") {
@@ -95,43 +265,38 @@ export default function HomeScreen() {
     }
   }, [overviewChart, overviewPeriod]);
 
-  const balance = useMemo(
-    () =>
-      reportableTransactions.reduce((acc, transaction) => {
-        const multiplier = transaction.type === "income" ? 1 : -1;
-        return acc + transaction.amount * multiplier;
-      }, 0),
-    [reportableTransactions],
-  );
-
   const startOfMonth = useMemo(() => dayjs().startOf("month"), []);
   const endOfMonth = useMemo(() => dayjs().endOf("month"), []);
 
   const summary = useMemo(
     () =>
-      reportableTransactions.reduce(
-        (acc, transaction) => {
-          const value = transaction.type === "income" ? transaction.amount : -transaction.amount;
+      ledgerTransactions.reduce(
+        (acc, entry) => {
+          const { transaction, effectiveType, signedAmount } = entry;
           const date = dayjs(transaction.date);
 
           if (date.isBefore(startOfMonth)) {
-            acc.openingBalance += value;
+            acc.openingBalance += signedAmount;
           }
 
           if (!date.isBefore(startOfMonth) && !date.isAfter(endOfMonth)) {
-            if (transaction.type === "income") {
-              acc.income += transaction.amount;
-            } else {
-              acc.expense += transaction.amount;
+            if (transaction.type !== "transfer") {
+              if (effectiveType === "income") {
+                acc.income += transaction.amount;
+              }
+
+              if (effectiveType === "expense") {
+                acc.expense += transaction.amount;
+              }
             }
-            acc.monthNet += value;
+            acc.monthNet += signedAmount;
           }
 
           return acc;
         },
         { income: 0, expense: 0, openingBalance: 0, monthNet: 0 },
       ),
-    [endOfMonth, reportableTransactions, startOfMonth],
+    [endOfMonth, ledgerTransactions, startOfMonth],
   );
 
   const {
@@ -145,18 +310,25 @@ export default function HomeScreen() {
     const periodStart = overviewPeriod === "week" ? today.startOf("week") : today.startOf("month");
     const periodEnd = overviewPeriod === "week" ? today.endOf("week") : today.endOf("month");
 
-    const filtered = reportableTransactions.filter((transaction) => {
-      const date = dayjs(transaction.date);
+    const filtered = ledgerTransactions.filter((entry) => {
+      const date = dayjs(entry.transaction.date);
       return !date.isBefore(periodStart) && !date.isAfter(periodEnd);
     });
 
     const totals = filtered.reduce(
-      (acc, transaction) => {
-        if (transaction.type === "income") {
-          acc.income += transaction.amount;
-        } else {
-          acc.expense += transaction.amount;
+      (acc, entry) => {
+        if (entry.transaction.type === "transfer") {
+          return acc;
         }
+
+        if (entry.effectiveType === "income") {
+          acc.income += entry.transaction.amount;
+        }
+
+        if (entry.effectiveType === "expense") {
+          acc.expense += entry.transaction.amount;
+        }
+
         return acc;
       },
       { income: 0, expense: 0 },
@@ -166,8 +338,13 @@ export default function HomeScreen() {
     const periodDailySpending = Array.from({ length: dayCount }).map((_, index) => {
       const day = periodStart.add(index, "day");
       const value = filtered
-        .filter((transaction) => transaction.type === "expense" && dayjs(transaction.date).isSame(day, "day"))
-        .reduce((acc, transaction) => acc + transaction.amount, 0);
+        .filter(
+          (entry) =>
+            entry.transaction.type !== "transfer" &&
+            entry.effectiveType === "expense" &&
+            dayjs(entry.transaction.date).isSame(day, "day"),
+        )
+        .reduce((acc, entry) => acc + entry.transaction.amount, 0);
 
       if (overviewPeriod === "week") {
         return {
@@ -190,14 +367,16 @@ export default function HomeScreen() {
     const previousPeriodEnd =
       overviewPeriod === "week" ? previousPeriodStart.endOf("week") : previousPeriodStart.endOf("month");
 
-    const previousExpense = reportableTransactions.reduce((acc, transaction) => {
-      if (transaction.type !== "expense") {
+    const previousExpense = ledgerTransactions.reduce((acc, entry) => {
+      if (entry.transaction.type === "transfer" || entry.effectiveType !== "expense") {
         return acc;
       }
-      const date = dayjs(transaction.date);
+
+      const date = dayjs(entry.transaction.date);
       if (!date.isBefore(previousPeriodStart) && !date.isAfter(previousPeriodEnd)) {
-        return acc + transaction.amount;
+        return acc + entry.transaction.amount;
       }
+
       return acc;
     }, 0);
 
@@ -208,14 +387,16 @@ export default function HomeScreen() {
             const target = today.subtract(offset, "month");
             const start = target.startOf("month");
             const end = target.endOf("month");
-            const spent = reportableTransactions.reduce((acc, transaction) => {
-              if (transaction.type !== "expense") {
+            const spent = ledgerTransactions.reduce((acc, entry) => {
+              if (entry.transaction.type === "transfer" || entry.effectiveType !== "expense") {
                 return acc;
               }
-              const date = dayjs(transaction.date);
+
+              const date = dayjs(entry.transaction.date);
               if (!date.isBefore(start) && !date.isAfter(end)) {
-                return acc + transaction.amount;
+                return acc + entry.transaction.amount;
               }
+
               return acc;
             }, 0);
 
@@ -242,18 +423,28 @@ export default function HomeScreen() {
 
     const currentMonthDaily = Array.from({ length: daysInMonth }).map((_, index) => {
       const day = monthStart.add(index, "day");
-      const spent = reportableTransactions
-        .filter((transaction) => transaction.type === "expense" && dayjs(transaction.date).isSame(day, "day"))
-        .reduce((acc, transaction) => acc + transaction.amount, 0);
+      const spent = ledgerTransactions
+        .filter(
+          (entry) =>
+            entry.transaction.type !== "transfer" &&
+            entry.effectiveType === "expense" &&
+            dayjs(entry.transaction.date).isSame(day, "day"),
+        )
+        .reduce((acc, entry) => acc + entry.transaction.amount, 0);
 
       return buildMonthlyPoint(index, spent);
     });
 
     const previousMonthValues = Array.from({ length: previousMonthDayCount }).map((_, index) => {
       const day = previousMonthStart.add(index, "day");
-      return reportableTransactions
-        .filter((transaction) => transaction.type === "expense" && dayjs(transaction.date).isSame(day, "day"))
-        .reduce((acc, transaction) => acc + transaction.amount, 0);
+      return ledgerTransactions
+        .filter(
+          (entry) =>
+            entry.transaction.type !== "transfer" &&
+            entry.effectiveType === "expense" &&
+            dayjs(entry.transaction.date).isSame(day, "day"),
+        )
+        .reduce((acc, entry) => acc + entry.transaction.amount, 0);
     });
 
     const lastPreviousValue = previousMonthValues.length
@@ -275,28 +466,29 @@ export default function HomeScreen() {
         previous: previousMonthDaily,
       },
     };
-  }, [overviewPeriod, reportableTransactions]);
+  }, [ledgerTransactions, overviewPeriod]);
 
   const topSpending = useMemo(() => {
     const today = dayjs();
     const periodStart = topSpendingPeriod === "week" ? today.startOf("week") : today.startOf("month");
     const periodEnd = topSpendingPeriod === "week" ? today.endOf("week") : today.endOf("month");
 
-    const filtered = reportableTransactions.filter((transaction) => {
-      if (transaction.type !== "expense") {
+    const filtered = ledgerTransactions.filter((entry) => {
+      if (entry.transaction.type === "transfer" || entry.effectiveType !== "expense") {
         return false;
       }
-      const date = dayjs(transaction.date);
+
+      const date = dayjs(entry.transaction.date);
       return !date.isBefore(periodStart) && !date.isAfter(periodEnd);
     });
 
-    const totalsByCategory = filtered.reduce((acc, transaction) => {
-      const previous = acc.get(transaction.category) ?? 0;
-      acc.set(transaction.category, previous + transaction.amount);
+    const totalsByCategory = filtered.reduce((acc, entry) => {
+      const previous = acc.get(entry.transaction.category) ?? 0;
+      acc.set(entry.transaction.category, previous + entry.transaction.amount);
       return acc;
     }, new Map<string, number>());
 
-    const totalSpent = filtered.reduce((acc, transaction) => acc + transaction.amount, 0);
+    const totalSpent = filtered.reduce((acc, entry) => acc + entry.transaction.amount, 0);
 
     const sorted = Array.from(totalsByCategory.entries()).sort((a, b) => b[1] - a[1]);
     const topThree = sorted.slice(0, 3);
@@ -320,7 +512,7 @@ export default function HomeScreen() {
     }
 
     return { entries, totalSpent };
-  }, [reportableTransactions, topSpendingPeriod]);
+  }, [ledgerTransactions, topSpendingPeriod]);
 
   const donutColors = useMemo(
     () => [
@@ -343,7 +535,12 @@ export default function HomeScreen() {
   );
 
   const currency = profile.currency || "USD";
-  const formattedBalance = formatCurrency(balance, currency);
+  const combinedBalance = useMemo(
+    () => accounts.reduce((acc, account) => acc + account.balance, 0),
+    [accounts],
+  );
+  const displayBalance = selectedAccount ? selectedAccount.balance : combinedBalance;
+  const formattedBalance = formatCurrency(displayBalance, currency);
   const formattedPeriodExpenses = formatCurrency(periodExpense, currency);
 
   const netChangeThisMonth = summary.income - summary.expense;
@@ -355,10 +552,10 @@ export default function HomeScreen() {
 
   const recentTransactions = useMemo(
     () =>
-      [...transactions]
+      [...scopedTransactions]
         .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
         .slice(0, 5),
-    [transactions],
+    [scopedTransactions],
   );
 
   const trendDelta = previousExpense - periodExpense;
@@ -367,10 +564,20 @@ export default function HomeScreen() {
   const upcomingRecurring = useMemo(
     () =>
       recurringTransactions
-        .filter((item) => item.isActive)
+        .filter((item) => {
+          if (!item.isActive) {
+            return false;
+          }
+
+          if (selectedAccountId === "all") {
+            return true;
+          }
+
+          return item.accountId === selectedAccountId || item.toAccountId === selectedAccountId;
+        })
         .sort((a, b) => new Date(a.nextOccurrence).getTime() - new Date(b.nextOccurrence).getTime())
         .slice(0, 3),
-    [recurringTransactions],
+    [recurringTransactions, selectedAccountId],
   );
 
   return (
@@ -385,9 +592,25 @@ export default function HomeScreen() {
           <Text style={styles.subtitle}>Here’s a tidy look at your money this month.</Text>
         </View>
 
+        <View style={[theme.components.surface, styles.accountPickerCard]}>
+          <Text style={styles.accountPickerLabel}>Viewing</Text>
+          <AccountPicker
+            currency={currency}
+            selectedAccountId={selectedAccountId}
+            onSelect={(value) => setSelectedAccountId(value)}
+            extraOptions={accountPickerOptions}
+            placeholder="Choose account"
+          />
+          {selectedAccount?.isArchived ? (
+            <Text style={styles.accountPickerHint}>Archived accounts are read-only.</Text>
+          ) : null}
+        </View>
+
         <View style={[theme.components.card, styles.balanceCard]}>
           <View style={styles.balanceHeader}>
-            <Text style={styles.balanceLabel}>Total balance</Text>
+            <Text style={styles.balanceLabel}>
+              {selectedAccount ? `${selectedAccount.name} balance` : "Total balance"}
+            </Text>
             <Pressable
               onPress={() => setShowBalance((prev) => !prev)}
               hitSlop={8}
@@ -675,7 +898,7 @@ export default function HomeScreen() {
             </View>
             <View style={styles.goalList}>
               {budgetGoals.map((goal) => {
-                const progress = summarizeGoalProgress(goal, currency, reportableTransactions);
+                const progress = summarizeGoalProgress(goal, currency, ledgerTransactions);
                 const progressPercent = Math.round(progress.percentage * 100);
                 const goalComplete = progressPercent >= 100;
 
@@ -730,31 +953,55 @@ export default function HomeScreen() {
                   onPress={() => router.push(`/transactions/${transaction.id}`)}
                   accessibilityRole="button"
                 >
-                  <View
-                    style={[
+                  {(() => {
+                    const effectiveType = getEffectiveType(transaction);
+                    const avatarStyle = [
                       styles.recentAvatar,
-                      transaction.type === "income" ? styles.avatarIncome : styles.avatarExpense,
-                    ]}
-                  >
-                    <Text style={styles.avatarText}>{transaction.category.charAt(0)}</Text>
-                  </View>
-                  <View style={styles.recentCopy}>
-                    <Text style={styles.recentNote}>{transaction.note}</Text>
-                    <Text style={styles.recentMeta}>
-                      {dayjs(transaction.date).format("ddd, D MMM")} • {transaction.category}
-                    </Text>
-                  </View>
-                  <Text
-                    style={[
+                      effectiveType === "income"
+                        ? styles.avatarIncome
+                        : effectiveType === "expense"
+                          ? styles.avatarExpense
+                          : styles.avatarTransfer,
+                    ];
+                    const metaParts = [
+                      dayjs(transaction.date).format("ddd, D MMM"),
+                      transaction.category,
+                    ];
+                    const accountLine = getTransactionAccountLine(transaction);
+                    if (accountLine) {
+                      metaParts.push(accountLine);
+                    }
+
+                    const amountStyle = [
                       styles.recentAmount,
-                      transaction.type === "income"
+                      effectiveType === "income"
                         ? styles.reportValuePositive
-                        : styles.reportValueNegative,
-                    ]}
-                  >
-                    {transaction.type === "income" ? "+" : "-"}
-                    {formatCurrency(transaction.amount, currency)}
-                  </Text>
+                        : effectiveType === "expense"
+                          ? styles.reportValueNegative
+                          : styles.reportValueNeutral,
+                    ];
+
+                    const avatarLabel =
+                      transaction.type === "transfer"
+                        ? "↔"
+                        : transaction.category.charAt(0).toUpperCase();
+
+                    return (
+                      <>
+                        <View style={avatarStyle}>
+                          <Text style={styles.avatarText}>{avatarLabel}</Text>
+                        </View>
+                        <View style={styles.recentCopy}>
+                          <Text style={styles.recentNote}>{transaction.note}</Text>
+                          <Text style={styles.recentMeta}>{metaParts.join(" • ")}</Text>
+                        </View>
+                        <Text style={amountStyle}>
+                          {getDisplaySign(transaction)}
+                          {formatCurrency(transaction.amount, currency)}
+                        </Text>
+                      </>
+                    );
+                  })()}
                 </Pressable>
               ))}
             </View>
@@ -787,6 +1034,21 @@ const createStyles = (
     },
     header: {
       gap: theme.spacing.xs,
+    },
+    accountPickerCard: {
+      gap: theme.spacing.sm,
+    },
+    accountPickerLabel: {
+      ...theme.typography.subtitle,
+      fontSize: 12,
+      textTransform: "uppercase",
+      letterSpacing: 1.4,
+      color: theme.colors.textMuted,
+    },
+    accountPickerHint: {
+      ...theme.typography.subtitle,
+      fontSize: 12,
+      color: theme.colors.textMuted,
     },
     hello: {
       ...theme.typography.title,
@@ -1155,6 +1417,9 @@ const createStyles = (
     avatarExpense: {
       backgroundColor: `${theme.colors.danger}33`,
     },
+    avatarTransfer: {
+      backgroundColor: `${theme.colors.primary}26`,
+    },
     avatarText: {
       fontSize: 16,
       fontWeight: "700",
@@ -1177,5 +1442,8 @@ const createStyles = (
       fontWeight: "600",
       minWidth: 96,
       textAlign: "right",
+    },
+    reportValueNeutral: {
+      color: theme.colors.textMuted,
     },
   });

@@ -1,6 +1,14 @@
 import { create } from "zustand";
 
-export type TransactionType = "income" | "expense";
+export type TransactionType = "income" | "expense" | "transfer";
+
+export interface Account {
+  id: string;
+  name: string;
+  balance: number;
+  isArchived: boolean;
+  createdAt: string;
+}
 
 export interface Transaction {
   id: string;
@@ -9,6 +17,8 @@ export interface Transaction {
   type: TransactionType;
   category: string;
   date: string; // ISO string (date only in practice)
+  accountId: string;
+  toAccountId?: string | null;
   participants?: string[];
   location?: string;
   photos?: string[];
@@ -53,6 +63,8 @@ export const DEFAULT_CATEGORIES: Category[] = [
   { id: "cat-dividends-income", name: "Dividends", type: "income" },
 ];
 
+export const TRANSFER_CATEGORY_NAME = "Transfer";
+
 export type ThemeMode = "light" | "dark";
 
 export interface RecurringTransaction {
@@ -61,6 +73,8 @@ export interface RecurringTransaction {
   note: string;
   type: TransactionType;
   category: string;
+  accountId: string;
+  toAccountId?: string | null;
   frequency: "weekly" | "biweekly" | "monthly";
   nextOccurrence: string;
   isActive: boolean;
@@ -87,6 +101,7 @@ interface Preferences {
 interface FinanceState {
   profile: Profile;
   preferences: Preferences;
+  accounts: Account[];
   transactions: Transaction[];
   recurringTransactions: RecurringTransaction[];
   budgetGoals: BudgetGoal[];
@@ -97,6 +112,10 @@ interface FinanceState {
   ) => void;
   removeTransaction: (id: string) => void;
   duplicateTransaction: (id: string) => void;
+  addAccount: (account: { name: string; initialBalance?: number }) => string | null;
+  updateAccount: (id: string, updates: Partial<Omit<Account, "id" | "createdAt">>) => void;
+  archiveAccount: (id: string) => void;
+  restoreAccount: (id: string) => void;
   addRecurringTransaction: (
     transaction: Omit<RecurringTransaction, "id" | "nextOccurrence"> & {
       nextOccurrence: string;
@@ -120,7 +139,109 @@ const daysAgo = (amount: number) => {
   return date.toISOString();
 };
 
-const seedTransactions: Transaction[] = [
+export const DEFAULT_ACCOUNT_ID = "acc-default";
+
+const roundCurrency = (value: number) => Math.round(value * 100) / 100;
+
+const sanitizeAccountId = (value?: string | null) => {
+  const trimmed = value?.trim();
+  return trimmed && trimmed.length > 0 ? trimmed : DEFAULT_ACCOUNT_ID;
+};
+
+const sanitizeOptionalAccountId = (value?: string | null) => {
+  const trimmed = value?.trim();
+  return trimmed && trimmed.length > 0 ? trimmed : null;
+};
+
+type TransactionLedger = Pick<Transaction, "type" | "amount" | "accountId" | "toAccountId">;
+
+const ensureAccountPresence = (accounts: Account[], accountId?: string | null) => {
+  if (!accountId) {
+    return { accounts, index: -1 };
+  }
+
+  const existingIndex = accounts.findIndex((account) => account.id === accountId);
+  if (existingIndex !== -1) {
+    return { accounts, index: existingIndex };
+  }
+
+  const placeholder: Account = {
+    id: accountId,
+    name: "Unknown account",
+    balance: 0,
+    isArchived: true,
+    createdAt: new Date().toISOString(),
+  };
+
+  return {
+    accounts: [...accounts, placeholder],
+    index: accounts.length,
+  };
+};
+
+const applyTransactionToAccounts = (
+  sourceAccounts: Account[],
+  transaction: TransactionLedger,
+  direction: 1 | -1 = 1,
+) => {
+  const multiplier = direction === 1 ? 1 : -1;
+  let accounts = sourceAccounts.map((account) => ({ ...account }));
+
+  const adjustBalance = (accountId: string | null | undefined, delta: number) => {
+    if (!accountId) {
+      return;
+    }
+    const { accounts: withAccount, index } = ensureAccountPresence(accounts, accountId);
+    accounts = withAccount;
+    if (index === -1) {
+      return;
+    }
+    const target = accounts[index];
+    accounts[index] = {
+      ...target,
+      balance: roundCurrency(target.balance + delta),
+    };
+  };
+
+  const amount = roundCurrency(transaction.amount);
+
+  if (transaction.type === "income") {
+    adjustBalance(transaction.accountId, amount * multiplier);
+  } else if (transaction.type === "expense") {
+    adjustBalance(transaction.accountId, -amount * multiplier);
+  } else if (transaction.type === "transfer") {
+    adjustBalance(transaction.accountId, -amount * multiplier);
+    if (transaction.toAccountId) {
+      adjustBalance(transaction.toAccountId, amount * multiplier);
+    }
+  }
+
+  return accounts;
+};
+
+const applyTransactionsToAccountList = (
+  startingAccounts: Account[],
+  transactions: TransactionLedger[],
+) => transactions.reduce((acc, transaction) => applyTransactionToAccounts(acc, transaction), startingAccounts);
+
+const migrateTransactions = (transactions: Transaction[]): Transaction[] =>
+  transactions.map((transaction) => {
+    const sanitizedType = transaction.type;
+    const accountId = sanitizeAccountId(transaction.accountId);
+    const toAccountId =
+      sanitizedType === "transfer"
+        ? sanitizeOptionalAccountId(transaction.toAccountId)
+        : null;
+
+    return {
+      ...transaction,
+      accountId,
+      toAccountId,
+      category: sanitizedType === "transfer" ? TRANSFER_CATEGORY_NAME : transaction.category,
+    };
+  });
+
+const baseSeedTransactions: Array<Omit<Transaction, "accountId" | "toAccountId">> = [
   {
     id: "t-1",
     amount: 38,
@@ -451,7 +572,25 @@ const seedTransactions: Transaction[] = [
   },
 ];
 
+const defaultAccount: Account = {
+  id: DEFAULT_ACCOUNT_ID,
+  name: "Cash Wallet",
+  balance: 0,
+  isArchived: false,
+  createdAt: new Date().toISOString(),
+};
+
+const seedTransactions: Transaction[] = migrateTransactions(
+  baseSeedTransactions.map((transaction) => ({
+    ...transaction,
+    accountId: DEFAULT_ACCOUNT_ID,
+  })),
+);
+
+const seedAccounts = applyTransactionsToAccountList([defaultAccount], seedTransactions);
+
 let uid = seedTransactions.length + 1;
+let accountUid = seedAccounts.length + 1;
 
 const nextOccurrenceForFrequency = (fromDate: string, frequency: RecurringTransaction["frequency"]) => {
   const base = new Date(fromDate);
@@ -474,6 +613,7 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
     themeMode: "dark",
     categories: [...DEFAULT_CATEGORIES],
   },
+  accounts: seedAccounts,
   transactions: seedTransactions,
   recurringTransactions: [
     {
@@ -482,6 +622,7 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
       note: "Coworking membership",
       type: "expense",
       category: "Work Expenses",
+      accountId: DEFAULT_ACCOUNT_ID,
       frequency: "monthly",
       nextOccurrence: daysAgo(-5),
       isActive: true,
@@ -492,6 +633,7 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
       note: "Product design salary",
       type: "income",
       category: "Salary",
+      accountId: DEFAULT_ACCOUNT_ID,
       frequency: "monthly",
       nextOccurrence: daysAgo(-2),
       isActive: true,
@@ -502,6 +644,7 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
       note: "Streaming subscriptions",
       type: "expense",
       category: "Lifestyle",
+      accountId: DEFAULT_ACCOUNT_ID,
       frequency: "monthly",
       nextOccurrence: daysAgo(6),
       isActive: true,
@@ -534,74 +677,123 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
 
       const normalizedPhotos = transaction.photos ? transaction.photos.filter(Boolean) : [];
 
-      const normalizedAmount = Math.round(transaction.amount * 100) / 100;
+      const normalizedAmount = roundCurrency(transaction.amount);
+      const normalizedAccountId = sanitizeAccountId(transaction.accountId);
+      const normalizedType = transaction.type;
+      const normalizedToAccountId =
+        normalizedType === "transfer"
+          ? sanitizeOptionalAccountId(transaction.toAccountId)
+          : null;
 
       const payload: Transaction = {
         id: `t-${uid++}`,
         ...transaction,
+        accountId: normalizedAccountId,
+        toAccountId: normalizedType === "transfer" ? normalizedToAccountId : null,
         participants: normalizedParticipants,
         photos: normalizedPhotos,
         excludeFromReports: Boolean(transaction.excludeFromReports),
         amount: normalizedAmount,
         note: transaction.note.trim(),
+        category: normalizedType === "transfer" ? TRANSFER_CATEGORY_NAME : transaction.category,
+        location: transaction.location?.trim() || undefined,
         date: normalizedDate.toISOString(),
       };
 
+      const accounts = applyTransactionToAccounts(state.accounts, payload, 1);
+
       return {
         transactions: [payload, ...state.transactions],
+        accounts,
       };
     }),
   updateTransaction: (id, updates) =>
-    set((state) => ({
-      transactions: state.transactions.map((transaction) => {
-        if (transaction.id !== id) {
-          return transaction;
+    set((state) => {
+      const existing = state.transactions.find((transaction) => transaction.id === id);
+      if (!existing) {
+        return state;
+      }
+
+      const next: Transaction = {
+        ...existing,
+        ...updates,
+      };
+
+      if (updates.note !== undefined) {
+        next.note = updates.note.trim();
+      }
+
+      if (updates.participants !== undefined) {
+        next.participants = updates.participants
+          .map((person) => person.trim())
+          .filter(Boolean);
+      }
+
+      if (updates.photos !== undefined) {
+        next.photos = updates.photos.filter(Boolean);
+      }
+
+      if (updates.location !== undefined) {
+        next.location = updates.location.trim() || undefined;
+      }
+
+      if (updates.excludeFromReports !== undefined) {
+        next.excludeFromReports = Boolean(updates.excludeFromReports);
+      }
+
+      if (updates.amount !== undefined) {
+        next.amount = roundCurrency(updates.amount);
+      } else {
+        next.amount = roundCurrency(next.amount);
+      }
+
+      if (updates.date !== undefined) {
+        const normalized = new Date(updates.date);
+        normalized.setHours(0, 0, 0, 0);
+        next.date = normalized.toISOString();
+      }
+
+      next.accountId = sanitizeAccountId(updates.accountId ?? next.accountId);
+      const targetType = updates.type ?? next.type;
+      next.type = targetType;
+
+      if (targetType === "transfer") {
+        next.category = TRANSFER_CATEGORY_NAME;
+        next.toAccountId = sanitizeOptionalAccountId(updates.toAccountId ?? next.toAccountId);
+      } else {
+        next.toAccountId = null;
+        if (updates.category !== undefined) {
+          next.category = updates.category;
         }
+      }
 
-        const next: Transaction = {
-          ...transaction,
-          ...updates,
-        };
+      const transactions = state.transactions.map((transaction) =>
+        transaction.id === id ? next : transaction,
+      );
 
-        if (updates.note !== undefined) {
-          next.note = updates.note.trim();
-        }
+      const resetAccounts = applyTransactionToAccounts(state.accounts, existing, -1);
+      const accounts = applyTransactionToAccounts(resetAccounts, next, 1);
 
-        if (updates.participants !== undefined) {
-          next.participants = updates.participants
-            .map((person) => person.trim())
-            .filter(Boolean);
-        }
-
-        if (updates.photos !== undefined) {
-          next.photos = updates.photos.filter(Boolean);
-        }
-
-        if (updates.location !== undefined) {
-          next.location = updates.location.trim() || undefined;
-        }
-
-        if (updates.excludeFromReports !== undefined) {
-          next.excludeFromReports = Boolean(updates.excludeFromReports);
-        }
-
-        if (updates.amount !== undefined) {
-          next.amount = Math.round(updates.amount * 100) / 100;
-        }
-
-        if (updates.date !== undefined) {
-          const normalized = new Date(updates.date);
-          normalized.setHours(0, 0, 0, 0);
-          next.date = normalized.toISOString();
-        }
-
-        return next;
-      }),
-    })),
+      return {
+        transactions,
+        accounts,
+      };
+    }),
   removeTransaction: (id) =>
-    set((state) => ({
-      transactions: state.transactions.filter((transaction) => transaction.id !== id),
-    })),
+    set((state) => {
+      const existing = state.transactions.find((transaction) => transaction.id === id);
+      if (!existing) {
+        return state;
+      }
+
+      const transactions = state.transactions.filter((transaction) => transaction.id !== id);
+      const accounts = applyTransactionToAccounts(state.accounts, existing, -1);
+
+      return {
+        transactions,
+        accounts,
+      };
+    }),
   duplicateTransaction: (id) => {
     const existing = get().transactions.find((transaction) => transaction.id === id);
     if (!existing) {
@@ -614,6 +806,8 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
       type: existing.type,
       category: existing.category,
       date: existing.date,
+      accountId: existing.accountId,
+      toAccountId: existing.toAccountId,
       participants: existing.participants ? [...existing.participants] : undefined,
       location: existing.location,
       photos: existing.photos ? [...existing.photos] : undefined,
@@ -622,19 +816,132 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
 
     get().addTransaction(copy);
   },
+  addAccount: ({ name, initialBalance }) => {
+    const trimmed = name.trim();
+    if (!trimmed) {
+      return null;
+    }
+
+    const normalizedName = trimmed.replace(/\s+/g, " ");
+    const existing = get().accounts;
+    const normalizedValue = normalizedName.toLowerCase();
+
+    const hasDuplicate = existing.some(
+      (account) => account.name.trim().toLowerCase() === normalizedValue && !account.isArchived,
+    );
+
+    if (hasDuplicate) {
+      return null;
+    }
+
+    const id = `acc-${accountUid++}`;
+    const hasInitialBalance = typeof initialBalance === "number" && Number.isFinite(initialBalance);
+    const balance = hasInitialBalance ? roundCurrency(initialBalance) : 0;
+    const createdAt = new Date().toISOString();
+
+    const account: Account = {
+      id,
+      name: normalizedName,
+      balance,
+      isArchived: false,
+      createdAt,
+    };
+
+    set((state) => ({
+      accounts: [...state.accounts, account],
+    }));
+
+    return id;
+  },
+  updateAccount: (id, updates) => {
+    set((state) => {
+      const index = state.accounts.findIndex((account) => account.id === id);
+      if (index === -1) {
+        return state;
+      }
+
+      const current = state.accounts[index];
+
+      let nextName = current.name;
+      if (updates.name !== undefined) {
+        const trimmed = updates.name.trim();
+        if (!trimmed) {
+          return state;
+        }
+        const normalized = trimmed.replace(/\s+/g, " ");
+        const hasDuplicate = state.accounts.some(
+          (account, position) =>
+            position !== index &&
+            !account.isArchived &&
+            account.name.trim().toLowerCase() === normalized.toLowerCase(),
+        );
+
+        if (hasDuplicate) {
+          return state;
+        }
+
+        nextName = normalized;
+      }
+
+      let nextBalance = current.balance;
+      if (typeof updates.balance === "number" && Number.isFinite(updates.balance)) {
+        nextBalance = roundCurrency(updates.balance);
+      }
+
+      const nextAccount: Account = {
+        ...current,
+        ...updates,
+        name: nextName,
+        balance: nextBalance,
+      };
+
+      const accounts = state.accounts.map((account, position) =>
+        position === index ? nextAccount : account,
+      );
+
+      return { accounts };
+    });
+  },
+  archiveAccount: (id) => {
+    if (id === DEFAULT_ACCOUNT_ID) {
+      return;
+    }
+
+    set((state) => ({
+      accounts: state.accounts.map((account) =>
+        account.id === id ? { ...account, isArchived: true } : account,
+      ),
+    }));
+  },
+  restoreAccount: (id) => {
+    set((state) => ({
+      accounts: state.accounts.map((account) =>
+        account.id === id ? { ...account, isArchived: false } : account,
+      ),
+    }));
+  },
   addRecurringTransaction: (transaction) =>
     set((state) => {
       const normalizedStart = new Date(transaction.nextOccurrence);
       normalizedStart.setHours(0, 0, 0, 0);
       const startDateIso = normalizedStart.toISOString();
 
+      const normalizedAccountId = sanitizeAccountId(transaction.accountId);
+      const normalizedToAccountId =
+        transaction.type === "transfer"
+          ? sanitizeOptionalAccountId(transaction.toAccountId)
+          : null;
+      const normalizedCategory =
+        transaction.type === "transfer" ? TRANSFER_CATEGORY_NAME : transaction.category;
+      const trimmedNote = transaction.note.trim();
+
       const alreadyLogged = state.transactions.some(
         (entry) =>
           entry.date === startDateIso &&
           entry.amount === transaction.amount &&
           entry.type === transaction.type &&
-          entry.category === transaction.category &&
-          entry.note === transaction.note.trim(),
+          entry.category === normalizedCategory &&
+          entry.note === trimmedNote,
       );
 
       const nextOccurrence = alreadyLogged
@@ -647,6 +954,10 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
           {
             id: `r-${state.recurringTransactions.length + 1}`,
             ...transaction,
+            accountId: normalizedAccountId,
+            toAccountId: normalizedToAccountId,
+            category: normalizedCategory,
+            note: trimmedNote,
             nextOccurrence,
             isActive: true,
           },
@@ -673,27 +984,34 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
 
     const nextOccurrence = nextOccurrenceForFrequency(recurring.nextOccurrence, recurring.frequency);
 
-    set((state) => ({
-      transactions: [
-        {
-          id: `t-${uid++}`,
-          amount: recurring.amount,
-          note: recurring.note,
-          type: recurring.type,
-          category: recurring.category,
-          date: recurring.nextOccurrence,
-        },
-        ...state.transactions,
-      ],
-      recurringTransactions: state.recurringTransactions.map((item) =>
-        item.id === id
-          ? {
-              ...item,
-              nextOccurrence,
-            }
-          : item,
-      ),
-    }));
+    set((state) => {
+      const transaction: Transaction = {
+        id: `t-${uid++}`,
+        amount: recurring.amount,
+        note: recurring.note,
+        type: recurring.type,
+        category: recurring.type === "transfer" ? TRANSFER_CATEGORY_NAME : recurring.category,
+        accountId: sanitizeAccountId(recurring.accountId),
+        toAccountId:
+          recurring.type === "transfer"
+            ? sanitizeOptionalAccountId(recurring.toAccountId)
+            : null,
+        date: recurring.nextOccurrence,
+      };
+
+      return {
+        transactions: [transaction, ...state.transactions],
+        recurringTransactions: state.recurringTransactions.map((item) =>
+          item.id === id
+            ? {
+                ...item,
+                nextOccurrence,
+              }
+            : item,
+        ),
+        accounts: applyTransactionToAccounts(state.accounts, transaction, 1),
+      };
+    });
   },
   addBudgetGoal: (goal) =>
     set((state) => ({
@@ -771,3 +1089,9 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
     }));
   },
 }));
+
+export const selectAccounts = (state: FinanceState) => state.accounts;
+export const selectActiveAccounts = (state: FinanceState) =>
+  state.accounts.filter((account) => !account.isArchived);
+export const selectAccountById = (accountId?: string | null) => (state: FinanceState) =>
+  accountId ? state.accounts.find((account) => account.id === accountId) : undefined;
