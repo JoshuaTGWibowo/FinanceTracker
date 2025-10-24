@@ -1,4 +1,4 @@
-import { useMemo, useState, useRef, useEffect } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Modal,
   Platform,
@@ -17,7 +17,8 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import dayjs, { type Dayjs } from "dayjs";
 
 import { useAppTheme } from "../../theme";
-import { Transaction, useFinanceStore } from "../../lib/store";
+import { Transaction, selectAccounts, useFinanceStore } from "../../lib/store";
+import { AccountPicker } from "../../components/accounts/AccountPicker";
 import { truncateWords } from "../../lib/text";
 
 const formatCurrency = (
@@ -122,6 +123,7 @@ export default function TransactionsScreen() {
   const categories = useFinanceStore((state) => state.preferences.categories);
   const recurringTransactions = useFinanceStore((state) => state.recurringTransactions);
   const logRecurringTransaction = useFinanceStore((state) => state.logRecurringTransaction);
+  const accounts = useFinanceStore(selectAccounts);
   const router = useRouter();
   const { category: categoryParam } = useLocalSearchParams<{ category?: string | string[] }>();
 
@@ -151,6 +153,7 @@ export default function TransactionsScreen() {
   const [minAmount, setMinAmount] = useState("");
   const [maxAmount, setMaxAmount] = useState("");
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
+  const [selectedAccountId, setSelectedAccountId] = useState<string>("all");
   const [startDate, setStartDate] = useState<Dayjs | null>(null);
   const [endDate, setEndDate] = useState<Dayjs | null>(null);
   const [showStartPicker, setShowStartPicker] = useState(false);
@@ -182,6 +185,92 @@ export default function TransactionsScreen() {
 
   const insets = useSafeAreaInsets();
   const styles = useMemo(() => createStyles(theme, insets), [theme, insets]);
+  const accountsMap = useMemo(
+    () => new Map(accounts.map((account) => [account.id, account])),
+    [accounts],
+  );
+  const selectedAccount = selectedAccountId === "all" ? null : accountsMap.get(selectedAccountId);
+
+  const getEffectiveType = useCallback(
+    (transaction: Transaction): "income" | "expense" | "transfer" | "ignore" => {
+      if (selectedAccountId === "all") {
+        return transaction.type;
+      }
+
+      if (transaction.type === "transfer") {
+        if (transaction.accountId === selectedAccountId) {
+          return "expense";
+        }
+        if (transaction.toAccountId === selectedAccountId) {
+          return "income";
+        }
+        return "ignore";
+      }
+
+      return transaction.accountId === selectedAccountId ? transaction.type : "ignore";
+    },
+    [selectedAccountId],
+  );
+
+  const getSignedAmount = useCallback(
+    (transaction: Transaction) => {
+      const effectiveType = getEffectiveType(transaction);
+      if (effectiveType === "income") {
+        return transaction.amount;
+      }
+      if (effectiveType === "expense") {
+        return -transaction.amount;
+      }
+      return 0;
+    },
+    [getEffectiveType],
+  );
+
+  const getDisplaySign = useCallback(
+    (transaction: Transaction) => {
+      const effectiveType = getEffectiveType(transaction);
+      if (effectiveType === "income") {
+        return "+";
+      }
+      if (effectiveType === "expense") {
+        return "−";
+      }
+      return "↔";
+    },
+    [getEffectiveType],
+  );
+
+  const getTransactionAccountLine = useCallback(
+    (transaction: Transaction) => {
+      const sourceName = accountsMap.get(transaction.accountId)?.name ?? "Unknown account";
+      if (transaction.type === "transfer") {
+        const destinationName = transaction.toAccountId
+          ? accountsMap.get(transaction.toAccountId)?.name ?? "Unspecified"
+          : "Unspecified";
+
+        if (selectedAccountId === "all") {
+          return `${sourceName} → ${destinationName}`;
+        }
+
+        if (transaction.accountId === selectedAccountId) {
+          return `→ ${destinationName}`;
+        }
+
+        if (transaction.toAccountId === selectedAccountId) {
+          return `← ${sourceName}`;
+        }
+
+        return `${sourceName} → ${destinationName}`;
+      }
+
+      if (selectedAccountId === "all") {
+        return sourceName;
+      }
+
+      return null;
+    },
+    [accountsMap, selectedAccountId],
+  );
 
   const toggleCategory = (category: string) => {
     setSelectedCategories((prev) =>
@@ -199,6 +288,7 @@ export default function TransactionsScreen() {
     setSelectedCategories([]);
     setStartDate(null);
     setEndDate(null);
+    setSelectedAccountId("all");
   };
 
   const openSearch = (showFilters = false) => {
@@ -252,8 +342,18 @@ export default function TransactionsScreen() {
     selectedCategories.forEach((category) => {
       filters.push({ key: `cat-${category}`, label: category, type: "category", value: category });
     });
+    if (selectedAccountId !== "all") {
+      const accountName =
+        accounts.find((account) => account.id === selectedAccountId)?.name ?? "Unknown account";
+      filters.push({
+        key: `account-${selectedAccountId}`,
+        label: accountName,
+        type: "account",
+        value: selectedAccountId,
+      });
+    }
     return filters;
-  }, [endDate, maxAmount, minAmount, searchTerm, selectedCategories, startDate, currency]);
+  }, [accounts, currency, endDate, maxAmount, minAmount, searchTerm, selectedAccountId, selectedCategories, startDate]);
 
   const hasActiveFilters = activeFilters.length > 0;
 
@@ -275,6 +375,14 @@ export default function TransactionsScreen() {
       // Date range filters
       if (startDate && date.isBefore(startDate)) return false;
       if (endDate && date.isAfter(endDate)) return false;
+
+      if (selectedAccountId !== "all") {
+        const matchesSource = transaction.accountId === selectedAccountId;
+        const matchesDestination = transaction.toAccountId === selectedAccountId;
+        if (!matchesSource && !matchesDestination) {
+          return false;
+        }
+      }
 
       // Amount filters
       const amount = transaction.amount;
@@ -306,7 +414,14 @@ export default function TransactionsScreen() {
       return true;
     });
 
-    const reportable = periodTransactions.filter((transaction) => !transaction.excludeFromReports);
+    const reportable = periodTransactions.filter((transaction) => {
+      if (transaction.excludeFromReports) {
+        return false;
+      }
+
+      const effectiveType = getEffectiveType(transaction);
+      return effectiveType !== "ignore";
+    });
 
     const parseTransactionId = (id: string) => {
       const match = id.match(/(\d+)$/);
@@ -359,10 +474,11 @@ export default function TransactionsScreen() {
             dailyNet: 0,
           };
         existing.transactions.push(transaction);
-        if (transaction.type === "income") {
+        const effectiveType = getEffectiveType(transaction);
+        if (effectiveType === "income") {
           existing.dailyIncome += transaction.amount;
           existing.dailyNet += transaction.amount;
-        } else {
+        } else if (effectiveType === "expense") {
           existing.dailyExpense += transaction.amount;
           existing.dailyNet -= transaction.amount;
         }
@@ -380,9 +496,10 @@ export default function TransactionsScreen() {
     // Calculate summary
     const totals = reportable.reduce(
       (acc, transaction) => {
-        if (transaction.type === "income") {
+        const effectiveType = getEffectiveType(transaction);
+        if (effectiveType === "income") {
           acc.income += transaction.amount;
-        } else {
+        } else if (effectiveType === "expense") {
           acc.expense += transaction.amount;
         }
         return acc;
@@ -396,7 +513,7 @@ export default function TransactionsScreen() {
     [...transactions.filter((transaction) => !transaction.excludeFromReports)]
       .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
       .forEach((transaction) => {
-        const value = transaction.type === "income" ? transaction.amount : -transaction.amount;
+        const value = getSignedAmount(transaction);
         const date = dayjs(transaction.date);
 
         if (date.isBefore(start)) {
@@ -409,7 +526,8 @@ export default function TransactionsScreen() {
 
     // Expense breakdown
     const expenseMap = reportable.reduce((acc, transaction) => {
-      if (transaction.type !== "expense") return acc;
+      const effectiveType = getEffectiveType(transaction);
+      if (effectiveType !== "expense") return acc;
       const current = acc.get(transaction.category) ?? 0;
       acc.set(transaction.category, current + transaction.amount);
       return acc;
@@ -430,6 +548,14 @@ export default function TransactionsScreen() {
       return !occurrence.isBefore(start) && !occurrence.isAfter(end);
     });
 
+    const relevantRecurring =
+      selectedAccountId === "all"
+        ? recurring
+        : recurring.filter(
+            (item) =>
+              item.accountId === selectedAccountId || item.toAccountId === selectedAccountId,
+          );
+
     return {
       sections: sectionData,
       summary: {
@@ -441,15 +567,18 @@ export default function TransactionsScreen() {
         percentageChange: formatPercentage(closingBalance, openingBalance),
       },
       expenseBreakdown: breakdown,
-      filteredRecurring: recurring,
+      filteredRecurring: relevantRecurring,
     };
   }, [
     endDate,
+    getEffectiveType,
+    getSignedAmount,
     maxAmount,
     minAmount,
     periodOptions,
     recurringTransactions,
     searchTerm,
+    selectedAccountId,
     selectedPeriod,
     selectedCategories,
     startDate,
@@ -490,7 +619,9 @@ export default function TransactionsScreen() {
             <View style={styles.balanceCard}>
               <View style={styles.balanceHeader}>
                 <View>
-                  <Text style={styles.balanceLabel}>Current Balance</Text>
+                  <Text style={styles.balanceLabel}>
+                    {selectedAccount ? `${selectedAccount.name} balance` : "Current Balance"}
+                  </Text>
                   <Text style={styles.balanceValue(balanceFontSize)}>{closingBalanceDisplay}</Text>
                 </View>
                 <View style={styles.changeBadge(summary.net)}>
@@ -556,6 +687,17 @@ export default function TransactionsScreen() {
               })}
             </ScrollView>
 
+            <View style={styles.accountPickerContainer}>
+              <AccountPicker
+                currency={currency || "USD"}
+                selectedAccountId={selectedAccountId}
+                onSelect={(value) => setSelectedAccountId(value)}
+                includeArchived
+                placeholder="All accounts"
+                extraOptions={[{ id: "all", label: "All accounts", description: "Combined overview" }]}
+              />
+            </View>
+
             {/* Search and Filters */}
             <View style={styles.searchContainer}>
               <Pressable
@@ -605,6 +747,8 @@ export default function TransactionsScreen() {
                           setSelectedCategories((prev) =>
                             prev.filter((c) => c !== filter.value),
                           );
+                        } else if (filter.type === "account") {
+                          setSelectedAccountId("all");
                         }
                       }}
                       style={styles.filterChipClose}
@@ -722,6 +866,13 @@ export default function TransactionsScreen() {
               const notePreview = transaction.note.trim().length
                 ? truncateWords(transaction.note, 10)
                 : "No notes";
+              const effectiveType = getEffectiveType(transaction);
+              const displaySign = getDisplaySign(transaction);
+              const styleType =
+                effectiveType === "income" || effectiveType === "expense"
+                  ? effectiveType
+                  : transaction.type;
+              const accountLine = getTransactionAccountLine(transaction);
 
               return (
                 <View key={transaction.id}>
@@ -732,7 +883,7 @@ export default function TransactionsScreen() {
                     accessibilityRole="button"
                   >
                     <View style={styles.transactionLeft}>
-                      <View style={styles.categoryIcon(transaction.type)}>
+                      <View style={styles.categoryIcon(styleType)}>
                         <Text style={styles.categoryInitial}>
                           {transaction.category.charAt(0).toUpperCase()}
                         </Text>
@@ -744,11 +895,16 @@ export default function TransactionsScreen() {
                         <Text style={styles.transactionNote} numberOfLines={2}>
                           {notePreview}
                         </Text>
+                        {accountLine && (
+                          <Text style={styles.transactionMeta} numberOfLines={1}>
+                            {accountLine}
+                          </Text>
+                        )}
                       </View>
                     </View>
                     <View style={styles.transactionRight}>
-                      <Text style={styles.transactionAmount(transaction.type)}>
-                        {transaction.type === "income" ? "+" : "−"}
+                      <Text style={styles.transactionAmount(styleType)}>
+                        {displaySign}
                         {formatCurrency(transaction.amount, currency || "USD")}
                       </Text>
                       {transaction.excludeFromReports && (
@@ -1298,9 +1454,12 @@ const createStyles = (theme: any, insets: any) =>
       width: 36,
       height: 36,
       borderRadius: 10,
-      backgroundColor: type === "income" 
-        ? `${theme.colors.success}20` 
-        : `${theme.colors.danger}20`,
+      backgroundColor:
+        type === "income"
+          ? `${theme.colors.success}20`
+          : type === "expense"
+            ? `${theme.colors.danger}20`
+            : `${theme.colors.primary}20`,
       alignItems: "center",
       justifyContent: "center",
     }),
@@ -1325,8 +1484,17 @@ const createStyles = (theme: any, insets: any) =>
     transactionAmount: (type: string) => ({
       fontSize: 15,
       fontWeight: "700",
-      color: type === "income" ? theme.colors.success : theme.colors.danger,
+      color:
+        type === "income"
+          ? theme.colors.success
+          : type === "expense"
+            ? theme.colors.danger
+            : theme.colors.text,
     }),
+    transactionMeta: {
+      fontSize: 12,
+      color: theme.colors.textMuted,
+    },
     transactionRight: {
       alignItems: "flex-end",
       gap: 6,

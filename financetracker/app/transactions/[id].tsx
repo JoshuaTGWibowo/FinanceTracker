@@ -14,7 +14,7 @@ import { Image } from "expo-image";
 import dayjs from "dayjs";
 
 import { useAppTheme } from "../../theme";
-import { useFinanceStore } from "../../lib/store";
+import { selectAccountById, useFinanceStore } from "../../lib/store";
 
 const formatCurrency = (
   value: number,
@@ -41,6 +41,10 @@ export default function TransactionDetailsScreen() {
   );
   const duplicateTransaction = useFinanceStore((state) => state.duplicateTransaction);
   const removeTransaction = useFinanceStore((state) => state.removeTransaction);
+  const sourceAccount = useFinanceStore(selectAccountById(transaction?.accountId));
+  const destinationAccount = useFinanceStore(
+    selectAccountById(transaction?.toAccountId ?? null),
+  );
 
   if (!transaction) {
     return (
@@ -81,6 +85,23 @@ export default function TransactionDetailsScreen() {
 
   const participants = transaction.participants ?? [];
   const photos = transaction.photos ?? [];
+  const typeIcon =
+    transaction.type === "income"
+      ? "trending-up"
+      : transaction.type === "expense"
+        ? "trending-down"
+        : "swap-horizontal";
+  const typeLabel =
+    transaction.type === "income"
+      ? "Income"
+      : transaction.type === "expense"
+        ? "Expense"
+        : "Transfer";
+  const sourceAccountName = sourceAccount?.name ?? "Unknown account";
+  const destinationAccountName =
+    transaction.type === "transfer"
+      ? destinationAccount?.name ?? "Not specified"
+      : undefined;
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -108,14 +129,8 @@ export default function TransactionDetailsScreen() {
               {formatCurrency(transaction.amount, currency || "USD")}
             </Text>
             <View style={styles.typeBadge(transaction.type)}>
-              <Ionicons
-                name={transaction.type === "income" ? "trending-up" : "trending-down"}
-                size={14}
-                color={theme.colors.text}
-              />
-              <Text style={styles.typeBadgeText}>
-                {transaction.type === "income" ? "Income" : "Expense"}
-              </Text>
+              <Ionicons name={typeIcon} size={14} color={theme.colors.text} />
+              <Text style={styles.typeBadgeText}>{typeLabel}</Text>
             </View>
           </View>
           <View style={styles.summaryMeta}>
@@ -124,6 +139,18 @@ export default function TransactionDetailsScreen() {
               <Text style={styles.metaLabel}>Category</Text>
               <Text style={styles.metaValue}>{transaction.category}</Text>
             </View>
+            <View style={styles.metaRow}>
+              <Ionicons name="wallet" size={16} color={theme.colors.textMuted} />
+              <Text style={styles.metaLabel}>Account</Text>
+              <Text style={styles.metaValue}>{sourceAccountName}</Text>
+            </View>
+            {transaction.type === "transfer" && (
+              <View style={styles.metaRow}>
+                <Ionicons name="swap-horizontal" size={16} color={theme.colors.textMuted} />
+                <Text style={styles.metaLabel}>Destination</Text>
+                <Text style={styles.metaValue}>{destinationAccountName}</Text>
+              </View>
+            )}
             <View style={styles.metaRow}>
               <Ionicons name="calendar" size={16} color={theme.colors.textMuted} />
               <Text style={styles.metaLabel}>Date</Text>
@@ -246,7 +273,12 @@ const createStyles = (
     amount: (type: string) => ({
       fontSize: 28,
       fontWeight: "700",
-      color: type === "income" ? theme.colors.success : theme.colors.danger,
+      color:
+        type === "income"
+          ? theme.colors.success
+          : type === "expense"
+            ? theme.colors.danger
+            : theme.colors.primary,
     }),
     typeBadge: (type: string) => ({
       flexDirection: "row",
@@ -256,7 +288,11 @@ const createStyles = (
       paddingVertical: theme.spacing.xs,
       borderRadius: theme.radii.pill,
       backgroundColor:
-        type === "income" ? `${theme.colors.success}22` : `${theme.colors.danger}22`,
+        type === "income"
+          ? `${theme.colors.success}22`
+          : type === "expense"
+            ? `${theme.colors.danger}22`
+            : `${theme.colors.primary}22`,
     }),
     typeBadgeText: {
       fontSize: 12,
