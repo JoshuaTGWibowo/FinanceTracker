@@ -1,3 +1,4 @@
+import dayjs from "dayjs";
 import { create } from "zustand";
 
 export type TransactionType = "income" | "expense";
@@ -72,7 +73,169 @@ export interface BudgetGoal {
   target: number;
   period: "week" | "month";
   category?: string | null;
+  deprecated?: boolean;
 }
+
+export type AssignmentSourceType = "income" | "goal" | "rollover" | "adjustment";
+
+export interface AssignmentSource {
+  type: AssignmentSourceType;
+  transactionId?: string;
+  goalId?: string;
+  note?: string;
+}
+
+export interface Assignment {
+  id: string;
+  month: string; // YYYY-MM
+  category: string;
+  amount: number;
+  source: AssignmentSource;
+  createdAt: string;
+}
+
+export interface BudgetEnvelope {
+  id: string;
+  category: string;
+  month: string;
+  assigned: number;
+  activity: number;
+  available: number;
+  metadata: {
+    overspent: boolean;
+    fundSources: AssignmentSource[];
+  };
+}
+
+export interface BudgetMonth {
+  id: string;
+  incomeTotal: number;
+  assignedTotal: number;
+  activityTotal: number;
+  availableToBudget: number;
+  overspent: boolean;
+  envelopes: Record<string, BudgetEnvelope>;
+}
+
+export type EnvelopeHealthStatus = "healthy" | "underfunded" | "overspent";
+
+export interface EnvelopeHealth {
+  category: string;
+  assigned: number;
+  activity: number;
+  available: number;
+  status: EnvelopeHealthStatus;
+}
+
+export interface FundEnvelopePayload {
+  month: string;
+  category: string;
+  amount: number;
+  transactionId?: string;
+  note?: string;
+}
+
+const getMonthKey = (value: string | Date) => dayjs(value).format("YYYY-MM");
+
+const createBudgetEnvelope = (category: string, month: string): BudgetEnvelope => ({
+  id: `${month}-${category}`,
+  category,
+  month,
+  assigned: 0,
+  activity: 0,
+  available: 0,
+  metadata: {
+    overspent: false,
+    fundSources: [],
+  },
+});
+
+export const createEmptyBudgetMonth = (month: string): BudgetMonth => ({
+  id: month,
+  incomeTotal: 0,
+  assignedTotal: 0,
+  activityTotal: 0,
+  availableToBudget: 0,
+  overspent: false,
+  envelopes: {},
+});
+
+const buildBudgetMonths = (payload: { transactions: Transaction[]; assignments: Assignment[] }) => {
+  const months: Record<string, BudgetMonth> = {};
+
+  const ensureMonth = (monthKey: string) => {
+    if (!months[monthKey]) {
+      months[monthKey] = createEmptyBudgetMonth(monthKey);
+    }
+    return months[monthKey];
+  };
+
+  const ensureEnvelope = (month: BudgetMonth, category: string) => {
+    if (!month.envelopes[category]) {
+      month.envelopes[category] = createBudgetEnvelope(category, month.id);
+    }
+    return month.envelopes[category];
+  };
+
+  ensureMonth(getMonthKey(new Date()));
+
+  payload.assignments.forEach((assignment) => {
+    const month = ensureMonth(assignment.month);
+    const envelope = ensureEnvelope(month, assignment.category);
+    envelope.assigned += assignment.amount;
+    envelope.metadata.fundSources.push(assignment.source);
+    month.assignedTotal += assignment.amount;
+  });
+
+  payload.transactions
+    .filter((transaction) => !transaction.excludeFromReports)
+    .forEach((transaction) => {
+      const month = ensureMonth(getMonthKey(transaction.date));
+      if (transaction.type === "income") {
+        month.incomeTotal += transaction.amount;
+        return;
+      }
+      month.activityTotal += transaction.amount;
+      const envelope = ensureEnvelope(month, transaction.category);
+      envelope.activity += transaction.amount;
+    });
+
+  Object.values(months).forEach((month) => {
+    Object.values(month.envelopes).forEach((envelope) => {
+      envelope.available = envelope.assigned - envelope.activity;
+      envelope.metadata.overspent = envelope.available < 0;
+    });
+    month.availableToBudget = month.incomeTotal - month.assignedTotal;
+    month.overspent = Object.values(month.envelopes).some((envelope) => envelope.metadata.overspent);
+  });
+
+  return months;
+};
+
+const getNextMonthKey = (monthKey: string) => dayjs(monthKey).add(1, "month").format("YYYY-MM");
+
+let assignmentUid = 1;
+const nextAssignmentId = () => `assign-${assignmentUid++}`;
+
+const migrateGoalsToAssignments = (goals: BudgetGoal[]) => {
+  const currentMonthKey = getMonthKey(new Date());
+  const assignments: Assignment[] = [];
+  const updatedGoals = goals.map((goal) => {
+    if (!goal.category) {
+      return goal;
+    }
+    assignments.push({
+      id: nextAssignmentId(),
+      month: currentMonthKey,
+      category: goal.category,
+      amount: goal.target,
+      source: { type: "goal", goalId: goal.id },
+      createdAt: new Date().toISOString(),
+    });
+    return { ...goal, deprecated: true };
+  });
+  return { assignments, goals: updatedGoals };
+};
 
 interface Profile {
   name: string;
@@ -90,6 +253,9 @@ interface FinanceState {
   transactions: Transaction[];
   recurringTransactions: RecurringTransaction[];
   budgetGoals: BudgetGoal[];
+  budgetAssignments: Assignment[];
+  budgetMonths: Record<string, BudgetMonth>;
+  budgetRollovers: Record<string, boolean>;
   addTransaction: (transaction: Omit<Transaction, "id">) => void;
   updateTransaction: (
     id: string,
@@ -107,6 +273,9 @@ interface FinanceState {
   addBudgetGoal: (goal: Omit<BudgetGoal, "id">) => void;
   updateBudgetGoal: (id: string, updates: Partial<Omit<BudgetGoal, "id">>) => void;
   removeBudgetGoal: (id: string) => void;
+  fundEnvelopeFromIncome: (payload: FundEnvelopePayload) => void;
+  recordEnvelopeActivity: () => void;
+  rolloverBudgetBalances: (month: string) => void;
   updateProfile: (payload: Partial<Profile>) => void;
   setThemeMode: (mode: ThemeMode) => void;
   addCategory: (category: Omit<Category, "id">) => void;
@@ -451,6 +620,31 @@ const seedTransactions: Transaction[] = [
   },
 ];
 
+const seedBudgetGoals: BudgetGoal[] = [
+  {
+    id: "g-1",
+    name: "Save $500 this month",
+    target: 500,
+    period: "month",
+    category: null,
+  },
+  {
+    id: "g-2",
+    name: "Limit dining out to $250",
+    target: 250,
+    period: "month",
+    category: "Dining",
+  },
+];
+
+const { assignments: initialBudgetAssignments, goals: migratedBudgetGoals } =
+  migrateGoalsToAssignments(seedBudgetGoals);
+
+const initialBudgetMonths = buildBudgetMonths({
+  transactions: seedTransactions,
+  assignments: initialBudgetAssignments,
+});
+
 let uid = seedTransactions.length + 1;
 
 const nextOccurrenceForFrequency = (fromDate: string, frequency: RecurringTransaction["frequency"]) => {
@@ -507,23 +701,11 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
       isActive: true,
     },
   ],
-  budgetGoals: [
-    {
-      id: "g-1",
-      name: "Save $500 this month",
-      target: 500,
-      period: "month",
-      category: null,
-    },
-    {
-      id: "g-2",
-      name: "Limit dining out to $250",
-      target: 250,
-      period: "month",
-      category: "Dining",
-    },
-  ],
-  addTransaction: (transaction) =>
+  budgetGoals: [...migratedBudgetGoals],
+  budgetAssignments: [...initialBudgetAssignments],
+  budgetMonths: initialBudgetMonths,
+  budgetRollovers: {},
+  addTransaction: (transaction) => {
     set((state) => {
       const normalizedDate = new Date(transaction.date);
       normalizedDate.setHours(0, 0, 0, 0);
@@ -550,8 +732,10 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
       return {
         transactions: [payload, ...state.transactions],
       };
-    }),
-  updateTransaction: (id, updates) =>
+    });
+    get().recordEnvelopeActivity();
+  },
+  updateTransaction: (id, updates) => {
     set((state) => ({
       transactions: state.transactions.map((transaction) => {
         if (transaction.id !== id) {
@@ -597,11 +781,15 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
 
         return next;
       }),
-    })),
-  removeTransaction: (id) =>
+    }));
+    get().recordEnvelopeActivity();
+  },
+  removeTransaction: (id) => {
     set((state) => ({
       transactions: state.transactions.filter((transaction) => transaction.id !== id),
-    })),
+    }));
+    get().recordEnvelopeActivity();
+  },
   duplicateTransaction: (id) => {
     const existing = get().transactions.find((transaction) => transaction.id === id);
     if (!existing) {
@@ -694,32 +882,192 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
           : item,
       ),
     }));
+    get().recordEnvelopeActivity();
   },
   addBudgetGoal: (goal) =>
-    set((state) => ({
-      budgetGoals: [
-        ...state.budgetGoals,
-        {
-          id: `g-${state.budgetGoals.length + 1}`,
-          ...goal,
-        },
-      ],
-    })),
+    set((state) => {
+      const id = `g-${state.budgetGoals.length + 1}`;
+      const newGoal: BudgetGoal = {
+        id,
+        ...goal,
+        deprecated: Boolean(goal.category),
+      };
+
+      const shouldCreateAssignment = Boolean(goal.category);
+      let assignments = state.budgetAssignments;
+
+      if (shouldCreateAssignment && goal.category) {
+        const assignment: Assignment = {
+          id: nextAssignmentId(),
+          month: getMonthKey(new Date()),
+          category: goal.category,
+          amount: goal.target,
+          source: { type: "goal", goalId: id },
+          createdAt: new Date().toISOString(),
+        };
+        assignments = [...state.budgetAssignments, assignment];
+      }
+
+      return {
+        budgetGoals: [...state.budgetGoals, newGoal],
+        budgetAssignments: assignments,
+        budgetMonths: shouldCreateAssignment
+          ? buildBudgetMonths({ transactions: state.transactions, assignments })
+          : state.budgetMonths,
+      };
+    }),
   updateBudgetGoal: (id, updates) =>
-    set((state) => ({
-      budgetGoals: state.budgetGoals.map((goal) =>
+    set((state) => {
+      let assignments = state.budgetAssignments;
+      let shouldRecalculate = false;
+      const budgetGoals = state.budgetGoals.map((goal) =>
         goal.id === id
           ? {
               ...goal,
               ...updates,
             }
           : goal,
-      ),
-    })),
+      );
+
+      const targetGoal = budgetGoals.find((goal) => goal.id === id);
+
+      if (targetGoal?.category) {
+        const hasExistingAssignment = state.budgetAssignments.some(
+          (assignment) => assignment.source.goalId === id,
+        );
+
+        if (hasExistingAssignment) {
+          assignments = state.budgetAssignments.map((assignment) =>
+            assignment.source.goalId === id
+              ? {
+                  ...assignment,
+                  category: targetGoal.category as string,
+                  amount: targetGoal.target,
+                }
+              : assignment,
+          );
+        } else {
+          const assignment: Assignment = {
+            id: nextAssignmentId(),
+            month: getMonthKey(new Date()),
+            category: targetGoal.category,
+            amount: targetGoal.target,
+            source: { type: "goal", goalId: id },
+            createdAt: new Date().toISOString(),
+          };
+          assignments = [...state.budgetAssignments, assignment];
+        }
+        shouldRecalculate = true;
+      } else if (state.budgetAssignments.some((assignment) => assignment.source.goalId === id)) {
+        assignments = state.budgetAssignments.filter((assignment) => assignment.source.goalId !== id);
+        shouldRecalculate = true;
+      }
+
+      return {
+        budgetGoals,
+        budgetAssignments: assignments,
+        budgetMonths: shouldRecalculate
+          ? buildBudgetMonths({ transactions: state.transactions, assignments })
+          : state.budgetMonths,
+      };
+    }),
   removeBudgetGoal: (id) =>
+    set((state) => {
+      const budgetGoals = state.budgetGoals.filter((goal) => goal.id !== id);
+      const assignments = state.budgetAssignments.filter((assignment) => assignment.source.goalId !== id);
+      const shouldRecalculate = assignments.length !== state.budgetAssignments.length;
+      return {
+        budgetGoals,
+        budgetAssignments: assignments,
+        budgetMonths: shouldRecalculate
+          ? buildBudgetMonths({ transactions: state.transactions, assignments })
+          : state.budgetMonths,
+      };
+    }),
+  fundEnvelopeFromIncome: (payload) =>
+    set((state) => {
+      const normalizedAmount = Math.round(payload.amount * 100) / 100;
+      if (!Number.isFinite(normalizedAmount) || normalizedAmount === 0) {
+        return state;
+      }
+
+      const monthKey = payload.month || getMonthKey(new Date());
+      const monthAvailable = state.budgetMonths[monthKey]?.availableToBudget ?? 0;
+      const amount = monthAvailable > 0 ? Math.min(normalizedAmount, monthAvailable) : normalizedAmount;
+
+      if (amount === 0) {
+        return state;
+      }
+
+      const assignment: Assignment = {
+        id: nextAssignmentId(),
+        month: monthKey,
+        category: payload.category,
+        amount,
+        source: {
+          type: "income",
+          transactionId: payload.transactionId,
+          note: payload.note,
+        },
+        createdAt: new Date().toISOString(),
+      };
+
+      const assignments = [...state.budgetAssignments, assignment];
+
+      return {
+        budgetAssignments: assignments,
+        budgetMonths: buildBudgetMonths({ transactions: state.transactions, assignments }),
+      };
+    }),
+  recordEnvelopeActivity: () =>
     set((state) => ({
-      budgetGoals: state.budgetGoals.filter((goal) => goal.id !== id),
+      budgetMonths: buildBudgetMonths({
+        transactions: state.transactions,
+        assignments: state.budgetAssignments,
+      }),
     })),
+  rolloverBudgetBalances: (month) =>
+    set((state) => {
+      if (state.budgetRollovers[month]) {
+        return state;
+      }
+
+      const currentMonth = state.budgetMonths[month];
+      if (!currentMonth) {
+        return state;
+      }
+
+      const nextMonthKey = getNextMonthKey(month);
+      const timestamp = new Date().toISOString();
+      const assignments = [...state.budgetAssignments];
+
+      Object.values(currentMonth.envelopes).forEach((envelope) => {
+        if (!envelope.available) {
+          return;
+        }
+
+        assignments.push({
+          id: nextAssignmentId(),
+          month: nextMonthKey,
+          category: envelope.category,
+          amount: envelope.available,
+          source: { type: "rollover", note: `Balance from ${month}` },
+          createdAt: timestamp,
+        });
+      });
+
+      if (assignments.length === state.budgetAssignments.length) {
+        return { budgetRollovers: { ...state.budgetRollovers, [month]: true } };
+      }
+
+      const budgetRollovers = { ...state.budgetRollovers, [month]: true };
+
+      return {
+        budgetAssignments: assignments,
+        budgetRollovers,
+        budgetMonths: buildBudgetMonths({ transactions: state.transactions, assignments }),
+      };
+    }),
   updateProfile: (payload) =>
     set((state) => ({
       profile: {
@@ -771,3 +1119,60 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
     }));
   },
 }));
+
+const selectReportableTransactions = (state: FinanceState) =>
+  state.transactions.filter((transaction) => !transaction.excludeFromReports);
+
+const baseEnvelopeHealth: EnvelopeHealth = {
+  category: "",
+  assigned: 0,
+  activity: 0,
+  available: 0,
+  status: "underfunded",
+};
+
+export const getEnvelopeHealth = (envelope?: BudgetEnvelope): EnvelopeHealth => {
+  if (!envelope) {
+    return { ...baseEnvelopeHealth };
+  }
+
+  if (envelope.available < 0) {
+    return {
+      category: envelope.category,
+      assigned: envelope.assigned,
+      activity: envelope.activity,
+      available: envelope.available,
+      status: "overspent",
+    };
+  }
+
+  if (envelope.assigned <= 0) {
+    return {
+      category: envelope.category,
+      assigned: envelope.assigned,
+      activity: envelope.activity,
+      available: envelope.available,
+      status: "underfunded",
+    };
+  }
+
+  return {
+    category: envelope.category,
+    assigned: envelope.assigned,
+    activity: envelope.activity,
+    available: envelope.available,
+    status: "healthy",
+  };
+};
+
+export const useBudgetMonth = (monthKey: string) =>
+  useFinanceStore((state) => state.budgetMonths[monthKey] ?? createEmptyBudgetMonth(monthKey));
+
+export const useBudgetMonths = () => useFinanceStore((state) => state.budgetMonths);
+
+export const useEnvelopeHealth = (monthKey: string, category: string) =>
+  useFinanceStore((state) => getEnvelopeHealth(state.budgetMonths[monthKey]?.envelopes[category]));
+
+export const useReportableTransactions = () => useFinanceStore(selectReportableTransactions);
+
+export const monthKeyFromDate = (value: string | Date) => getMonthKey(value);

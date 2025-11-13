@@ -17,7 +17,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import dayjs, { type Dayjs } from "dayjs";
 
 import { useAppTheme } from "../../theme";
-import { Transaction, useFinanceStore } from "../../lib/store";
+import { Transaction, monthKeyFromDate, useBudgetMonth, useFinanceStore } from "../../lib/store";
 import { truncateWords } from "../../lib/text";
 
 const formatCurrency = (
@@ -133,6 +133,14 @@ export default function TransactionsScreen() {
     const currentMonth = periodOptions[periodOptions.length - 1];
     return currentMonth?.key ?? "";
   });
+
+  const resolvedPeriodKey = selectedPeriod || periodOptions[periodOptions.length - 1]?.key || monthKeyFromDate(new Date());
+  const selectedPeriodDate = dayjs(resolvedPeriodKey, "YYYY-MM");
+  const previousPeriodKey = selectedPeriodDate.isValid()
+    ? selectedPeriodDate.subtract(1, "month").format("YYYY-MM")
+    : monthKeyFromDate(dayjs(resolvedPeriodKey).subtract(1, "month").toDate());
+  const budgetMonth = useBudgetMonth(resolvedPeriodKey);
+  const previousBudgetMonth = useBudgetMonth(previousPeriodKey);
   
   // Auto-scroll to current month on mount
   useEffect(() => {
@@ -257,7 +265,7 @@ export default function TransactionsScreen() {
 
   const hasActiveFilters = activeFilters.length > 0;
 
-  const { sections, summary, expenseBreakdown, filteredRecurring } = useMemo(() => {
+  const { sections, filteredRecurring } = useMemo(() => {
     const period = periodOptions.find((option) => option.key === selectedPeriod) ?? periodOptions[periodOptions.length - 1];
     const { start, end } = period.range();
 
@@ -305,8 +313,6 @@ export default function TransactionsScreen() {
 
       return true;
     });
-
-    const reportable = periodTransactions.filter((transaction) => !transaction.excludeFromReports);
 
     const parseTransactionId = (id: string) => {
       const match = id.match(/(\d+)$/);
@@ -377,53 +383,6 @@ export default function TransactionsScreen() {
       dailyNet: value.dailyNet,
     }));
 
-    // Calculate summary
-    const totals = reportable.reduce(
-      (acc, transaction) => {
-        if (transaction.type === "income") {
-          acc.income += transaction.amount;
-        } else {
-          acc.expense += transaction.amount;
-        }
-        return acc;
-      },
-      { income: 0, expense: 0 },
-    );
-
-    // Calculate balances
-    let openingBalance = 0;
-
-    [...transactions.filter((transaction) => !transaction.excludeFromReports)]
-      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
-      .forEach((transaction) => {
-        const value = transaction.type === "income" ? transaction.amount : -transaction.amount;
-        const date = dayjs(transaction.date);
-
-        if (date.isBefore(start)) {
-          openingBalance += value;
-        }
-      });
-
-    const netChange = totals.income - totals.expense;
-    const closingBalance = openingBalance + netChange;
-
-    // Expense breakdown
-    const expenseMap = reportable.reduce((acc, transaction) => {
-      if (transaction.type !== "expense") return acc;
-      const current = acc.get(transaction.category) ?? 0;
-      acc.set(transaction.category, current + transaction.amount);
-      return acc;
-    }, new Map<string, number>());
-
-    const breakdown = Array.from(expenseMap.entries())
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 5)
-      .map(([category, amount]) => ({
-        category,
-        amount,
-        percentage: totals.expense ? Math.round((amount / totals.expense) * 100) : 0,
-      }));
-
     // Recurring transactions
     const recurring = recurringTransactions.filter((item) => {
       const occurrence = dayjs(item.nextOccurrence);
@@ -432,15 +391,6 @@ export default function TransactionsScreen() {
 
     return {
       sections: sectionData,
-      summary: {
-        income: totals.income,
-        expense: totals.expense,
-        net: netChange,
-        openingBalance,
-        closingBalance,
-        percentageChange: formatPercentage(closingBalance, openingBalance),
-      },
-      expenseBreakdown: breakdown,
       filteredRecurring: recurring,
     };
   }, [
@@ -455,6 +405,39 @@ export default function TransactionsScreen() {
     startDate,
     transactions,
   ]);
+
+  const summary = useMemo(() => {
+    const income = budgetMonth.incomeTotal;
+    const expense = budgetMonth.activityTotal;
+    const net = income - expense;
+    const openingBalance =
+      Object.values(previousBudgetMonth.envelopes).reduce((acc, envelope) => acc + envelope.available, 0) +
+      previousBudgetMonth.availableToBudget;
+    const closingBalance = openingBalance + net;
+
+    return {
+      income,
+      expense,
+      net,
+      openingBalance,
+      closingBalance,
+      percentageChange: formatPercentage(closingBalance, openingBalance),
+    };
+  }, [budgetMonth, previousBudgetMonth]);
+
+  const expenseBreakdown = useMemo(() => {
+    const envelopes = Object.values(budgetMonth.envelopes).filter((envelope) => envelope.activity > 0);
+    return envelopes
+      .sort((a, b) => b.activity - a.activity)
+      .slice(0, 5)
+      .map((envelope) => ({
+        category: envelope.category,
+        amount: envelope.activity,
+        percentage: budgetMonth.activityTotal
+          ? Math.round((envelope.activity / budgetMonth.activityTotal) * 100)
+          : 0,
+      }));
+  }, [budgetMonth]);
 
   const closingBalanceDisplay = useMemo(() => {
     const amount = summary.closingBalance;

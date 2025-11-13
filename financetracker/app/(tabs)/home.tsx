@@ -8,7 +8,15 @@ import { Link, useRouter } from "expo-router";
 import { DonutChart } from "../../components/DonutChart";
 import { SpendingBarChart, SpendingLineChart } from "../../components/SpendingCharts";
 import { useAppTheme } from "../../theme";
-import { BudgetGoal, useFinanceStore } from "../../lib/store";
+import {
+  BudgetGoal,
+  BudgetMonth,
+  monthKeyFromDate,
+  useBudgetMonth,
+  useBudgetMonths,
+  useFinanceStore,
+  useReportableTransactions,
+} from "../../lib/store";
 import { truncateWords } from "../../lib/text";
 
 const formatCurrency = (
@@ -23,25 +31,10 @@ const formatCurrency = (
     ...options,
   }).format(value);
 
-const summarizeGoalProgress = (
-  goal: BudgetGoal,
-  currency: string,
-  transactions: ReturnType<typeof useFinanceStore.getState>["transactions"],
-) => {
-  const now = dayjs();
-  const start = goal.period === "week" ? now.startOf("week") : now.startOf("month");
-  const end = goal.period === "week" ? now.endOf("week") : now.endOf("month");
-
-  const withinPeriod = transactions.filter((transaction) => {
-    const date = dayjs(transaction.date);
-    return !date.isBefore(start) && !date.isAfter(end);
-  });
-
+const buildGoalProgress = (goal: BudgetGoal, currency: string, budgetMonth: BudgetMonth) => {
   if (goal.category) {
-    const spent = withinPeriod
-      .filter((transaction) => transaction.type === "expense" && transaction.category === goal.category)
-      .reduce((acc, transaction) => acc + transaction.amount, 0);
-
+    const envelope = budgetMonth.envelopes[goal.category];
+    const spent = envelope?.activity ?? 0;
     return {
       label: `${goal.category} spend`,
       value: spent,
@@ -51,18 +44,13 @@ const summarizeGoalProgress = (
     };
   }
 
-  const netSavings = withinPeriod.reduce((acc, transaction) => {
-    const delta = transaction.type === "income" ? transaction.amount : -transaction.amount;
-    return acc + delta;
-  }, 0);
-
-  const savingsValue = Math.max(0, netSavings);
+  const available = Math.max(0, budgetMonth.availableToBudget);
 
   return {
-    label: "Net saved",
-    value: savingsValue,
-    formatted: formatCurrency(savingsValue, currency),
-    percentage: Math.min(1, savingsValue / goal.target || 0),
+    label: "Ready to assign",
+    value: available,
+    formatted: formatCurrency(available, currency),
+    percentage: Math.min(1, available / goal.target || 0),
     direction: "save" as const,
   };
 };
@@ -75,11 +63,13 @@ export default function HomeScreen() {
   const budgetGoals = useFinanceStore((state) => state.budgetGoals);
   const recurringTransactions = useFinanceStore((state) => state.recurringTransactions);
   const logRecurringTransaction = useFinanceStore((state) => state.logRecurringTransaction);
+  const reportableTransactions = useReportableTransactions();
 
-  const reportableTransactions = useMemo(
-    () => transactions.filter((transaction) => !transaction.excludeFromReports),
-    [transactions],
-  );
+  const currentMonthKey = monthKeyFromDate(new Date());
+  const previousMonthKey = monthKeyFromDate(dayjs().subtract(1, "month").toDate());
+  const currentBudgetMonth = useBudgetMonth(currentMonthKey);
+  const previousBudgetMonth = useBudgetMonth(previousMonthKey);
+  const budgetMonths = useBudgetMonths();
 
   const [overviewPeriod, setOverviewPeriod] = useState<"week" | "month">("month");
   const [overviewChart, setOverviewChart] = useState<"bar" | "line">("bar");
@@ -95,44 +85,23 @@ export default function HomeScreen() {
     }
   }, [overviewChart, overviewPeriod]);
 
-  const balance = useMemo(
-    () =>
-      reportableTransactions.reduce((acc, transaction) => {
-        const multiplier = transaction.type === "income" ? 1 : -1;
-        return acc + transaction.amount * multiplier;
-      }, 0),
-    [reportableTransactions],
-  );
+  const balance = useMemo(() => {
+    const envelopeAvailable = Object.values(currentBudgetMonth.envelopes).reduce(
+      (acc, envelope) => acc + envelope.available,
+      0,
+    );
+    return envelopeAvailable + currentBudgetMonth.availableToBudget;
+  }, [currentBudgetMonth]);
 
-  const startOfMonth = useMemo(() => dayjs().startOf("month"), []);
-  const endOfMonth = useMemo(() => dayjs().endOf("month"), []);
-
-  const summary = useMemo(
-    () =>
-      reportableTransactions.reduce(
-        (acc, transaction) => {
-          const value = transaction.type === "income" ? transaction.amount : -transaction.amount;
-          const date = dayjs(transaction.date);
-
-          if (date.isBefore(startOfMonth)) {
-            acc.openingBalance += value;
-          }
-
-          if (!date.isBefore(startOfMonth) && !date.isAfter(endOfMonth)) {
-            if (transaction.type === "income") {
-              acc.income += transaction.amount;
-            } else {
-              acc.expense += transaction.amount;
-            }
-            acc.monthNet += value;
-          }
-
-          return acc;
-        },
-        { income: 0, expense: 0, openingBalance: 0, monthNet: 0 },
-      ),
-    [endOfMonth, reportableTransactions, startOfMonth],
-  );
+  const summary = useMemo(() => {
+    const openingAvailable =
+      Object.values(previousBudgetMonth.envelopes).reduce((acc, envelope) => acc + envelope.available, 0) +
+      previousBudgetMonth.availableToBudget;
+    const income = currentBudgetMonth.incomeTotal;
+    const expense = currentBudgetMonth.activityTotal;
+    const monthNet = income - expense;
+    return { income, expense, openingBalance: openingAvailable, monthNet };
+  }, [currentBudgetMonth, previousBudgetMonth]);
 
   const {
     periodExpense,
@@ -190,7 +159,7 @@ export default function HomeScreen() {
     const previousPeriodEnd =
       overviewPeriod === "week" ? previousPeriodStart.endOf("week") : previousPeriodStart.endOf("month");
 
-    const previousExpense = reportableTransactions.reduce((acc, transaction) => {
+    const previousPeriodExpense = reportableTransactions.reduce((acc, transaction) => {
       if (transaction.type !== "expense") {
         return acc;
       }
@@ -201,30 +170,21 @@ export default function HomeScreen() {
       return acc;
     }, 0);
 
+    const budgetMonthEntries = Object.keys(budgetMonths)
+      .sort()
+      .slice(-5)
+      .map((key) => ({
+        key,
+        data: budgetMonths[key],
+      }));
+
     const monthlyComparison =
       overviewPeriod === "month"
-        ? Array.from({ length: 5 }).map((_, index) => {
-            const offset = 4 - index;
-            const target = today.subtract(offset, "month");
-            const start = target.startOf("month");
-            const end = target.endOf("month");
-            const spent = reportableTransactions.reduce((acc, transaction) => {
-              if (transaction.type !== "expense") {
-                return acc;
-              }
-              const date = dayjs(transaction.date);
-              if (!date.isBefore(start) && !date.isAfter(end)) {
-                return acc + transaction.amount;
-              }
-              return acc;
-            }, 0);
-
-            return {
-              label: target.format("MMM"),
-              value: spent,
-              hint: target.format("MMM"),
-            };
-          })
+        ? budgetMonthEntries.map((entry) => ({
+            label: dayjs(entry.key).format("MMM"),
+            value: entry.data?.activityTotal ?? 0,
+            hint: dayjs(entry.key).format("MMM"),
+          }))
         : [];
 
     const monthStart = today.startOf("month");
@@ -265,19 +225,58 @@ export default function HomeScreen() {
       return buildMonthlyPoint(index, value);
     });
 
+    const budgetPeriodExpense = currentBudgetMonth.activityTotal;
+    const budgetPreviousExpense = previousBudgetMonth.activityTotal;
+    const resolvedPeriodExpense = overviewPeriod === "month" ? budgetPeriodExpense : totals.expense;
+    const resolvedPreviousExpense =
+      overviewPeriod === "month" ? budgetPreviousExpense : previousPeriodExpense;
+
     return {
-      periodExpense: totals.expense,
+      periodExpense: resolvedPeriodExpense,
       periodDailySpending,
       monthlyComparison,
-      previousExpense,
+      previousExpense: resolvedPreviousExpense,
       monthlyLineSeries: {
         current: currentMonthDaily,
         previous: previousMonthDaily,
       },
     };
-  }, [overviewPeriod, reportableTransactions]);
+  }, [
+    budgetMonths,
+    currentBudgetMonth,
+    overviewPeriod,
+    previousBudgetMonth,
+    reportableTransactions,
+  ]);
 
   const topSpending = useMemo(() => {
+    if (topSpendingPeriod === "month") {
+      const envelopes = Object.values(currentBudgetMonth.envelopes).filter((envelope) => envelope.activity > 0);
+      const totalSpent = envelopes.reduce((acc, envelope) => acc + envelope.activity, 0);
+      const sorted = [...envelopes].sort((a, b) => b.activity - a.activity);
+      const topThree = sorted.slice(0, 3);
+      const remaining = sorted.slice(3);
+      const othersTotal = remaining.reduce((acc, envelope) => acc + envelope.activity, 0);
+
+      const entries = topThree.map((envelope) => ({
+        key: envelope.category,
+        label: envelope.category,
+        amount: envelope.activity,
+        percentage: totalSpent ? Math.round((envelope.activity / totalSpent) * 100) : 0,
+      }));
+
+      if (othersTotal > 0) {
+        entries.push({
+          key: "__others__",
+          label: "Others",
+          amount: othersTotal,
+          percentage: totalSpent ? Math.round((othersTotal / totalSpent) * 100) : 0,
+        });
+      }
+
+      return { entries, totalSpent };
+    }
+
     const today = dayjs();
     const periodStart = topSpendingPeriod === "week" ? today.startOf("week") : today.startOf("month");
     const periodEnd = topSpendingPeriod === "week" ? today.endOf("week") : today.endOf("month");
@@ -320,7 +319,7 @@ export default function HomeScreen() {
     }
 
     return { entries, totalSpent };
-  }, [reportableTransactions, topSpendingPeriod]);
+  }, [currentBudgetMonth, reportableTransactions, topSpendingPeriod]);
 
   const donutColors = useMemo(
     () => [
@@ -675,7 +674,7 @@ export default function HomeScreen() {
             </View>
             <View style={styles.goalList}>
               {budgetGoals.map((goal) => {
-                const progress = summarizeGoalProgress(goal, currency, reportableTransactions);
+                const progress = buildGoalProgress(goal, currency, currentBudgetMonth);
                 const progressPercent = Math.round(progress.percentage * 100);
                 const goalComplete = progressPercent >= 100;
 
