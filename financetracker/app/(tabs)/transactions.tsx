@@ -157,6 +157,26 @@ export default function TransactionsScreen() {
     const currentMonth = periodOptions[periodOptions.length - 1];
     return currentMonth?.key ?? "";
   });
+
+  const selectedPeriodOption = useMemo(() => {
+    if (!periodOptions.length) {
+      const fallbackMonth = dayjs().startOf("month");
+      const fallbackOption: PeriodOption = {
+        key: fallbackMonth.format("YYYY-MM"),
+        label: fallbackMonth.format("MMM YYYY"),
+        range: () => ({
+          start: fallbackMonth.startOf("month"),
+          end: fallbackMonth.endOf("month"),
+        }),
+      };
+      return fallbackOption;
+    }
+
+    return (
+      periodOptions.find((option) => option.key === selectedPeriod) ??
+      periodOptions[periodOptions.length - 1]
+    );
+  }, [periodOptions, selectedPeriod]);
   
   // Auto-scroll to current month on mount
   useEffect(() => {
@@ -301,7 +321,7 @@ export default function TransactionsScreen() {
   const hasActiveFilters = activeFilters.length > 0;
 
   const { sections, summary, expenseBreakdown, filteredRecurring } = useMemo(() => {
-    const period = periodOptions.find((option) => option.key === selectedPeriod) ?? periodOptions[periodOptions.length - 1];
+    const period = selectedPeriodOption;
     const { start, end } = period.range();
 
     const allowedAccountIds = selectedAccountId ? null : new Set(visibleAccountIds);
@@ -516,12 +536,11 @@ export default function TransactionsScreen() {
     endDate,
     maxAmount,
     minAmount,
-    periodOptions,
     recurringTransactions,
     searchTerm,
-    selectedPeriod,
     selectedCategories,
     selectedAccountId,
+    selectedPeriodOption,
     startDate,
     transactions,
     visibleAccountIds,
@@ -547,6 +566,46 @@ export default function TransactionsScreen() {
     return 20;
   }, [closingBalanceDisplay]);
 
+  const selectedPeriodRange = useMemo(() => selectedPeriodOption.range(), [selectedPeriodOption]);
+  const periodRangeLabel = useMemo(
+    () => `${selectedPeriodRange.start.format("MMM D")} – ${selectedPeriodRange.end.format("MMM D")}`,
+    [selectedPeriodRange],
+  );
+  const periodDayCount = useMemo(
+    () => Math.max(selectedPeriodRange.end.diff(selectedPeriodRange.start, "day") + 1, 1),
+    [selectedPeriodRange],
+  );
+  const averageDailySpend = useMemo(
+    () => (periodDayCount ? summary.expense / periodDayCount : 0),
+    [periodDayCount, summary.expense],
+  );
+  const averageDailySpendDisplay = useMemo(
+    () =>
+      formatCurrency(averageDailySpend, currency || "USD", {
+        maximumFractionDigits: 0,
+        minimumFractionDigits: 0,
+      }),
+    [averageDailySpend, currency],
+  );
+  const spendShare = useMemo(() => {
+    const total = summary.expense + summary.income;
+    if (!total) {
+      return 0;
+    }
+    return Math.round((summary.expense / total) * 100);
+  }, [summary.expense, summary.income]);
+  const netProgress = useMemo(() => {
+    const baseline = Math.max(Math.abs(summary.openingBalance), 1);
+    const ratio = Math.min(Math.abs(summary.net) / baseline, 1);
+    return Math.round(ratio * 100);
+  }, [summary.net, summary.openingBalance]);
+  const trackedAccountCount = selectedAccountId ? 1 : visibleAccountIds.length;
+  const selectedPeriodLabel = selectedPeriodOption.label;
+  const topCategory = expenseBreakdown[0];
+  const topCategoryAmount = topCategory
+    ? formatCurrency(topCategory.amount, currency || "USD")
+    : null;
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <SectionList
@@ -559,6 +618,8 @@ export default function TransactionsScreen() {
           <View style={styles.header}>
             {/* Primary Balance Display */}
             <View style={styles.balanceCard}>
+              <View style={styles.balanceBackdrop} />
+              <View style={styles.balanceBackdropSecondary} />
               <View style={styles.balanceHeader}>
                 <View>
                   <Text style={styles.balanceLabel}>Current Balance</Text>
@@ -595,11 +656,101 @@ export default function TransactionsScreen() {
                 </View>
                 <View style={styles.metricDivider} />
                 <View style={styles.metric}>
-                  <Text style={styles.metricLabel}>Previous</Text>
+                  <Text style={styles.metricLabel}>Opening</Text>
                   <Text style={styles.metricValue(theme.colors.text)}>
                     {formatCurrency(summary.openingBalance, currency || "USD")}
                   </Text>
                 </View>
+              </View>
+
+              <View style={styles.balanceFootnoteRow}>
+                <View style={styles.balanceFootnoteBlock}>
+                  <Text style={styles.balanceFootnoteLabel}>Period</Text>
+                  <Text style={styles.balanceFootnoteValue}>{periodRangeLabel}</Text>
+                </View>
+                <View style={styles.balanceFootnoteBlock}>
+                  <Text style={styles.balanceFootnoteLabel}>Accounts tracked</Text>
+                  <Text style={styles.balanceFootnoteValue}>{trackedAccountCount}</Text>
+                </View>
+              </View>
+
+              <View style={styles.netProgressContainer}>
+                <View style={styles.netProgressLabels}>
+                  <Text style={styles.netProgressLabel}>
+                    {summary.net >= 0 ? "Building reserves" : "On the decline"}
+                  </Text>
+                  <Text style={styles.netProgressValue(summary.net >= 0)}>
+                    {netProgress}% of opening balance
+                  </Text>
+                </View>
+                <View style={styles.netProgressBar}>
+                  <View style={styles.netProgressFill(summary.net >= 0, netProgress)} />
+                </View>
+              </View>
+            </View>
+
+            <View style={styles.quickStatsGrid}>
+              <View style={[styles.statCard, styles.netStatCard(summary.net)]}>
+                <View style={styles.statCardHeader}>
+                  <Text style={styles.statLabel}>Net change</Text>
+                  <View
+                    style={styles.statIconBubble(
+                      summary.net >= 0 ? theme.colors.success : theme.colors.danger,
+                    )}
+                  >
+                    <Ionicons
+                      name={summary.net >= 0 ? "trending-up" : "trending-down"}
+                      size={16}
+                      color="#fff"
+                    />
+                  </View>
+                </View>
+                <Text style={styles.statValue(summary.net >= 0 ? theme.colors.success : theme.colors.danger)}>
+                  {formatCurrency(summary.net, currency || "USD")}
+                </Text>
+                <Text style={styles.statHelperText}>vs {selectedPeriodLabel}</Text>
+              </View>
+
+              <View style={styles.statCard}>
+                <View style={styles.statCardHeader}>
+                  <Text style={styles.statLabel}>Avg daily spend</Text>
+                  <Text style={styles.statLabelValue}>{periodDayCount}d</Text>
+                </View>
+                <Text style={styles.statValue(theme.colors.danger)}>{averageDailySpendDisplay}</Text>
+                <View style={styles.statProgressBar}>
+                  <View style={styles.statProgressFill(spendShare, theme.colors.danger)} />
+                </View>
+                <Text style={styles.statHelperText}>{spendShare}% of inflows used</Text>
+              </View>
+
+              <View style={[styles.statCard, styles.statCardFull]}>
+                <View style={styles.statCardHeader}>
+                  <Text style={styles.statLabel}>Top category</Text>
+                  {topCategory ? (
+                    <View style={styles.topCategoryPill}>
+                      <Ionicons name="pricetag" size={12} color={theme.colors.primary} />
+                      <Text style={styles.topCategoryPillText}>{topCategory.category}</Text>
+                    </View>
+                  ) : (
+                    <Text style={styles.statLabelValue}>No data</Text>
+                  )}
+                </View>
+                {topCategory && topCategoryAmount ? (
+                  <>
+                    <View style={styles.statRow}>
+                      <Text style={styles.statValue()}>{topCategoryAmount}</Text>
+                      <Text style={styles.statLabelValue}>{topCategory.percentage}%</Text>
+                    </View>
+                    <View style={styles.statProgressBar}>
+                      <View
+                        style={styles.statProgressFill(topCategory.percentage, theme.colors.primary)}
+                      />
+                    </View>
+                    <Text style={styles.statHelperText}>of this period’s spending</Text>
+                  </>
+                ) : (
+                  <Text style={styles.statHelperText}>Track a few expenses to see insights.</Text>
+                )}
               </View>
             </View>
 
@@ -1060,19 +1211,41 @@ const createStyles = (theme: any, insets: any) =>
     header: {
       paddingHorizontal: 16,
       paddingTop: 16,
+      gap: 16,
     },
-    
+
     // Balance Card
     balanceCard: {
-      backgroundColor: theme.colors.surface,
-      borderRadius: 20,
+      backgroundColor: theme.colors.surfaceElevated,
+      borderRadius: 24,
       padding: 20,
-      marginBottom: 16,
+      marginBottom: 4,
+      borderWidth: 1,
+      borderColor: `${theme.colors.border}99`,
+      overflow: "hidden",
       shadowColor: "#000",
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.05,
-      shadowRadius: 8,
-      elevation: 2,
+      shadowOffset: { width: 0, height: 6 },
+      shadowOpacity: 0.06,
+      shadowRadius: 12,
+      elevation: 3,
+    },
+    balanceBackdrop: {
+      position: "absolute",
+      width: 180,
+      height: 180,
+      borderRadius: 999,
+      backgroundColor: `${theme.colors.primary}22`,
+      top: -60,
+      right: -30,
+    },
+    balanceBackdropSecondary: {
+      position: "absolute",
+      width: 140,
+      height: 140,
+      borderRadius: 999,
+      backgroundColor: `${theme.colors.accent}11`,
+      bottom: -40,
+      left: -20,
     },
     balanceHeader: {
       flexDirection: "row",
@@ -1116,11 +1289,13 @@ const createStyles = (theme: any, insets: any) =>
     },
     metricsRow: {
       flexDirection: "row",
-      alignItems: "center",
+      alignItems: "flex-start",
+      justifyContent: "space-between",
     },
     metric: {
       flex: 1,
-      alignItems: "center",
+      alignItems: "flex-start",
+      gap: 2,
     },
     metricLabel: {
       fontSize: 11,
@@ -1137,10 +1312,168 @@ const createStyles = (theme: any, insets: any) =>
     }),
     metricDivider: {
       width: 1,
-      height: 32,
-      backgroundColor: theme.colors.border,
+      height: 36,
+      backgroundColor: `${theme.colors.border}99`,
+      marginHorizontal: 8,
     },
-    
+    balanceFootnoteRow: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      marginTop: 20,
+      gap: 12,
+    },
+    balanceFootnoteBlock: {
+      flex: 1,
+      backgroundColor: theme.colors.surface,
+      borderRadius: 14,
+      padding: 12,
+      borderWidth: 1,
+      borderColor: `${theme.colors.border}66`,
+    },
+    balanceFootnoteLabel: {
+      fontSize: 11,
+      fontWeight: "600",
+      color: theme.colors.textMuted,
+      textTransform: "uppercase",
+      letterSpacing: 0.6,
+      marginBottom: 4,
+    },
+    balanceFootnoteValue: {
+      fontSize: 14,
+      fontWeight: "600",
+      color: theme.colors.text,
+    },
+    netProgressContainer: {
+      marginTop: 16,
+      gap: 8,
+    },
+    netProgressLabels: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+    },
+    netProgressLabel: {
+      fontSize: 12,
+      fontWeight: "600",
+      color: theme.colors.textMuted,
+      letterSpacing: 0.3,
+    },
+    netProgressValue: (positive: boolean) => ({
+      fontSize: 12,
+      fontWeight: "700",
+      color: positive ? theme.colors.success : theme.colors.danger,
+    }),
+    netProgressBar: {
+      height: 8,
+      borderRadius: 999,
+      backgroundColor: `${theme.colors.border}80`,
+      overflow: "hidden",
+    },
+    netProgressFill: (positive: boolean, percentage: number) => ({
+      height: "100%",
+      width: `${Math.min(Math.max(percentage, 0), 100)}%`,
+      backgroundColor: positive ? theme.colors.success : theme.colors.danger,
+      borderRadius: 999,
+    }),
+
+    quickStatsGrid: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 12,
+      marginBottom: 4,
+    },
+    statCard: {
+      backgroundColor: theme.colors.surface,
+      borderRadius: 18,
+      padding: 16,
+      borderWidth: 1,
+      borderColor: `${theme.colors.border}80`,
+      width: "48%",
+      minWidth: 150,
+      flexGrow: 1,
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.05,
+      shadowRadius: 10,
+      elevation: 2,
+    },
+    statCardFull: {
+      width: "100%",
+    },
+    netStatCard: (value: number) => ({
+      backgroundColor: value >= 0 ? `${theme.colors.success}15` : `${theme.colors.danger}15`,
+      borderColor: value >= 0 ? `${theme.colors.success}55` : `${theme.colors.danger}55`,
+    }),
+    statCardHeader: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      marginBottom: 6,
+    },
+    statLabel: {
+      fontSize: 12,
+      fontWeight: "600",
+      color: theme.colors.textMuted,
+      textTransform: "uppercase",
+      letterSpacing: 0.6,
+    },
+    statLabelValue: {
+      fontSize: 12,
+      fontWeight: "600",
+      color: theme.colors.textMuted,
+    },
+    statValue: (color?: string) => ({
+      fontSize: 20,
+      fontWeight: "700",
+      color: color ?? theme.colors.text,
+    }),
+    statHelperText: {
+      fontSize: 12,
+      color: theme.colors.textMuted,
+      marginTop: 6,
+    },
+    statProgressBar: {
+      height: 6,
+      borderRadius: 999,
+      backgroundColor: theme.colors.border,
+      marginTop: 8,
+      overflow: "hidden",
+    },
+    statProgressFill: (percentage: number, color: string) => ({
+      height: "100%",
+      width: `${Math.min(Math.max(percentage, 0), 100)}%`,
+      backgroundColor: color,
+      borderRadius: 999,
+    }),
+    statIconBubble: (color: string) => ({
+      width: 28,
+      height: 28,
+      borderRadius: 14,
+      backgroundColor: color,
+      alignItems: "center",
+      justifyContent: "center",
+    }),
+    statRow: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "flex-end",
+      marginTop: 4,
+    },
+    topCategoryPill: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+      paddingHorizontal: 10,
+      paddingVertical: 4,
+      borderRadius: 999,
+      backgroundColor: `${theme.colors.primary}12`,
+    },
+    topCategoryPillText: {
+      fontSize: 12,
+      fontWeight: "600",
+      color: theme.colors.primary,
+    },
+
     // Period Selector
     periodScroll: {
       marginBottom: 16,
@@ -1169,30 +1502,39 @@ const createStyles = (theme: any, insets: any) =>
       flexDirection: "row",
       gap: 12,
       marginBottom: 16,
+      padding: 12,
+      borderRadius: 20,
+      backgroundColor: theme.colors.surface,
+      borderWidth: 1,
+      borderColor: `${theme.colors.border}99`,
+      alignItems: "center",
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.04,
+      shadowRadius: 8,
+      elevation: 1,
     },
     searchField: {
       flex: 1,
       flexDirection: "row",
       alignItems: "center",
       gap: 8,
-      backgroundColor: theme.colors.surface,
-      borderRadius: 12,
-      paddingHorizontal: 16,
-      paddingVertical: 12,
-      borderWidth: 1,
-      borderColor: theme.colors.border,
+      backgroundColor: "transparent",
+      borderRadius: 16,
+      paddingHorizontal: 4,
+      paddingVertical: 0,
     },
     searchPlaceholder: {
       fontSize: 15,
       color: theme.colors.textMuted,
     },
     filterButton: (active: boolean) => ({
-      width: 44,
-      height: 44,
-      borderRadius: 12,
-      backgroundColor: active ? theme.colors.primaryMuted : theme.colors.surface,
+      width: 48,
+      height: 48,
+      borderRadius: 16,
+      backgroundColor: active ? theme.colors.primaryMuted : theme.colors.surfaceElevated,
       borderWidth: 1,
-      borderColor: active ? theme.colors.primary : theme.colors.border,
+      borderColor: active ? theme.colors.primary : `${theme.colors.border}99`,
       alignItems: "center",
       justifyContent: "center",
       position: "relative",
@@ -1205,6 +1547,10 @@ const createStyles = (theme: any, insets: any) =>
       borderRadius: 8,
       paddingHorizontal: 6,
       paddingVertical: 2,
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.2,
+      shadowRadius: 4,
     },
     filterBadgeText: {
       fontSize: 10,
@@ -1217,6 +1563,7 @@ const createStyles = (theme: any, insets: any) =>
       flexDirection: "row",
       gap: 8,
       paddingVertical: 8,
+      paddingHorizontal: 4,
     },
     filterChip: {
       flexDirection: "row",
@@ -1241,6 +1588,8 @@ const createStyles = (theme: any, insets: any) =>
       paddingVertical: 6,
       borderRadius: 16,
       backgroundColor: theme.colors.surface,
+      borderWidth: 1,
+      borderColor: `${theme.colors.border}99`,
     },
     clearButtonText: {
       fontSize: 12,
@@ -1249,9 +1598,8 @@ const createStyles = (theme: any, insets: any) =>
     },
     accountChipRow: {
       flexDirection: "row",
-      flexWrap: "wrap",
-      gap: 8,
-      paddingVertical: 8,
+      gap: 12,
+      paddingVertical: 12,
       marginBottom: 16,
     },
     accountChip: {
@@ -1259,14 +1607,20 @@ const createStyles = (theme: any, insets: any) =>
       paddingVertical: 12,
       borderRadius: 999,
       borderWidth: 1,
-      borderColor: theme.colors.border,
+      borderColor: "transparent",
       backgroundColor: theme.colors.surface,
       minWidth: 140,
       flexShrink: 1,
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 3 },
+      shadowOpacity: 0.08,
+      shadowRadius: 6,
+      elevation: 1,
     },
     accountChipActive: {
       borderColor: theme.colors.primary,
       backgroundColor: theme.colors.primary,
+      shadowOpacity: 0.2,
     },
     accountChipArchived: {
       opacity: 0.6,
@@ -1289,10 +1643,17 @@ const createStyles = (theme: any, insets: any) =>
     
     // Breakdown Card
     breakdownCard: {
-      backgroundColor: theme.colors.surface,
-      borderRadius: 16,
-      padding: 16,
+      backgroundColor: theme.colors.surfaceElevated,
+      borderRadius: 20,
+      padding: 18,
       marginBottom: 16,
+      borderWidth: 1,
+      borderColor: `${theme.colors.border}80`,
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.05,
+      shadowRadius: 8,
+      elevation: 2,
     },
     breakdownHeader: {
       flexDirection: "row",
@@ -1362,9 +1723,11 @@ const createStyles = (theme: any, insets: any) =>
       justifyContent: "space-between",
       alignItems: "center",
       backgroundColor: theme.colors.surface,
-      borderRadius: 12,
-      padding: 14,
+      borderRadius: 16,
+      padding: 16,
       marginBottom: 8,
+      borderWidth: 1,
+      borderColor: `${theme.colors.border}66`,
     },
     recurringInfo: {
       flex: 1,
@@ -1446,8 +1809,10 @@ const createStyles = (theme: any, insets: any) =>
     dayCard: {
       backgroundColor: theme.colors.surface,
       marginHorizontal: 16,
-      borderRadius: 12,
+      borderRadius: 14,
       overflow: "hidden",
+      borderWidth: 1,
+      borderColor: theme.colors.border,
     },
     transactionItem: {
       flexDirection: "row",
