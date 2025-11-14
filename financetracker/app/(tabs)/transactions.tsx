@@ -104,21 +104,50 @@ interface PeriodOption {
   range: () => { start: Dayjs; end: Dayjs };
 }
 
-const MONTHS_TO_DISPLAY = 12;
+const DEFAULT_PERIOD_START = dayjs("2025-01-01").startOf("month");
 
-const buildMonthlyPeriods = (): PeriodOption[] => {
+const buildMonthlyPeriods = (transactions: Transaction[]): PeriodOption[] => {
   const currentMonth = dayjs().startOf("month");
-  return Array.from({ length: MONTHS_TO_DISPLAY }).map((_, index) => {
-    const month = currentMonth.subtract(MONTHS_TO_DISPLAY - 1 - index, "month");
-    return {
-      key: month.format("YYYY-MM"),
-      label: month.format("MMM YYYY"),
-      range: () => ({ 
-        start: month.startOf("month"), 
-        end: month.endOf("month") 
-      }),
-    };
+
+  const baselineMonths: Dayjs[] = [];
+  let cursor = DEFAULT_PERIOD_START;
+  while (!cursor.isAfter(currentMonth)) {
+    baselineMonths.push(cursor);
+    cursor = cursor.add(1, "month");
+  }
+
+  const extraMonthsMap = new Map<string, Dayjs>();
+  transactions.forEach((transaction) => {
+    const month = dayjs(transaction.date).startOf("month");
+    if (month.isBefore(DEFAULT_PERIOD_START)) {
+      const key = month.format("YYYY-MM");
+      if (!extraMonthsMap.has(key)) {
+        extraMonthsMap.set(key, month);
+      }
+    }
   });
+
+  const combined = [...extraMonthsMap.values(), ...baselineMonths];
+  const uniqueMonths = new Map<string, Dayjs>();
+  combined.forEach((month) => {
+    const key = month.format("YYYY-MM");
+    if (!uniqueMonths.has(key)) {
+      uniqueMonths.set(key, month);
+    }
+  });
+
+  const sorted = Array.from(uniqueMonths.values()).sort(
+    (a, b) => a.valueOf() - b.valueOf(),
+  );
+
+  return sorted.map((month) => ({
+    key: month.format("YYYY-MM"),
+    label: month.format("MMM YYYY"),
+    range: () => ({
+      start: month.startOf("month"),
+      end: month.endOf("month"),
+    }),
+  }));
 };
 
 export default function TransactionsScreen() {
@@ -134,7 +163,7 @@ export default function TransactionsScreen() {
 
   const baseCurrency = currency || "USD";
 
-  const periodOptions = useMemo(() => buildMonthlyPeriods(), []);
+  const periodOptions = useMemo(() => buildMonthlyPeriods(transactions), [transactions]);
   const scrollViewRef = useRef<ScrollView>(null);
 
   const visibleAccounts = useMemo(
@@ -547,6 +576,44 @@ export default function TransactionsScreen() {
     return 20;
   }, [closingBalanceDisplay]);
 
+  const totalTransactions = useMemo(() => {
+    return sections.reduce((acc, section) => {
+      const day = section.data[0];
+      return acc + (day?.transactions.length ?? 0);
+    }, 0);
+  }, [sections]);
+
+  const positiveDayCount = useMemo(
+    () => sections.filter((section) => section.dailyNet > 0).length,
+    [sections],
+  );
+
+  const averageTransactionsPerDay = sections.length
+    ? totalTransactions / sections.length
+    : 0;
+
+  const positiveDayPercentage = sections.length
+    ? Math.round((positiveDayCount / sections.length) * 100)
+    : 0;
+
+  const spendingToIncomeRatio = useMemo(() => {
+    if (summary.income <= 0) {
+      return 0;
+    }
+    const ratio = Math.round((summary.expense / summary.income) * 100);
+    return Math.min(200, Math.max(0, ratio));
+  }, [summary.expense, summary.income]);
+
+  const nextRecurring = useMemo(() => {
+    if (!filteredRecurring.length) {
+      return null;
+    }
+
+    return [...filteredRecurring].sort(
+      (a, b) => dayjs(a.nextOccurrence).valueOf() - dayjs(b.nextOccurrence).valueOf(),
+    )[0];
+  }, [filteredRecurring]);
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <SectionList
@@ -690,58 +757,165 @@ export default function TransactionsScreen() {
               </ScrollView>
             )}
 
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.accountChipRow}
-            >
-            <Pressable
-              onPress={() => setSelectedAccountId(null)}
-              style={[styles.accountChip, !selectedAccountId && styles.accountChipActive]}
-            >
-              <Text
-                style={[
-                  styles.accountChipTitle,
-                  !selectedAccountId && styles.accountChipTitleActive,
-                ]}
-              >
-                All accounts
-              </Text>
-              <Text
-                style={[
-                  styles.accountChipBalance,
-                  !selectedAccountId && styles.accountChipBalanceActive,
-                ]}
-              >
-                {formatCurrency(allAccountsBalance, baseCurrency)}
-              </Text>
-            </Pressable>
-            {accounts.map((account) => {
-              const active = selectedAccountId === account.id;
-              return (
+            <View style={styles.insightsGrid}>
+              <View style={[styles.insightCard, styles.insightCardWide]}>
+                <View style={styles.insightHeader}>
+                  <View>
+                    <Text style={styles.insightLabel}>Net cashflow</Text>
+                    <Text style={styles.insightValue(
+                      summary.net >= 0 ? theme.colors.success : theme.colors.danger,
+                    )}>
+                      {formatCurrency(summary.net, currency || "USD")}
+                    </Text>
+                  </View>
+                  <View style={styles.insightIcon(summary.net >= 0 ? "success" : "danger")}>
+                    <Ionicons
+                      name={summary.net >= 0 ? "trending-up" : "trending-down"}
+                      size={16}
+                      color={summary.net >= 0 ? theme.colors.success : theme.colors.danger}
+                    />
+                  </View>
+                </View>
+                <Text style={styles.insightSubtext}>
+                  {sections.length
+                    ? `${positiveDayCount} of ${sections.length} days positive`
+                    : "No activity yet"}
+                </Text>
+                <View style={styles.insightProgress}>
+                  <View style={styles.insightProgressFill(positiveDayPercentage)} />
+                </View>
+              </View>
+
+              <View style={styles.insightCard}>
+                <View style={styles.insightHeader}>
+                  <View>
+                    <Text style={styles.insightLabel}>Transactions logged</Text>
+                    <Text style={styles.insightValue(theme.colors.primary)}>
+                      {totalTransactions}
+                    </Text>
+                  </View>
+                  <View style={styles.insightIcon("primary")}>
+                    <Ionicons name="receipt-outline" size={16} color={theme.colors.primary} />
+                  </View>
+                </View>
+                <Text style={styles.insightSubtext}>
+                  Avg {averageTransactionsPerDay.toFixed(1)} per day
+                </Text>
+              </View>
+
+              <View style={styles.insightCard}>
+                <View style={styles.insightHeader}>
+                  <View>
+                    <Text style={styles.insightLabel}>Spending vs income</Text>
+                    <Text style={styles.insightValue()}>
+                      {summary.income > 0 ? `${spendingToIncomeRatio}%` : "—"}
+                    </Text>
+                  </View>
+                  <View style={styles.insightIcon("muted")}>
+                    <Ionicons name="pie-chart-outline" size={16} color={theme.colors.text} />
+                  </View>
+                </View>
+                <View style={styles.ratioBar}>
+                  <View style={styles.ratioFill(spendingToIncomeRatio)} />
+                </View>
+                <Text style={styles.insightSubtext}>
+                  {summary.income > 0
+                    ? `${formatCurrency(summary.expense, currency || "USD")} spent`
+                    : "Log income to compare"}
+                </Text>
+              </View>
+
+              <View style={styles.insightCard}>
+                <View style={styles.insightHeader}>
+                  <View>
+                    <Text style={styles.insightLabel}>Recurring this period</Text>
+                    <Text style={styles.insightValue(theme.colors.accent)}>
+                      {filteredRecurring.length}
+                    </Text>
+                  </View>
+                  <View style={styles.insightIcon("accent")}>
+                    <Ionicons name="repeat" size={16} color={theme.colors.accent} />
+                  </View>
+                </View>
+                <Text style={styles.insightSubtext}>
+                  {nextRecurring
+                    ? `${nextRecurring.category} • ${dayjs(nextRecurring.nextOccurrence).format("MMM D")}`
+                    : "All caught up"}
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.accountSection}>
+              <View style={styles.sectionHeadingRow}>
+                <Text style={styles.sectionHeading}>Accounts</Text>
+                <Text style={styles.sectionHint}>Tap to focus totals</Text>
+              </View>
+              <View style={styles.accountGrid}>
                 <Pressable
-                    key={account.id}
-                    onPress={() => setSelectedAccountId(account.id)}
-                    style={[
-                      styles.accountChip,
-                      active && styles.accountChipActive,
-                      account.isArchived && styles.accountChipArchived,
-                    ]}
-                  >
+                  onPress={() => setSelectedAccountId(null)}
+                  style={styles.accountCard(!selectedAccountId)}
+                >
+                  <View style={styles.accountAvatar(!selectedAccountId)}>
+                    <Ionicons
+                      name="grid-outline"
+                      size={16}
+                      color={!selectedAccountId ? theme.colors.background : theme.colors.text}
+                    />
+                  </View>
+                  <View style={styles.accountDetails}>
                     <Text
-                      style={[styles.accountChipTitle, active && styles.accountChipTitleActive]}
+                      style={[
+                        styles.accountName,
+                        !selectedAccountId && styles.accountNameActive,
+                      ]}
                     >
-                      {account.name}
+                      All accounts
                     </Text>
                     <Text
-                      style={[styles.accountChipBalance, active && styles.accountChipBalanceActive]}
+                      style={[
+                        styles.accountBalance,
+                        !selectedAccountId && styles.accountBalanceActive,
+                      ]}
                     >
-                      {formatCurrency(account.balance, account.currency || baseCurrency)}
+                      {formatCurrency(allAccountsBalance, baseCurrency)}
                     </Text>
-                  </Pressable>
-                );
-              })}
-            </ScrollView>
+                  </View>
+                </Pressable>
+
+                {accounts.map((account) => {
+                  const active = selectedAccountId === account.id;
+                  return (
+                    <Pressable
+                      key={account.id}
+                      onPress={() => setSelectedAccountId(account.id)}
+                      style={[styles.accountCard(active), account.isArchived && styles.accountCardArchived]}
+                    >
+                      <View style={styles.accountAvatar(active)}>
+                        <Ionicons
+                          name={account.isArchived ? "archive-outline" : "wallet-outline"}
+                          size={16}
+                          color={active ? theme.colors.background : theme.colors.text}
+                        />
+                      </View>
+                      <View style={styles.accountDetails}>
+                        <Text
+                          style={[styles.accountName, active && styles.accountNameActive]}
+                          numberOfLines={1}
+                        >
+                          {account.name}
+                        </Text>
+                        <Text
+                          style={[styles.accountBalance, active && styles.accountBalanceActive]}
+                          numberOfLines={1}
+                        >
+                          {formatCurrency(account.balance, account.currency || baseCurrency)}
+                        </Text>
+                      </View>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
 
             {/* Expense Breakdown */}
             {expenseBreakdown.length > 0 && (
@@ -749,51 +923,61 @@ export default function TransactionsScreen() {
                 style={styles.breakdownCard}
                 onPress={() => setCategoriesExpanded(!categoriesExpanded)}
               >
-                <View style={styles.breakdownHeader}>
-                  <Text style={styles.breakdownTitle}>Top Categories</Text>
-                  <Ionicons
-                    name={categoriesExpanded ? "chevron-up" : "chevron-down"}
-                    size={16}
-                    color={theme.colors.textMuted}
-                  />
+                <View style={styles.sectionHeadingRow}>
+                  <View>
+                    <Text style={styles.sectionHeading}>Spending focus</Text>
+                    <Text style={styles.sectionHint}>
+                      Tap to {categoriesExpanded ? "collapse" : "expand"}
+                    </Text>
+                  </View>
+                  <View style={styles.breakdownIcon}>
+                    <Ionicons
+                      name={categoriesExpanded ? "chevron-up" : "chevron-down"}
+                      size={16}
+                      color={theme.colors.primary}
+                    />
+                  </View>
                 </View>
-                {categoriesExpanded && (
-                  <View style={styles.breakdownContent}>
-                    {expenseBreakdown.map((item) => (
-                      <View key={item.category} style={styles.breakdownRow}>
+                <View style={styles.breakdownPreview}>
+                  {(categoriesExpanded ? expenseBreakdown : expenseBreakdown.slice(0, 3)).map(
+                    (item) => (
+                      <View key={item.category} style={styles.breakdownPill}>
                         <View style={styles.breakdownInfo}>
                           <Text style={styles.breakdownCategory}>{item.category}</Text>
                           <Text style={styles.breakdownAmount}>
-                            {formatCurrency(item.amount, currency || "USD")}
+                            {formatCurrency(item.amount, currency || "USD")} • {item.percentage}%
                           </Text>
                         </View>
-                        <View style={styles.progressBar}>
-                          <View style={styles.progressFill(item.percentage)} />
+                        <View style={styles.breakdownBar}>
+                          <View style={styles.breakdownBarFill(item.percentage)} />
                         </View>
-                        <Text style={styles.breakdownPercent}>{item.percentage}%</Text>
                       </View>
-                    ))}
-                  </View>
-                )}
+                    ),
+                  )}
+                </View>
               </Pressable>
             )}
 
             {/* Recurring Transactions */}
             {filteredRecurring.length > 0 && (
               <View style={styles.recurringSection}>
-                <Text style={styles.sectionTitle}>
-                  Upcoming Recurring ({filteredRecurring.length})
-                </Text>
+                <View style={styles.sectionHeadingRow}>
+                  <Text style={styles.sectionHeading}>Upcoming recurring</Text>
+                  <Text style={styles.sectionHint}>{filteredRecurring.length} scheduled</Text>
+                </View>
                 {filteredRecurring.map((item) => (
-                  <View key={item.id} style={styles.recurringItem}>
-                    <View style={styles.recurringInfo}>
+                  <View key={item.id} style={styles.recurringCard}>
+                    <View style={styles.recurringBadge}>
+                      <Ionicons name="refresh" size={16} color={theme.colors.primary} />
+                    </View>
+                    <View style={styles.recurringDetails}>
                       <Text style={styles.recurringCategory}>{item.category}</Text>
                       {item.note ? (
                         <Text style={styles.recurringNote} numberOfLines={2}>
                           {truncateWords(item.note, 10)}
                         </Text>
                       ) : null}
-                      <Text style={styles.recurringDate}>
+                      <Text style={styles.recurringMeta}>
                         {dayjs(item.nextOccurrence).format("MMM D")} • {item.frequency}
                       </Text>
                     </View>
@@ -842,6 +1026,7 @@ export default function TransactionsScreen() {
         }}
         renderItem={({ item }) => (
           <View style={styles.dayCard}>
+            <View style={styles.dayCardAccent} />
             {item.transactions.map((transaction, index) => {
               const notePreview = transaction.note.trim().length
                 ? truncateWords(transaction.note, 10)
@@ -851,48 +1036,53 @@ export default function TransactionsScreen() {
               const transferLabel = isTransfer
                 ? `${resolveAccountName(transaction.accountId)} → ${resolveAccountName(transaction.toAccountId)}`
                 : null;
+              const isLast = index === item.transactions.length - 1;
 
               return (
-                <View key={transaction.id}>
-                  {index > 0 && <View style={styles.transactionDivider} />}
-                  <Pressable
-                    style={styles.transactionItem}
-                    onPress={() => router.push(`/transactions/${transaction.id}`)}
-                    accessibilityRole="button"
-                  >
-                    <View style={styles.transactionLeft}>
-                      <View style={styles.categoryIcon(visual.variant)}>
-                        <Text style={styles.categoryInitial}>
-                          {transaction.category.charAt(0).toUpperCase()}
-                        </Text>
-                      </View>
-                      <View style={styles.transactionDetails}>
-                        <Text style={styles.transactionCategory} numberOfLines={1}>
-                          {transaction.category}
-                        </Text>
-                        <Text style={styles.transactionNote} numberOfLines={2}>
-                          {notePreview}
-                        </Text>
-                        {isTransfer && transferLabel ? (
-                          <Text style={styles.transferMeta} numberOfLines={1}>
-                            {transferLabel}
+                <Pressable
+                  key={transaction.id}
+                  style={styles.transactionItem}
+                  onPress={() => router.push(`/transactions/${transaction.id}`)}
+                  accessibilityRole="button"
+                >
+                  <View style={styles.timelineColumn}>
+                    <View style={styles.timelineBullet(visual.variant)} />
+                    {!isLast && <View style={styles.timelineLine} />}
+                  </View>
+                  <View style={[styles.transactionBody, isLast && styles.transactionBodyLast]}>
+                    <View style={styles.transactionHeaderRow}>
+                      <View style={styles.transactionTitleRow}>
+                        <View style={styles.categoryIcon(visual.variant)}>
+                          <Text style={styles.categoryInitial}>
+                            {transaction.category.charAt(0).toUpperCase()}
                           </Text>
-                        ) : null}
+                        </View>
+                        <View>
+                          <Text style={styles.transactionCategory} numberOfLines={1}>
+                            {transaction.category}
+                          </Text>
+                          {isTransfer && transferLabel ? (
+                            <Text style={styles.transferMeta} numberOfLines={1}>
+                              {transferLabel}
+                            </Text>
+                          ) : null}
+                        </View>
                       </View>
-                    </View>
-                    <View style={styles.transactionRight}>
                       <Text style={styles.transactionAmount(visual.variant)}>
                         {visual.prefix}
                         {formatCurrency(transaction.amount, currency || "USD")}
                       </Text>
-                      {transaction.excludeFromReports && (
-                        <View style={styles.excludedBadge}>
-                          <Text style={styles.excludedBadgeText}>Excluded</Text>
-                        </View>
-                      )}
                     </View>
-                  </Pressable>
-                </View>
+                    <Text style={styles.transactionNote} numberOfLines={2}>
+                      {notePreview}
+                    </Text>
+                    {transaction.excludeFromReports && (
+                      <View style={styles.excludedBadge}>
+                        <Text style={styles.excludedBadgeText}>Excluded from reports</Text>
+                      </View>
+                    )}
+                  </View>
+                </Pressable>
               );
             })}
           </View>
@@ -1247,126 +1437,235 @@ const createStyles = (theme: any, insets: any) =>
       fontWeight: "600",
       color: theme.colors.text,
     },
-    accountChipRow: {
+    insightsGrid: {
       flexDirection: "row",
       flexWrap: "wrap",
-      gap: 8,
-      paddingVertical: 8,
-      marginBottom: 16,
+      gap: theme.spacing.md,
+      marginBottom: theme.spacing.lg,
     },
-    accountChip: {
-      paddingHorizontal: 16,
-      paddingVertical: 12,
-      borderRadius: 999,
+    insightCard: {
+      flexBasis: "48%",
+      flexGrow: 1,
+      backgroundColor: theme.colors.surfaceElevated,
+      borderRadius: theme.radii.lg,
+      padding: theme.spacing.lg,
       borderWidth: 1,
-      borderColor: theme.colors.border,
-      backgroundColor: theme.colors.surface,
-      minWidth: 140,
-      flexShrink: 1,
+      borderColor: `${theme.colors.primary}15`,
+      shadowColor: theme.colors.primary,
+      shadowOpacity: 0.08,
+      shadowRadius: 12,
+      elevation: 2,
+      gap: theme.spacing.xs,
     },
-    accountChipActive: {
-      borderColor: theme.colors.primary,
-      backgroundColor: theme.colors.primary,
+    insightCardWide: {
+      flexBasis: "100%",
     },
-    accountChipArchived: {
-      opacity: 0.6,
+    insightHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      marginBottom: theme.spacing.xs,
     },
-    accountChipTitle: {
+    insightLabel: {
+      fontSize: 11,
+      fontWeight: "600",
+      letterSpacing: 1,
+      textTransform: "uppercase",
+      color: theme.colors.textMuted,
+    },
+    insightValue: (color?: string) => ({
+      fontSize: 22,
+      fontWeight: "700",
+      color: color ?? theme.colors.text,
+    }),
+    insightIcon: (tone: "success" | "danger" | "primary" | "muted" | "accent") => ({
+      width: 32,
+      height: 32,
+      borderRadius: theme.radii.md,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor:
+        tone === "success"
+          ? `${theme.colors.success}18`
+          : tone === "danger"
+            ? `${theme.colors.danger}18`
+            : tone === "primary"
+              ? `${theme.colors.primary}18`
+              : tone === "accent"
+                ? `${theme.colors.accent}18`
+                : `${theme.colors.border}80`,
+    }),
+    insightSubtext: {
+      fontSize: 13,
+      color: theme.colors.textMuted,
+    },
+    insightProgress: {
+      height: 6,
+      borderRadius: 999,
+      backgroundColor: `${theme.colors.border}66`,
+      overflow: "hidden",
+    },
+    insightProgressFill: (percentage: number) => ({
+      height: "100%",
+      width: `${Math.min(Math.max(percentage, 0), 100)}%`,
+      backgroundColor: theme.colors.success,
+    }),
+    ratioBar: {
+      height: 6,
+      borderRadius: 999,
+      backgroundColor: `${theme.colors.border}66`,
+      overflow: "hidden",
+      marginBottom: theme.spacing.xs,
+    },
+    ratioFill: (percentage: number) => ({
+      height: "100%",
+      width: `${Math.min(Math.max(percentage, 0), 150)}%`,
+      backgroundColor: theme.colors.danger,
+    }),
+    accountSection: {
+      marginBottom: theme.spacing.xl,
+    },
+    sectionHeadingRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      marginBottom: theme.spacing.sm,
+    },
+    sectionHeading: {
+      fontSize: 15,
+      fontWeight: "700",
+      color: theme.colors.text,
+    },
+    sectionHint: {
+      fontSize: 12,
+      color: theme.colors.textMuted,
+    },
+    accountGrid: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: theme.spacing.md,
+    },
+    accountCard: (active: boolean) => ({
+      flexBasis: "48%",
+      flexGrow: 1,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: theme.spacing.md,
+      padding: theme.spacing.md,
+      borderRadius: theme.radii.lg,
+      borderWidth: 1,
+      borderColor: active ? theme.colors.primary : theme.colors.border,
+      backgroundColor: active ? theme.colors.primary : theme.colors.surface,
+    }),
+    accountCardArchived: {
+      opacity: 0.65,
+    },
+    accountAvatar: (active: boolean) => ({
+      width: 36,
+      height: 36,
+      borderRadius: 18,
+      backgroundColor: active
+        ? `${theme.colors.background}33`
+        : `${theme.colors.primary}18`,
+      alignItems: "center",
+      justifyContent: "center",
+    }),
+    accountDetails: {
+      flex: 1,
+    },
+    accountName: {
       fontSize: 13,
       fontWeight: "600",
       color: theme.colors.text,
     },
-    accountChipTitleActive: {
+    accountNameActive: {
       color: theme.colors.background,
     },
-    accountChipBalance: {
+    accountBalance: {
       fontSize: 12,
       color: theme.colors.textMuted,
     },
-    accountChipBalanceActive: {
+    accountBalanceActive: {
       color: `${theme.colors.background}CC`,
     },
     
     // Breakdown Card
     breakdownCard: {
-      backgroundColor: theme.colors.surface,
-      borderRadius: 16,
-      padding: 16,
-      marginBottom: 16,
+      backgroundColor: theme.colors.surfaceElevated,
+      borderRadius: theme.radii.xl,
+      padding: theme.spacing.lg,
+      borderWidth: 1,
+      borderColor: `${theme.colors.primary}22`,
+      marginBottom: theme.spacing.lg,
     },
-    breakdownHeader: {
-      flexDirection: "row",
-      justifyContent: "space-between",
+    breakdownIcon: {
+      width: 40,
+      height: 40,
+      borderRadius: theme.radii.md,
+      backgroundColor: `${theme.colors.primary}15`,
       alignItems: "center",
+      justifyContent: "center",
     },
-    breakdownTitle: {
-      fontSize: 12,
-      fontWeight: "600",
-      color: theme.colors.textMuted,
-      textTransform: "uppercase",
-      letterSpacing: 0.5,
+    breakdownPreview: {
+      marginTop: theme.spacing.md,
+      gap: theme.spacing.md,
     },
-    breakdownContent: {
-      marginTop: 12,
-    },
-    breakdownRow: {
-      marginBottom: 12,
+    breakdownPill: {
+      borderRadius: theme.radii.lg,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      backgroundColor: theme.colors.surface,
+      padding: theme.spacing.md,
+      gap: theme.spacing.xs,
     },
     breakdownInfo: {
-      flexDirection: "row",
-      justifyContent: "space-between",
-      marginBottom: 6,
+      gap: 4,
     },
     breakdownCategory: {
-      fontSize: 14,
+      fontSize: 15,
       fontWeight: "600",
       color: theme.colors.text,
     },
     breakdownAmount: {
-      fontSize: 14,
-      fontWeight: "600",
-      color: theme.colors.text,
-    },
-    progressBar: {
-      height: 4,
-      backgroundColor: theme.colors.border,
-      borderRadius: 2,
-      overflow: "hidden",
-      marginBottom: 4,
-    },
-    progressFill: (percentage: number) => ({
-      height: "100%",
-      width: `${percentage}%`,
-      backgroundColor: theme.colors.primary,
-      borderRadius: 2,
-    }),
-    breakdownPercent: {
-      fontSize: 11,
+      fontSize: 13,
       color: theme.colors.textMuted,
     },
-    
+    breakdownBar: {
+      height: 6,
+      borderRadius: 999,
+      backgroundColor: `${theme.colors.border}80`,
+      overflow: "hidden",
+    },
+    breakdownBarFill: (percentage: number) => ({
+      height: "100%",
+      width: `${Math.min(Math.max(percentage, 0), 100)}%`,
+      backgroundColor: theme.colors.primary,
+    }),
+
     // Recurring Section
     recurringSection: {
-      marginBottom: 24,
+      marginBottom: theme.spacing.xl,
+      gap: theme.spacing.md,
     },
-    sectionTitle: {
-      fontSize: 12,
-      fontWeight: "600",
-      color: theme.colors.textMuted,
-      textTransform: "uppercase",
-      letterSpacing: 0.5,
-      marginBottom: 12,
-    },
-    recurringItem: {
+    recurringCard: {
       flexDirection: "row",
-      justifyContent: "space-between",
       alignItems: "center",
+      gap: theme.spacing.md,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      borderRadius: theme.radii.lg,
+      padding: theme.spacing.md,
       backgroundColor: theme.colors.surface,
-      borderRadius: 12,
-      padding: 14,
-      marginBottom: 8,
     },
-    recurringInfo: {
+    recurringBadge: {
+      width: 44,
+      height: 44,
+      borderRadius: 22,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: `${theme.colors.primary}15`,
+    },
+    recurringDetails: {
       flex: 1,
       gap: 4,
     },
@@ -1379,20 +1678,22 @@ const createStyles = (theme: any, insets: any) =>
       fontSize: 12,
       color: theme.colors.textMuted,
     },
-    recurringDate: {
+    recurringMeta: {
       fontSize: 12,
       color: theme.colors.textMuted,
     },
     logButton: {
-      paddingHorizontal: 16,
-      paddingVertical: 6,
-      borderRadius: 16,
+      paddingHorizontal: theme.spacing.md,
+      paddingVertical: theme.spacing.sm,
+      borderRadius: theme.radii.pill,
+      borderWidth: 1,
+      borderColor: theme.colors.primary,
       backgroundColor: theme.colors.primary,
     },
     logButtonText: {
-      fontSize: 12,
+      fontSize: 13,
       fontWeight: "600",
-      color: "#fff",
+      color: theme.colors.background,
     },
     
     // Transactions List
@@ -1446,36 +1747,83 @@ const createStyles = (theme: any, insets: any) =>
     dayCard: {
       backgroundColor: theme.colors.surface,
       marginHorizontal: 16,
-      borderRadius: 12,
+      borderRadius: theme.radii.xl,
+      paddingHorizontal: theme.spacing.lg,
+      paddingVertical: theme.spacing.md,
       overflow: "hidden",
+      position: "relative",
+      gap: theme.spacing.md,
+    },
+    dayCardAccent: {
+      position: "absolute",
+      top: 0,
+      left: 0,
+      right: 0,
+      height: 4,
+      backgroundColor: `${theme.colors.primary}33`,
     },
     transactionItem: {
       flexDirection: "row",
-      justifyContent: "space-between",
+      alignItems: "flex-start",
+      gap: theme.spacing.md,
+    },
+    timelineColumn: {
+      width: 18,
       alignItems: "center",
-      padding: 12,
+      flexDirection: "column",
+      gap: 6,
+      paddingTop: 6,
     },
-    transactionDivider: {
-      height: 1,
-      backgroundColor: theme.colors.border,
-      marginHorizontal: 12,
+    timelineBullet: (variant: TransactionVisualVariant) => ({
+      width: 10,
+      height: 10,
+      borderRadius: 5,
+      backgroundColor:
+        variant === "income"
+          ? theme.colors.success
+          : variant === "expense"
+            ? theme.colors.danger
+            : theme.colors.primary,
+    }),
+    timelineLine: {
+      width: 2,
+      flex: 1,
+      backgroundColor: `${theme.colors.border}AA`,
+      borderRadius: 2,
     },
-    transactionLeft: {
+    transactionBody: {
+      flex: 1,
+      gap: 6,
+      borderBottomWidth: 1,
+      borderBottomColor: `${theme.colors.border}55`,
+      paddingBottom: theme.spacing.md,
+    },
+    transactionBodyLast: {
+      borderBottomWidth: 0,
+      paddingBottom: 0,
+    },
+    transactionHeaderRow: {
+      flexDirection: "row",
+      alignItems: "flex-start",
+      justifyContent: "space-between",
+      gap: theme.spacing.md,
+    },
+    transactionTitleRow: {
       flexDirection: "row",
       alignItems: "center",
-      gap: 12,
+      gap: theme.spacing.sm,
       flex: 1,
     },
     categoryIcon: (variant: TransactionVisualVariant) => ({
-      width: 36,
-      height: 36,
-      borderRadius: 10,
+      width: 40,
+      height: 40,
+      borderRadius: theme.radii.lg,
       backgroundColor:
         variant === "income"
-          ? `${theme.colors.success}20`
+          ? `${theme.colors.success}22`
           : variant === "expense"
-            ? `${theme.colors.danger}20`
-            : `${theme.colors.border}55`,
+            ? `${theme.colors.danger}22`
+            : `${theme.colors.primary}22`,
       alignItems: "center",
       justifyContent: "center",
     }),
@@ -1483,10 +1831,6 @@ const createStyles = (theme: any, insets: any) =>
       fontSize: 16,
       fontWeight: "700",
       color: theme.colors.text,
-    },
-    transactionDetails: {
-      flex: 1,
-      gap: 4,
     },
     transactionCategory: {
       fontSize: 14,
@@ -1511,22 +1855,19 @@ const createStyles = (theme: any, insets: any) =>
             ? theme.colors.danger
             : theme.colors.text,
     }),
-    transactionRight: {
-      alignItems: "flex-end",
-      gap: 6,
-    },
     excludedBadge: {
-      paddingHorizontal: 8,
-      paddingVertical: 3,
+      alignSelf: "flex-start",
+      paddingHorizontal: 10,
+      paddingVertical: 4,
       borderRadius: theme.radii.pill,
       backgroundColor: `${theme.colors.border}55`,
     },
     excludedBadgeText: {
-      fontSize: 10,
+      fontSize: 11,
       fontWeight: "600",
       color: theme.colors.textMuted,
       textTransform: "uppercase",
-      letterSpacing: 1,
+      letterSpacing: 0.5,
     },
     separator: {
       height: 8,
