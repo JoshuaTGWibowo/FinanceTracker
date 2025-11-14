@@ -17,14 +17,12 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import dayjs, { type Dayjs } from "dayjs";
 
 import { useAppTheme } from "../../theme";
-import { Transaction, useFinanceStore } from "../../lib/store";
-import {
-  filterTransactionsByAccount,
-  getTransactionDelta,
-  getTransactionVisualState,
-  type TransactionVisualVariant,
-} from "../../lib/transactions";
+import { useFinanceStore } from "../../lib/store";
+import { getTransactionVisualState, type TransactionVisualVariant } from "../../lib/transactions";
 import { truncateWords } from "../../lib/text";
+import { parseAmountFilterValue } from "../../lib/filters";
+import { buildMonthlyPeriods } from "../../lib/periods";
+import { buildPeriodOverview } from "../../lib/reporting";
 
 const formatCurrency = (
   value: number,
@@ -51,74 +49,6 @@ const formatCurrency = (
     maximumFractionDigits: maxDigits,
     minimumFractionDigits: minDigits,
   }).format(value);
-};
-
-const parseAmountFilterValue = (value: string): number | undefined => {
-  if (!value.trim()) {
-    return undefined;
-  }
-
-  const sanitized = value.replace(/[\s']/g, "").replace(/[^0-9,.-]/g, "");
-  if (!sanitized) {
-    return undefined;
-  }
-
-  const hasComma = sanitized.includes(",");
-  const hasDot = sanitized.includes(".");
-  let normalized = sanitized;
-
-  if (hasComma && hasDot) {
-    const lastComma = sanitized.lastIndexOf(",");
-    const lastDot = sanitized.lastIndexOf(".");
-    const decimalSeparator = lastComma > lastDot ? "," : ".";
-    const thousandSeparator = decimalSeparator === "," ? "." : ",";
-    const thousandPattern = new RegExp(`\\${thousandSeparator}`, "g");
-    normalized = normalized.replace(thousandPattern, "");
-    if (decimalSeparator === ",") {
-      normalized = normalized.replace(/,/g, ".");
-    }
-  } else if (hasComma) {
-    const parts = sanitized.split(",");
-    const isDecimalCandidate =
-      parts.length === 2 && (parts[1].length <= 3 || parts[0].length > 2);
-    normalized = isDecimalCandidate ? sanitized.replace(/,/g, ".") : sanitized.replace(/,/g, "");
-  } else if (hasDot) {
-    const parts = sanitized.split(".");
-    const isDecimalCandidate = parts.length === 2 && parts[1].length <= 3;
-    normalized = isDecimalCandidate ? sanitized : sanitized.replace(/\./g, "");
-  }
-
-  const parsed = Number(normalized);
-  return Number.isNaN(parsed) ? undefined : parsed;
-};
-
-const formatPercentage = (current: number, previous: number): string => {
-  if (previous === 0) return "—";
-  const change = ((current - previous) / Math.abs(previous)) * 100;
-  return `${change >= 0 ? "+" : ""}${change.toFixed(1)}%`;
-};
-
-interface PeriodOption {
-  key: string;
-  label: string;
-  range: () => { start: Dayjs; end: Dayjs };
-}
-
-const MONTHS_TO_DISPLAY = 12;
-
-const buildMonthlyPeriods = (): PeriodOption[] => {
-  const currentMonth = dayjs().startOf("month");
-  return Array.from({ length: MONTHS_TO_DISPLAY }).map((_, index) => {
-    const month = currentMonth.subtract(MONTHS_TO_DISPLAY - 1 - index, "month");
-    return {
-      key: month.format("YYYY-MM"),
-      label: month.format("MMM YYYY"),
-      range: () => ({ 
-        start: month.startOf("month"), 
-        end: month.endOf("month") 
-      }),
-    };
-  });
 };
 
 export default function TransactionsScreen() {
@@ -166,12 +96,24 @@ export default function TransactionsScreen() {
 
     return () => clearTimeout(timeout);
   }, []);
+
+  useEffect(() => {
+    const today = dayjs().startOf("day");
+    recurringTransactions.forEach((item) => {
+      if (!item.isActive) {
+        return;
+      }
+      const occurrence = dayjs(item.nextOccurrence);
+      if (occurrence.isSame(today, "day")) {
+        logRecurringTransaction(item.id);
+      }
+    });
+  }, [logRecurringTransaction, recurringTransactions]);
   
   const [searchTerm, setSearchTerm] = useState("");
   const [searchVisible, setSearchVisible] = useState(false);
   const [draftSearchTerm, setDraftSearchTerm] = useState("");
   const [filtersExpanded, setFiltersExpanded] = useState(false);
-  const [categoriesExpanded, setCategoriesExpanded] = useState(false);
   const [minAmount, setMinAmount] = useState("");
   const [maxAmount, setMaxAmount] = useState("");
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
@@ -180,6 +122,7 @@ export default function TransactionsScreen() {
   const [showStartPicker, setShowStartPicker] = useState(false);
   const [showEndPicker, setShowEndPicker] = useState(false);
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
+  const [recurringExpanded, setRecurringExpanded] = useState(true);
 
   useEffect(() => {
     if (!categoryParam) {
@@ -300,218 +243,27 @@ export default function TransactionsScreen() {
 
   const hasActiveFilters = activeFilters.length > 0;
 
-  const { sections, summary, expenseBreakdown, filteredRecurring } = useMemo(() => {
-    const period = periodOptions.find((option) => option.key === selectedPeriod) ?? periodOptions[periodOptions.length - 1];
+  const { sections, summary, filteredRecurring } = useMemo(() => {
+    const period =
+      periodOptions.find((option) => option.key === selectedPeriod) ??
+      periodOptions[periodOptions.length - 1];
     const { start, end } = period.range();
 
-    const allowedAccountIds = selectedAccountId ? null : new Set(visibleAccountIds);
-    const scopedTransactions = filterTransactionsByAccount(transactions, selectedAccountId).filter(
-      (transaction) => {
-        if (!allowedAccountIds || allowedAccountIds.size === 0) {
-          return true;
-        }
-
-        const fromAllowed = transaction.accountId
-          ? allowedAccountIds.has(transaction.accountId)
-          : false;
-        const toAllowed = transaction.toAccountId
-          ? allowedAccountIds.has(transaction.toAccountId)
-          : false;
-
-        return fromAllowed || toAllowed;
+    return buildPeriodOverview({
+      transactions,
+      recurringTransactions,
+      visibleAccountIds,
+      selectedAccountId,
+      range: { start, end },
+      filters: {
+        minAmount: parseAmountFilterValue(minAmount),
+        maxAmount: parseAmountFilterValue(maxAmount),
+        selectedCategories,
+        searchTerm,
+        startDate,
+        endDate,
       },
-    );
-
-    const periodTransactions = scopedTransactions.filter((transaction) => {
-      const date = dayjs(transaction.date);
-      return !date.isBefore(start) && !date.isAfter(end);
     });
-
-    const minAmountValue = parseAmountFilterValue(minAmount);
-    const maxAmountValue = parseAmountFilterValue(maxAmount);
-
-    const filtered = periodTransactions.filter((transaction) => {
-      const date = dayjs(transaction.date);
-
-      // Date range filters
-      if (startDate && date.isBefore(startDate)) return false;
-      if (endDate && date.isAfter(endDate)) return false;
-
-      // Amount filters
-      const amount = transaction.amount;
-      if (minAmountValue !== undefined && amount < minAmountValue) return false;
-      if (maxAmountValue !== undefined && amount > maxAmountValue) return false;
-      
-      // Category filter
-      if (selectedCategories.length && !selectedCategories.includes(transaction.category)) {
-        return false;
-      }
-      
-      // Search filter
-      if (searchTerm.trim()) {
-        const query = searchTerm.toLowerCase();
-        const matchesNote = transaction.note.toLowerCase().includes(query);
-        const matchesCategory = transaction.category.toLowerCase().includes(query);
-        const matchesLocation = transaction.location
-          ? transaction.location.toLowerCase().includes(query)
-          : false;
-        const matchesParticipants = transaction.participants
-          ? transaction.participants.some((participant) => participant.toLowerCase().includes(query))
-          : false;
-
-        if (!matchesNote && !matchesCategory && !matchesLocation && !matchesParticipants) {
-          return false;
-        }
-      }
-
-      return true;
-    });
-
-    const reportable = periodTransactions.filter((transaction) => !transaction.excludeFromReports);
-
-    const parseTransactionId = (id: string) => {
-      const match = id.match(/(\d+)$/);
-      return match ? Number(match[1]) : null;
-    };
-
-    const sortTransactionsByRecency = (a: Transaction, b: Transaction) => {
-      const dateDiff = dayjs(b.date).valueOf() - dayjs(a.date).valueOf();
-      if (dateDiff !== 0) {
-        return dateDiff;
-      }
-
-      const aId = parseTransactionId(a.id);
-      const bId = parseTransactionId(b.id);
-
-      if (aId !== null && bId !== null && aId !== bId) {
-        return bId - aId;
-      }
-
-      if (bId !== null && aId === null) {
-        return 1;
-      }
-
-      if (aId !== null && bId === null) {
-        return -1;
-      }
-
-      return 0;
-    };
-
-    // Group by date with daily totals
-    const grouped = new Map<
-      string,
-      {
-        transactions: Transaction[];
-        dailyIncome: number;
-        dailyExpense: number;
-        dailyNet: number;
-      }
-    >();
-    filtered
-      .sort(sortTransactionsByRecency)
-      .forEach((transaction) => {
-        const key = dayjs(transaction.date).format("YYYY-MM-DD");
-        const existing =
-          grouped.get(key) ?? {
-            transactions: [],
-            dailyIncome: 0,
-            dailyExpense: 0,
-            dailyNet: 0,
-          };
-        existing.transactions.push(transaction);
-        if (transaction.type === "income") {
-          existing.dailyIncome += transaction.amount;
-          existing.dailyNet += transaction.amount;
-        } else if (transaction.type === "expense") {
-          existing.dailyExpense += transaction.amount;
-          existing.dailyNet -= transaction.amount;
-        } else {
-          existing.dailyNet += getTransactionDelta(transaction, selectedAccountId);
-        }
-        grouped.set(key, existing);
-      });
-
-    const sectionData = Array.from(grouped.entries()).map(([key, value]) => ({
-      title: dayjs(key).format("dddd, MMM D"),
-      data: [{ ...value, id: key }],
-      dailyIncome: value.dailyIncome,
-      dailyExpense: value.dailyExpense,
-      dailyNet: value.dailyNet,
-    }));
-
-    // Calculate summary
-    const totals = reportable.reduce(
-      (acc, transaction) => {
-        if (transaction.type === "income") {
-          acc.income += transaction.amount;
-        } else if (transaction.type === "expense") {
-          acc.expense += transaction.amount;
-        }
-        return acc;
-      },
-      { income: 0, expense: 0 },
-    );
-
-    const netChange = reportable.reduce(
-      (acc, transaction) => acc + getTransactionDelta(transaction, selectedAccountId),
-      0,
-    );
-
-    // Calculate balances
-    let openingBalance = 0;
-
-    scopedTransactions
-      .filter((transaction) => !transaction.excludeFromReports)
-      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
-      .forEach((transaction) => {
-        const value = getTransactionDelta(transaction, selectedAccountId);
-        const date = dayjs(transaction.date);
-
-        if (date.isBefore(start)) {
-          openingBalance += value;
-        }
-      });
-    const closingBalance = openingBalance + netChange;
-
-    // Expense breakdown
-    const expenseMap = reportable.reduce((acc, transaction) => {
-      if (transaction.type !== "expense") return acc;
-      const current = acc.get(transaction.category) ?? 0;
-      acc.set(transaction.category, current + transaction.amount);
-      return acc;
-    }, new Map<string, number>());
-
-    const breakdown = Array.from(expenseMap.entries())
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 5)
-      .map(([category, amount]) => ({
-        category,
-        amount,
-        percentage: totals.expense ? Math.round((amount / totals.expense) * 100) : 0,
-      }));
-
-    // Recurring transactions
-    const recurring = recurringTransactions.filter((item) => {
-      const occurrence = dayjs(item.nextOccurrence);
-      const matchesAccount =
-        !selectedAccountId || item.accountId === selectedAccountId || item.toAccountId === selectedAccountId;
-      return matchesAccount && !occurrence.isBefore(start) && !occurrence.isAfter(end);
-    });
-
-    return {
-      sections: sectionData,
-      summary: {
-        income: totals.income,
-        expense: totals.expense,
-        net: netChange,
-        openingBalance,
-        closingBalance,
-        percentageChange: formatPercentage(closingBalance, openingBalance),
-      },
-      expenseBreakdown: breakdown,
-      filteredRecurring: recurring,
-    };
   }, [
     endDate,
     maxAmount,
@@ -519,12 +271,38 @@ export default function TransactionsScreen() {
     periodOptions,
     recurringTransactions,
     searchTerm,
-    selectedPeriod,
-    selectedCategories,
     selectedAccountId,
+    selectedCategories,
+    selectedPeriod,
     startDate,
     transactions,
     visibleAccountIds,
+  ]);
+
+  const handleOpenReport = useCallback(() => {
+    const params: Record<string, string> = {};
+    if (selectedPeriod) params.period = selectedPeriod;
+    if (selectedAccountId) params.accountId = selectedAccountId;
+    if (selectedCategories.length) params.categories = selectedCategories.join(",");
+    const minValue = parseAmountFilterValue(minAmount);
+    const maxValue = parseAmountFilterValue(maxAmount);
+    if (typeof minValue === "number") params.min = String(minValue);
+    if (typeof maxValue === "number") params.max = String(maxValue);
+    if (searchTerm) params.search = searchTerm;
+    if (startDate) params.start = startDate.toISOString();
+    if (endDate) params.end = endDate.toISOString();
+
+    router.push({ pathname: "/transactions/report", params });
+  }, [
+    endDate,
+    maxAmount,
+    minAmount,
+    router,
+    searchTerm,
+    selectedAccountId,
+    selectedCategories,
+    selectedPeriod,
+    startDate,
   ]);
 
   const closingBalanceDisplay = useMemo(() => {
@@ -601,6 +379,10 @@ export default function TransactionsScreen() {
                   </Text>
                 </View>
               </View>
+              <Pressable style={styles.reportButton} onPress={handleOpenReport}>
+                <Text style={styles.reportButtonText}>View report for this period</Text>
+                <Ionicons name="arrow-forward" size={16} color={theme.colors.primary} />
+              </Pressable>
             </View>
 
             {/* Period Selector */}
@@ -743,68 +525,44 @@ export default function TransactionsScreen() {
               })}
             </ScrollView>
 
-            {/* Expense Breakdown */}
-            {expenseBreakdown.length > 0 && (
-              <Pressable
-                style={styles.breakdownCard}
-                onPress={() => setCategoriesExpanded(!categoriesExpanded)}
-              >
-                <View style={styles.breakdownHeader}>
-                  <Text style={styles.breakdownTitle}>Top Categories</Text>
-                  <Ionicons
-                    name={categoriesExpanded ? "chevron-up" : "chevron-down"}
-                    size={16}
-                    color={theme.colors.textMuted}
-                  />
-                </View>
-                {categoriesExpanded && (
-                  <View style={styles.breakdownContent}>
-                    {expenseBreakdown.map((item) => (
-                      <View key={item.category} style={styles.breakdownRow}>
-                        <View style={styles.breakdownInfo}>
-                          <Text style={styles.breakdownCategory}>{item.category}</Text>
-                          <Text style={styles.breakdownAmount}>
-                            {formatCurrency(item.amount, currency || "USD")}
-                          </Text>
-                        </View>
-                        <View style={styles.progressBar}>
-                          <View style={styles.progressFill(item.percentage)} />
-                        </View>
-                        <Text style={styles.breakdownPercent}>{item.percentage}%</Text>
-                      </View>
-                    ))}
-                  </View>
-                )}
-              </Pressable>
-            )}
-
             {/* Recurring Transactions */}
             {filteredRecurring.length > 0 && (
               <View style={styles.recurringSection}>
-                <Text style={styles.sectionTitle}>
-                  Upcoming Recurring ({filteredRecurring.length})
-                </Text>
-                {filteredRecurring.map((item) => (
-                  <View key={item.id} style={styles.recurringItem}>
-                    <View style={styles.recurringInfo}>
-                      <Text style={styles.recurringCategory}>{item.category}</Text>
-                      {item.note ? (
-                        <Text style={styles.recurringNote} numberOfLines={2}>
-                          {truncateWords(item.note, 10)}
+                <Pressable
+                  style={styles.recurringHeader}
+                  onPress={() => setRecurringExpanded((prev) => !prev)}
+                >
+                  <Text style={styles.sectionTitle}>
+                    Upcoming Recurring ({filteredRecurring.length})
+                  </Text>
+                  <Ionicons
+                    name={recurringExpanded ? "chevron-up" : "chevron-down"}
+                    size={16}
+                    color={theme.colors.textMuted}
+                  />
+                </Pressable>
+                {recurringExpanded &&
+                  filteredRecurring.map((item) => (
+                    <View key={item.id} style={styles.recurringItem}>
+                      <View style={styles.recurringInfo}>
+                        <Text style={styles.recurringCategory}>{item.category}</Text>
+                        {item.note ? (
+                          <Text style={styles.recurringNote} numberOfLines={2}>
+                            {truncateWords(item.note, 10)}
+                          </Text>
+                        ) : null}
+                        <Text style={styles.recurringDate}>
+                          {dayjs(item.nextOccurrence).format("MMM D")} • {item.frequency}
                         </Text>
-                      ) : null}
-                      <Text style={styles.recurringDate}>
-                        {dayjs(item.nextOccurrence).format("MMM D")} • {item.frequency}
-                      </Text>
+                      </View>
+                      <Pressable
+                        onPress={() => logRecurringTransaction(item.id)}
+                        style={styles.logButton}
+                      >
+                        <Text style={styles.logButtonText}>Log</Text>
+                      </Pressable>
                     </View>
-                    <Pressable
-                      onPress={() => logRecurringTransaction(item.id)}
-                      style={styles.logButton}
-                    >
-                      <Text style={styles.logButtonText}>Log</Text>
-                    </Pressable>
-                  </View>
-                ))}
+                  ))}
               </View>
             )}
 
@@ -1118,6 +876,21 @@ const createStyles = (theme: any, insets: any) =>
       flexDirection: "row",
       alignItems: "center",
     },
+    reportButton: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 8,
+      marginTop: 20,
+      paddingVertical: 12,
+      borderRadius: 16,
+      backgroundColor: `${theme.colors.primary}15`,
+    },
+    reportButtonText: {
+      fontSize: 13,
+      fontWeight: "600",
+      color: theme.colors.primary,
+    },
     metric: {
       flex: 1,
       alignItems: "center",
@@ -1287,67 +1060,15 @@ const createStyles = (theme: any, insets: any) =>
       color: `${theme.colors.background}CC`,
     },
     
-    // Breakdown Card
-    breakdownCard: {
-      backgroundColor: theme.colors.surface,
-      borderRadius: 16,
-      padding: 16,
-      marginBottom: 16,
-    },
-    breakdownHeader: {
-      flexDirection: "row",
-      justifyContent: "space-between",
-      alignItems: "center",
-    },
-    breakdownTitle: {
-      fontSize: 12,
-      fontWeight: "600",
-      color: theme.colors.textMuted,
-      textTransform: "uppercase",
-      letterSpacing: 0.5,
-    },
-    breakdownContent: {
-      marginTop: 12,
-    },
-    breakdownRow: {
-      marginBottom: 12,
-    },
-    breakdownInfo: {
-      flexDirection: "row",
-      justifyContent: "space-between",
-      marginBottom: 6,
-    },
-    breakdownCategory: {
-      fontSize: 14,
-      fontWeight: "600",
-      color: theme.colors.text,
-    },
-    breakdownAmount: {
-      fontSize: 14,
-      fontWeight: "600",
-      color: theme.colors.text,
-    },
-    progressBar: {
-      height: 4,
-      backgroundColor: theme.colors.border,
-      borderRadius: 2,
-      overflow: "hidden",
-      marginBottom: 4,
-    },
-    progressFill: (percentage: number) => ({
-      height: "100%",
-      width: `${percentage}%`,
-      backgroundColor: theme.colors.primary,
-      borderRadius: 2,
-    }),
-    breakdownPercent: {
-      fontSize: 11,
-      color: theme.colors.textMuted,
-    },
-    
     // Recurring Section
     recurringSection: {
       marginBottom: 24,
+    },
+    recurringHeader: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      marginBottom: 12,
     },
     sectionTitle: {
       fontSize: 12,
