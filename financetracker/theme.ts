@@ -5,16 +5,20 @@ import { ThemeMode, useFinanceStore } from "./lib/store";
 
 type Colors = {
   background: string;
+  backgroundAlt: string;
   surface: string;
   surfaceElevated: string;
+  frosted: string;
   primary: string;
   primaryMuted: string;
   accent: string;
+  secondary: string;
   text: string;
   textMuted: string;
   success: string;
   danger: string;
   border: string;
+  chartGrid: string;
 };
 
 export const spacing = {
@@ -34,31 +38,39 @@ export const radii = {
 } as const;
 
 const darkColors: Colors = {
-  background: "#050608",
-  surface: "#10121B",
-  surfaceElevated: "#161A26",
-  primary: "#3B82F6",
-  primaryMuted: "#2563EB",
-  accent: "#60A5FA",
+  background: "#050710",
+  backgroundAlt: "#080B18",
+  surface: "#101426",
+  surfaceElevated: "#161B2F",
+  frosted: "rgba(13,18,35,0.7)",
+  primary: "#8B5CF6",
+  primaryMuted: "#6D28D9",
+  accent: "#22D3EE",
+  secondary: "#F472B6",
   text: "#F8FAFF",
-  textMuted: "#94A3B8",
+  textMuted: "#A5B4FC",
   success: "#34D399",
   danger: "#FB7185",
-  border: "#1F2937",
+  border: "#1E253F",
+  chartGrid: "rgba(148,163,184,0.18)",
 };
 
 const lightColors: Colors = {
-  background: "#F8FAFF",
+  background: "#F3F5FF",
+  backgroundAlt: "#FFFFFF",
   surface: "#FFFFFF",
-  surfaceElevated: "#EEF3FF",
-  primary: "#2563EB",
-  primaryMuted: "#1D4ED8",
-  accent: "#60A5FA",
+  surfaceElevated: "#EEF2FF",
+  frosted: "rgba(255,255,255,0.8)",
+  primary: "#4C1D95",
+  primaryMuted: "#6D28D9",
+  accent: "#0EA5E9",
+  secondary: "#EC4899",
   text: "#0F172A",
   textMuted: "#475569",
   success: "#047857",
   danger: "#B91C1C",
   border: "#CBD5F5",
+  chartGrid: "rgba(15,23,42,0.16)",
 };
 
 const buildTypography = (colors: Colors) => ({
@@ -94,6 +106,20 @@ const buildComponents = (colors: Colors) => ({
     backgroundColor: colors.surface,
     borderRadius: radii.lg,
     padding: spacing.xl,
+  },
+  cardElevated: {
+    backgroundColor: colors.surfaceElevated,
+    borderRadius: radii.lg,
+    padding: spacing.xl,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  frosted: {
+    backgroundColor: colors.frosted,
+    borderRadius: radii.lg,
+    padding: spacing.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   surface: {
     backgroundColor: colors.surfaceElevated,

@@ -14,6 +14,7 @@ import DateTimePicker from "@react-native-community/datetimepicker";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { LinearGradient } from "expo-linear-gradient";
 import dayjs, { type Dayjs } from "dayjs";
 
 import { useAppTheme } from "../../theme";
@@ -558,27 +559,35 @@ export default function TransactionsScreen() {
         ListHeaderComponent={
           <View style={styles.header}>
             {/* Primary Balance Display */}
-            <View style={styles.balanceCard}>
+            <LinearGradient
+              colors={[theme.colors.primary, theme.colors.secondary]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.balanceCard}
+            >
               <View style={styles.balanceHeader}>
                 <View>
-                  <Text style={styles.balanceLabel}>Current Balance</Text>
+                  <Text style={styles.balanceLabel}>Current balance</Text>
                   <Text style={styles.balanceValue(balanceFontSize)}>{closingBalanceDisplay}</Text>
+                  <Text style={styles.balanceSubhead}>
+                    {dayjs().format("MMM D")} snapshot
+                  </Text>
                 </View>
-                <View style={styles.changeBadge(summary.net)}>
+                <View style={styles.deltaPill}>
                   <Ionicons
-                    name={summary.net >= 0 ? "arrow-up" : "arrow-down"}
-                    size={14}
-                    color={summary.net >= 0 ? theme.colors.success : theme.colors.danger}
+                    name={summary.net >= 0 ? "trending-up" : "trending-down"}
+                    size={16}
+                    color={theme.colors.background}
                   />
-                  <Text style={styles.changeValue(summary.net)}>
-                    {formatCurrency(Math.abs(summary.net), currency || "USD")}
-                  </Text>
-                  <Text style={styles.changePercent}>
-                    {summary.percentageChange}
-                  </Text>
+                  <View>
+                    <Text style={styles.deltaLabel}>Net movement</Text>
+                    <Text style={styles.deltaValue}>
+                      {formatCurrency(summary.net, currency || "USD")} · {summary.percentageChange}
+                    </Text>
+                  </View>
                 </View>
               </View>
-              
+
               <View style={styles.metricsRow}>
                 <View style={styles.metric}>
                   <Text style={styles.metricLabel}>Income</Text>
@@ -595,13 +604,13 @@ export default function TransactionsScreen() {
                 </View>
                 <View style={styles.metricDivider} />
                 <View style={styles.metric}>
-                  <Text style={styles.metricLabel}>Previous</Text>
+                  <Text style={styles.metricLabel}>Opening</Text>
                   <Text style={styles.metricValue(theme.colors.text)}>
                     {formatCurrency(summary.openingBalance, currency || "USD")}
                   </Text>
                 </View>
               </View>
-            </View>
+            </LinearGradient>
 
             {/* Period Selector */}
             <ScrollView
@@ -1064,15 +1073,16 @@ const createStyles = (theme: any, insets: any) =>
     
     // Balance Card
     balanceCard: {
-      backgroundColor: theme.colors.surface,
-      borderRadius: 20,
+      borderRadius: 24,
       padding: 20,
       marginBottom: 16,
-      shadowColor: "#000",
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.05,
-      shadowRadius: 8,
-      elevation: 2,
+      borderWidth: 1,
+      borderColor: `${theme.colors.border}55`,
+      shadowColor: theme.colors.primary,
+      shadowOpacity: 0.25,
+      shadowOffset: { width: 0, height: 10 },
+      shadowRadius: 20,
+      elevation: 4,
     },
     balanceHeader: {
       flexDirection: "row",
@@ -1083,7 +1093,7 @@ const createStyles = (theme: any, insets: any) =>
     balanceLabel: {
       fontSize: 12,
       fontWeight: "500",
-      color: theme.colors.textMuted,
+      color: theme.colors.text,
       textTransform: "uppercase",
       letterSpacing: 0.5,
       marginBottom: 4,
@@ -1093,30 +1103,36 @@ const createStyles = (theme: any, insets: any) =>
       fontWeight: "700",
       color: theme.colors.text,
     }),
-    changeBadge: (positive: number) => ({
+    balanceSubhead: {
+      fontSize: 14,
+      color: theme.colors.text,
+      opacity: 0.85,
+    },
+    deltaPill: {
       flexDirection: "row",
       alignItems: "center",
-      gap: 4,
-      paddingHorizontal: 10,
-      paddingVertical: 6,
-      borderRadius: 12,
-      backgroundColor: positive >= 0 
-        ? `${theme.colors.success}15` 
-        : `${theme.colors.danger}15`,
-    }),
-    changeValue: (positive: number) => ({
+      gap: 10,
+      backgroundColor: "rgba(0,0,0,0.25)",
+      paddingHorizontal: 14,
+      paddingVertical: 10,
+      borderRadius: 16,
+    },
+    deltaLabel: {
+      fontSize: 12,
+      color: theme.colors.text,
+      opacity: 0.7,
+      textTransform: "uppercase",
+      letterSpacing: 0.5,
+    },
+    deltaValue: {
       fontSize: 14,
       fontWeight: "600",
-      color: positive >= 0 ? theme.colors.success : theme.colors.danger,
-    }),
-    changePercent: {
-      fontSize: 12,
-      fontWeight: "500",
-      color: theme.colors.textMuted,
+      color: theme.colors.text,
     },
     metricsRow: {
       flexDirection: "row",
       alignItems: "center",
+      gap: 12,
     },
     metric: {
       flex: 1,
@@ -1154,9 +1170,13 @@ const createStyles = (theme: any, insets: any) =>
       paddingHorizontal: 16,
       paddingVertical: 8,
       borderRadius: 20,
-      backgroundColor: active ? theme.colors.primary : theme.colors.surface,
+      backgroundColor: active ? theme.colors.primary : theme.colors.surfaceElevated,
       borderWidth: 1,
       borderColor: active ? theme.colors.primary : theme.colors.border,
+      shadowColor: active ? theme.colors.primary : "transparent",
+      shadowOpacity: active ? 0.2 : 0,
+      shadowRadius: active ? 10 : 0,
+      shadowOffset: { width: 0, height: active ? 6 : 0 },
     }),
     periodText: (active: boolean) => ({
       fontSize: 13,
@@ -1169,33 +1189,38 @@ const createStyles = (theme: any, insets: any) =>
       flexDirection: "row",
       gap: 12,
       marginBottom: 16,
+      alignItems: "center",
     },
     searchField: {
       flex: 1,
       flexDirection: "row",
       alignItems: "center",
       gap: 8,
-      backgroundColor: theme.colors.surface,
-      borderRadius: 12,
-      paddingHorizontal: 16,
+      backgroundColor: theme.colors.frosted,
+      borderRadius: 14,
+      paddingHorizontal: 18,
       paddingVertical: 12,
       borderWidth: 1,
-      borderColor: theme.colors.border,
+      borderColor: `${theme.colors.border}AA`,
     },
     searchPlaceholder: {
       fontSize: 15,
       color: theme.colors.textMuted,
     },
     filterButton: (active: boolean) => ({
-      width: 44,
-      height: 44,
-      borderRadius: 12,
-      backgroundColor: active ? theme.colors.primaryMuted : theme.colors.surface,
+      width: 48,
+      height: 48,
+      borderRadius: 16,
+      backgroundColor: active ? theme.colors.primary : theme.colors.surfaceElevated,
       borderWidth: 1,
       borderColor: active ? theme.colors.primary : theme.colors.border,
       alignItems: "center",
       justifyContent: "center",
       position: "relative",
+      shadowColor: active ? theme.colors.primary : "transparent",
+      shadowOpacity: active ? 0.3 : 0,
+      shadowOffset: { width: 0, height: 6 },
+      shadowRadius: active ? 10 : 0,
     }),
     filterBadge: {
       position: "absolute",

@@ -14,6 +14,7 @@ import {
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
 
 import { useAppTheme } from "../../theme";
 import {
@@ -218,6 +219,50 @@ export default function AccountScreen() {
             <Text style={styles.title}>Account & preferences</Text>
             <Text style={styles.subtitle}>Personalize how your finance world looks.</Text>
           </View>
+
+          <LinearGradient
+            colors={[theme.colors.primary, theme.colors.secondary]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.heroCard}
+          >
+            <View style={styles.heroTopRow}>
+              <View>
+                <Text style={styles.heroLabel}>Active profile</Text>
+                <Text style={styles.heroValue}>{profile.name}</Text>
+                <Text style={styles.heroSub}>{currency || "USD"} base currency</Text>
+              </View>
+              <Pressable
+                style={styles.heroAction}
+                onPress={() => setThemeMode(themeMode === "dark" ? "light" : "dark")}
+              >
+                <Ionicons
+                  name={themeMode === "dark" ? "sunny" : "moon"}
+                  size={18}
+                  color={theme.colors.primary}
+                />
+                <Text style={styles.heroActionText}>
+                  {themeMode === "dark" ? "Light" : "Dark"} mode
+                </Text>
+              </Pressable>
+            </View>
+            <View style={styles.heroStats}>
+              <View style={styles.heroStat}>
+                <Text style={styles.heroStatLabel}>Accounts</Text>
+                <Text style={styles.heroStatValue}>{accounts.length}</Text>
+              </View>
+              <View style={styles.heroStat}>
+                <Text style={styles.heroStatLabel}>Goals</Text>
+                <Text style={styles.heroStatValue}>{budgetGoals.length}</Text>
+              </View>
+              <View style={styles.heroStat}>
+                <Text style={styles.heroStatLabel}>Theme</Text>
+                <Text style={styles.heroStatValue}>
+                  {themeMode === "dark" ? "Dark" : "Light"}
+                </Text>
+              </View>
+            </View>
+          </LinearGradient>
 
           <View style={[theme.components.surface, styles.sectionCard]}>
             <Text style={styles.sectionTitle}>Profile</Text>
@@ -670,6 +715,76 @@ const createStyles = (
     subtitle: {
       ...theme.typography.subtitle,
       fontSize: 14,
+    },
+    heroCard: {
+      borderRadius: theme.radii.lg * 1.2,
+      padding: theme.spacing.xl,
+      borderWidth: 1,
+      borderColor: `${theme.colors.border}55`,
+      shadowColor: theme.colors.primary,
+      shadowOpacity: 0.25,
+      shadowOffset: { width: 0, height: 10 },
+      shadowRadius: 24,
+      gap: theme.spacing.lg,
+    },
+    heroTopRow: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "flex-start",
+      gap: theme.spacing.md,
+    },
+    heroLabel: {
+      fontSize: 12,
+      color: theme.colors.text,
+      letterSpacing: 0.5,
+      textTransform: "uppercase",
+    },
+    heroValue: {
+      fontSize: 24,
+      fontWeight: "700",
+      color: theme.colors.text,
+    },
+    heroSub: {
+      fontSize: 14,
+      color: theme.colors.text,
+      opacity: 0.8,
+    },
+    heroAction: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+      backgroundColor: theme.colors.backgroundAlt,
+      paddingHorizontal: theme.spacing.md,
+      paddingVertical: theme.spacing.sm,
+      borderRadius: theme.radii.pill,
+    },
+    heroActionText: {
+      fontSize: 14,
+      fontWeight: "600",
+      color: theme.colors.primary,
+    },
+    heroStats: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      gap: theme.spacing.md,
+    },
+    heroStat: {
+      flex: 1,
+      backgroundColor: "rgba(0,0,0,0.2)",
+      borderRadius: theme.radii.md,
+      padding: theme.spacing.md,
+    },
+    heroStatLabel: {
+      fontSize: 12,
+      color: theme.colors.text,
+      opacity: 0.75,
+      textTransform: "uppercase",
+      letterSpacing: 0.5,
+    },
+    heroStatValue: {
+      fontSize: 18,
+      fontWeight: "700",
+      color: theme.colors.text,
     },
     sectionCard: {
       gap: theme.spacing.lg,

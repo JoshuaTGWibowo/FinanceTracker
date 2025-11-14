@@ -75,6 +75,7 @@ export default function TabsLayout() {
         tabBarActiveTintColor: theme.colors.primary,
         tabBarInactiveTintColor: theme.colors.textMuted,
         tabBarStyle: styles.tabBar,
+        tabBarBackground: () => <View style={styles.tabBarBackground} />, 
         tabBarLabelStyle: styles.tabLabel,
         tabBarItemStyle: styles.tabItem,
       }}
@@ -159,7 +160,7 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>) =>
       right: 12,
       bottom: Platform.select({ ios: 26, default: 18 }),
       alignSelf: "center",
-      backgroundColor: theme.colors.surface,
+      backgroundColor: "transparent",
       borderTopWidth: 0,
       borderRadius: theme.radii.lg + 6,
       elevation: 12,
@@ -171,6 +172,13 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>) =>
       paddingHorizontal: 4,
       paddingTop: 6,
       paddingBottom: Platform.select({ ios: 16, default: 10 }),
+    },
+    tabBarBackground: {
+      backgroundColor: theme.colors.frosted,
+      borderRadius: theme.radii.lg + 6,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      flex: 1,
     },
     tabLabel: {
       fontSize: 10,

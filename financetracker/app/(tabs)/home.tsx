@@ -4,6 +4,7 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 import { Ionicons } from "@expo/vector-icons";
 import dayjs from "dayjs";
 import { Link, useRouter } from "expo-router";
+import { LinearGradient } from "expo-linear-gradient";
 
 import { DonutChart } from "../../components/DonutChart";
 import { SpendingBarChart, SpendingLineChart } from "../../components/SpendingCharts";
@@ -396,8 +397,6 @@ export default function HomeScreen() {
 
   const netChangeThisMonth = summary.income - summary.expense;
   const netIsPositive = netChangeThisMonth >= 0;
-  const netBadgeColor = netIsPositive ? theme.colors.success : theme.colors.danger;
-  const netBadgeBackground = netIsPositive ? "rgba(52,211,153,0.16)" : "rgba(251,113,133,0.16)";
   const netIcon = netIsPositive ? "trending-up" : "trending-down";
   const netLabel = `${formatCurrency(netChangeThisMonth, currency, { signDisplay: "always" })} this month`;
 
@@ -426,6 +425,50 @@ export default function HomeScreen() {
     [recurringTransactions],
   );
 
+  const averageDailySpend = periodDailySpending.length
+    ? periodExpense / periodDailySpending.length
+    : 0;
+  const nextRecurring = upcomingRecurring[0];
+  const topCategoryHighlight = topSpendingEntries.find((entry) => entry.key !== "__others__");
+  const comparisonLabel = overviewPeriod === "week" ? "week" : "month";
+  const trendDescriptor = spentLess
+    ? `${formatCurrency(Math.abs(trendDelta), currency)} less vs last ${comparisonLabel}`
+    : `${formatCurrency(Math.abs(trendDelta), currency)} more vs last ${comparisonLabel}`;
+  const insightCards = [
+    {
+      key: "period",
+      label: overviewPeriod === "week" ? "This week" : "This month",
+      value: formattedPeriodExpenses,
+      meta: trendDescriptor,
+    },
+    {
+      key: "average",
+      label: "Avg daily spend",
+      value: formatCurrency(averageDailySpend, currency, {
+        maximumFractionDigits: 0,
+      }),
+      meta: overviewPeriod === "week" ? "7-day glide" : "30-day glide",
+    },
+    {
+      key: "focus",
+      label: nextRecurring
+        ? nextRecurring.category
+        : topCategoryHighlight?.label ?? "Top category",
+      value: nextRecurring
+        ? formatCurrency(nextRecurring.amount, currency)
+        : topCategoryHighlight
+          ? `${topCategoryHighlight.percentage}% of spend`
+          : "Log a few expenses",
+      meta: nextRecurring
+        ? `${dayjs(nextRecurring.nextOccurrence).format("MMM D")} • ${
+            nextRecurring.frequency.charAt(0).toUpperCase() + nextRecurring.frequency.slice(1)
+          }`
+        : topCategoryHighlight
+          ? "Leading category"
+          : "Track to unlock insights",
+    },
+  ];
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView
@@ -433,29 +476,98 @@ export default function HomeScreen() {
         contentInsetAdjustmentBehavior="automatic"
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.header}>
-          <Text style={styles.hello}>Welcome back, {profile.name.split(" ")[0]}</Text>
-          <Text style={styles.subtitle}>Here’s a tidy look at your money this month.</Text>
+        <View style={styles.headerRow}>
+          <View>
+            <Text style={styles.hello}>Welcome back, {profile.name.split(" ")[0]}</Text>
+            <Text style={styles.subtitle}>Your new money cockpit is ready.</Text>
+          </View>
+          <View style={styles.headerBadge}>
+            <Ionicons name="sparkles" size={16} color={theme.colors.accent} />
+            <Text style={styles.headerBadgeText}>Pulse mode</Text>
+          </View>
         </View>
 
+        <LinearGradient
+          colors={[theme.colors.primary, theme.colors.secondary]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.heroCard}
+        >
+          <View style={styles.heroTopRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.balanceLabel}>Total balance</Text>
+              <Text style={styles.heroBalance}>{showBalance ? formattedBalance : "••••••"}</Text>
+              <Text style={styles.heroMeta}>{dayjs().format("MMMM D, YYYY")}</Text>
+            </View>
+            <Pressable
+              style={styles.heroAction}
+              onPress={() => router.push("/transactions/new")}
+              accessibilityRole="button"
+            >
+              <Ionicons name="add" size={18} color={theme.colors.primary} />
+              <Text style={styles.heroActionText}>Log activity</Text>
+            </Pressable>
+          </View>
+          <View style={styles.heroBadgeRow}>
+            <Pressable
+              onPress={() => setShowBalance((prev) => !prev)}
+              style={[styles.metaBadge, styles.heroBadge]}
+              accessibilityRole="button"
+              accessibilityLabel={showBalance ? "Hide balance" : "Show balance"}
+            >
+              <Ionicons name={showBalance ? netIcon : "eye-off"} size={16} color={theme.colors.backgroundAlt} />
+              <Text style={styles.heroBadgeText}>{showBalance ? netLabel : "Balance hidden"}</Text>
+            </Pressable>
+            <Text style={styles.heroContext}>
+              {selectedAccount ? resolveAccountName(selectedAccount.id) : "Viewing all accounts"}
+            </Text>
+          </View>
+          <View style={styles.heroBreakdown}>
+            <View style={styles.balanceColumn}>
+              <Text style={styles.breakdownLabel}>Opening</Text>
+              <Text style={styles.breakdownValue}>
+                {showBalance ? formatCurrency(summary.openingBalance, currency) : "••••"}
+              </Text>
+            </View>
+            <View style={styles.balanceColumn}>
+              <Text style={styles.breakdownLabel}>Closing</Text>
+              <Text style={styles.breakdownValue}>
+                {showBalance
+                  ? formatCurrency(summary.openingBalance + summary.monthNet, currency)
+                  : "••••"}
+              </Text>
+            </View>
+            <View style={styles.balanceColumn}>
+              <Text style={styles.breakdownLabel}>Net change</Text>
+              <Text style={styles.breakdownValue}>{formatCurrency(netChangeThisMonth, currency)}</Text>
+            </View>
+          </View>
+        </LinearGradient>
+
+        <View style={styles.sectionHeaderRow}>
+          <Text style={styles.sectionTitle}>Accounts</Text>
+          <Text style={styles.sectionCaption}>
+            {selectedAccount ? resolveAccountName(selectedAccount.id) : "All balances"}
+          </Text>
+        </View>
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.accountChipRow}
         >
-            <Pressable
-              onPress={() => setSelectedAccountId(null)}
-              style={[styles.accountChip, !selectedAccountId && styles.accountChipActive]}
-            >
-              <Text style={styles.accountChipTitle}>All accounts</Text>
-              <Text style={styles.accountChipBalance}>
-                {formatCurrency(allAccountsBalance, baseCurrency)}
-              </Text>
-            </Pressable>
-            {accounts.map((account) => {
-              const active = selectedAccountId === account.id;
-              return (
-                <Pressable
+          <Pressable
+            onPress={() => setSelectedAccountId(null)}
+            style={[styles.accountChip, !selectedAccountId && styles.accountChipActive]}
+          >
+            <Text style={styles.accountChipTitle}>All accounts</Text>
+            <Text style={styles.accountChipBalance}>
+              {formatCurrency(allAccountsBalance, baseCurrency)}
+            </Text>
+          </Pressable>
+          {accounts.map((account) => {
+            const active = selectedAccountId === account.id;
+            return (
+              <Pressable
                 key={account.id}
                 onPress={() => setSelectedAccountId(account.id)}
                 style={[
@@ -463,62 +575,24 @@ export default function HomeScreen() {
                   active && styles.accountChipActive,
                   account.isArchived && styles.accountChipArchived,
                 ]}
-                  >
-                    <Text style={styles.accountChipTitle}>{account.name}</Text>
-                    <Text style={styles.accountChipBalance}>
-                      {formatCurrency(account.balance, account.currency || baseCurrency)}
-                    </Text>
-                  </Pressable>
-                );
-              })}
+              >
+                <Text style={styles.accountChipTitle}>{account.name}</Text>
+                <Text style={styles.accountChipBalance}>
+                  {formatCurrency(account.balance, account.currency || baseCurrency)}
+                </Text>
+              </Pressable>
+            );
+          })}
         </ScrollView>
 
-        <View style={[theme.components.card, styles.balanceCard]}>
-          <View style={styles.balanceHeader}>
-            <Text style={styles.balanceLabel}>Total balance</Text>
-            <Pressable
-              onPress={() => setShowBalance((prev) => !prev)}
-              hitSlop={8}
-              accessibilityRole="button"
-              accessibilityLabel={showBalance ? "Hide balance" : "Show balance"}
-            >
-              <Ionicons name={showBalance ? "eye" : "eye-off"} size={18} color={theme.colors.textMuted} />
-            </Pressable>
-          </View>
-          <Text style={styles.balanceValue}>{showBalance ? formattedBalance : "••••••"}</Text>
-          <View style={styles.balanceMetaRow}>
-            <View style={[styles.metaBadge, { backgroundColor: netBadgeBackground }]}>
-              <Ionicons name={netIcon} size={16} color={netBadgeColor} />
-              <Text style={[styles.metaText, { color: netBadgeColor }]}>
-                {showBalance ? netLabel : "Balance hidden"}
-              </Text>
+        <View style={styles.insightGrid}>
+          {insightCards.map((card) => (
+            <View key={card.key} style={styles.insightCard}>
+              <Text style={styles.insightLabel}>{card.label}</Text>
+              <Text style={styles.insightValue}>{card.value}</Text>
+              <Text style={styles.insightMeta}>{card.meta}</Text>
             </View>
-            <Text style={styles.metaCaption}>{dayjs().format("MMMM YYYY")}</Text>
-          </View>
-          <View style={styles.balanceBreakdown}>
-            <View style={styles.balanceColumn}>
-              <Text style={styles.breakdownLabel}>Opening balance</Text>
-              <Text style={styles.breakdownValue}>
-                {showBalance ? formatCurrency(summary.openingBalance, currency) : "••••"}
-              </Text>
-            </View>
-            <View style={styles.balanceColumn}>
-              <Text style={styles.breakdownLabel}>Ending balance</Text>
-              <Text style={styles.breakdownValue}>
-                {showBalance
-                  ? formatCurrency(summary.openingBalance + summary.monthNet, currency)
-                  : "••••"}
-              </Text>
-            </View>
-          </View>
-          <Pressable
-            style={styles.reportsLink}
-            accessibilityRole="button"
-            onPress={() => router.push("/(tabs)/transactions")}
-          >
-            <Text style={styles.reportsText}>View reports</Text>
-            <Ionicons name="chevron-forward" size={16} color={theme.colors.primary} />
-          </Pressable>
+          ))}
         </View>
 
         <View style={[theme.components.surface, styles.monthlyReport]}>
@@ -898,33 +972,71 @@ const createStyles = (
       paddingBottom: theme.spacing.xxl + 96 + insets.bottom,
       gap: theme.spacing.lg,
     },
-    header: {
-      gap: theme.spacing.xs,
+    headerRow: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "flex-start",
+      gap: theme.spacing.sm,
+    },
+    headerBadge: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+      paddingHorizontal: theme.spacing.md,
+      paddingVertical: theme.spacing.xs,
+      borderRadius: theme.radii.pill,
+      backgroundColor: theme.colors.surfaceElevated,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+    },
+    headerBadgeText: {
+      fontSize: 13,
+      fontWeight: "600",
+      color: theme.colors.accent,
+      letterSpacing: 0.4,
     },
     hello: {
       ...theme.typography.title,
-      fontSize: 24,
+      fontSize: 26,
     },
     subtitle: {
       ...theme.typography.subtitle,
-      fontSize: 14,
+      fontSize: 15,
+    },
+    heroCard: {
+      borderRadius: theme.radii.lg * 1.2,
+      padding: theme.spacing.xl,
+      gap: theme.spacing.lg,
+      borderWidth: 1,
+      borderColor: `${theme.colors.border}55`,
+      shadowColor: theme.colors.primary,
+      shadowOpacity: 0.35,
+      shadowOffset: { width: 0, height: 12 },
+      shadowRadius: 24,
+      elevation: 6,
+    },
+    heroTopRow: {
+      flexDirection: "row",
+      alignItems: "flex-start",
+      gap: theme.spacing.lg,
     },
     accountChipRow: {
       flexDirection: "row",
       gap: theme.spacing.sm,
       marginBottom: theme.spacing.sm,
+      paddingHorizontal: theme.spacing.xs,
     },
     accountChip: {
       paddingHorizontal: theme.spacing.md,
       paddingVertical: theme.spacing.sm,
       borderRadius: theme.radii.lg,
-      backgroundColor: theme.colors.surface,
+      backgroundColor: theme.colors.frosted,
       borderWidth: 1,
-      borderColor: theme.colors.border,
+      borderColor: `${theme.colors.border}AA`,
     },
     accountChipActive: {
-      borderColor: theme.colors.primary,
-      backgroundColor: `${theme.colors.primary}22`,
+      borderColor: theme.colors.accent,
+      backgroundColor: `${theme.colors.accent}22`,
     },
     accountChipArchived: {
       opacity: 0.6,
@@ -938,29 +1050,61 @@ const createStyles = (
       fontSize: 12,
       color: theme.colors.textMuted,
     },
-    balanceCard: {
-      gap: theme.spacing.lg,
-    },
-    balanceHeader: {
-      flexDirection: "row",
-      alignItems: "center",
-      justifyContent: "space-between",
-    },
     balanceLabel: {
       ...theme.typography.subtitle,
       textTransform: "uppercase",
       letterSpacing: 1.2,
       fontSize: 12,
-    },
-    balanceValue: {
-      fontSize: 36,
-      fontWeight: "700",
       color: theme.colors.text,
     },
-    balanceMetaRow: {
+    heroBalance: {
+      fontSize: 40,
+      fontWeight: "700",
+      color: theme.colors.text,
+      letterSpacing: -0.5,
+    },
+    heroMeta: {
+      fontSize: 14,
+      color: theme.colors.text,
+      opacity: 0.85,
+      marginTop: 2,
+    },
+    heroAction: {
       flexDirection: "row",
-      justifyContent: "space-between",
       alignItems: "center",
+      gap: 8,
+      backgroundColor: theme.colors.backgroundAlt,
+      paddingHorizontal: theme.spacing.lg,
+      paddingVertical: theme.spacing.sm,
+      borderRadius: theme.radii.pill,
+    },
+    heroActionText: {
+      fontSize: 14,
+      fontWeight: "600",
+      color: theme.colors.primary,
+    },
+    heroBadgeRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: theme.spacing.md,
+    },
+    heroBadge: {
+      backgroundColor: "rgba(255,255,255,0.18)",
+      borderWidth: 0,
+      paddingHorizontal: theme.spacing.md,
+      paddingVertical: theme.spacing.xs,
+    },
+    heroBadgeText: {
+      color: theme.colors.text,
+      fontWeight: "600",
+    },
+    heroContext: {
+      fontSize: 14,
+      color: theme.colors.text,
+      opacity: 0.85,
+      flex: 1,
+      textAlign: "right",
     },
     metaBadge: {
       flexDirection: "row",
@@ -974,38 +1118,58 @@ const createStyles = (
       fontSize: 12,
       fontWeight: "600",
     },
-    metaCaption: {
-      ...theme.typography.subtitle,
-      fontSize: 12,
-    },
-    balanceBreakdown: {
+    heroBreakdown: {
       flexDirection: "row",
       justifyContent: "space-between",
-      gap: theme.spacing.lg,
+      gap: theme.spacing.md,
     },
     balanceColumn: {
       flex: 1,
       gap: 4,
     },
     breakdownLabel: {
-      ...theme.typography.label,
+      fontSize: 11,
+      fontWeight: "700",
       letterSpacing: 1.2,
+      textTransform: "uppercase",
+      color: theme.colors.text,
     },
     breakdownValue: {
       fontSize: 18,
       fontWeight: "600",
       color: theme.colors.text,
     },
-    reportsLink: {
+    insightGrid: {
       flexDirection: "row",
-      alignItems: "center",
-      justifyContent: "flex-start",
-      gap: 8,
+      flexWrap: "wrap",
+      gap: theme.spacing.md,
     },
-    reportsText: {
-      fontSize: 14,
+    insightCard: {
+      flexGrow: 1,
+      flexBasis: "30%",
+      minWidth: 150,
+      borderRadius: theme.radii.md,
+      padding: theme.spacing.lg,
+      backgroundColor: theme.colors.surfaceElevated,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      gap: 6,
+    },
+    insightLabel: {
+      fontSize: 12,
       fontWeight: "600",
-      color: theme.colors.primary,
+      letterSpacing: 0.8,
+      textTransform: "uppercase",
+      color: theme.colors.textMuted,
+    },
+    insightValue: {
+      fontSize: 22,
+      fontWeight: "700",
+      color: theme.colors.text,
+    },
+    insightMeta: {
+      fontSize: 13,
+      color: theme.colors.textMuted,
     },
     monthlyReport: {
       gap: theme.spacing.md,
