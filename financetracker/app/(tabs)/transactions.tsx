@@ -25,6 +25,7 @@ import {
   type TransactionVisualVariant,
 } from "../../lib/transactions";
 import { truncateWords } from "../../lib/text";
+import { buildMonthlyPeriods } from "../../lib/periods";
 
 const formatCurrency = (
   value: number,
@@ -98,29 +99,6 @@ const formatPercentage = (current: number, previous: number): string => {
   return `${change >= 0 ? "+" : ""}${change.toFixed(1)}%`;
 };
 
-interface PeriodOption {
-  key: string;
-  label: string;
-  range: () => { start: Dayjs; end: Dayjs };
-}
-
-const MONTHS_TO_DISPLAY = 12;
-
-const buildMonthlyPeriods = (): PeriodOption[] => {
-  const currentMonth = dayjs().startOf("month");
-  return Array.from({ length: MONTHS_TO_DISPLAY }).map((_, index) => {
-    const month = currentMonth.subtract(MONTHS_TO_DISPLAY - 1 - index, "month");
-    return {
-      key: month.format("YYYY-MM"),
-      label: month.format("MMM YYYY"),
-      range: () => ({ 
-        start: month.startOf("month"), 
-        end: month.endOf("month") 
-      }),
-    };
-  });
-};
-
 export default function TransactionsScreen() {
   const theme = useAppTheme();
   const transactions = useFinanceStore((state) => state.transactions);
@@ -171,7 +149,6 @@ export default function TransactionsScreen() {
   const [searchVisible, setSearchVisible] = useState(false);
   const [draftSearchTerm, setDraftSearchTerm] = useState("");
   const [filtersExpanded, setFiltersExpanded] = useState(false);
-  const [categoriesExpanded, setCategoriesExpanded] = useState(false);
   const [minAmount, setMinAmount] = useState("");
   const [maxAmount, setMaxAmount] = useState("");
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
@@ -180,6 +157,25 @@ export default function TransactionsScreen() {
   const [showStartPicker, setShowStartPicker] = useState(false);
   const [showEndPicker, setShowEndPicker] = useState(false);
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
+  const [recurringExpanded, setRecurringExpanded] = useState(false);
+
+  useEffect(() => {
+    if (!recurringTransactions.length) {
+      return;
+    }
+
+    const today = dayjs().startOf("day");
+    recurringTransactions.forEach((item) => {
+      if (!item.isActive) {
+        return;
+      }
+
+      const occurrence = dayjs(item.nextOccurrence);
+      if (occurrence.isSame(today, "day")) {
+        logRecurringTransaction(item.id);
+      }
+    });
+  }, [recurringTransactions, logRecurringTransaction]);
 
   useEffect(() => {
     if (!categoryParam) {
@@ -300,7 +296,7 @@ export default function TransactionsScreen() {
 
   const hasActiveFilters = activeFilters.length > 0;
 
-  const { sections, summary, expenseBreakdown, filteredRecurring } = useMemo(() => {
+  const { sections, summary, filteredRecurring } = useMemo(() => {
     const period = periodOptions.find((option) => option.key === selectedPeriod) ?? periodOptions[periodOptions.length - 1];
     const { start, end } = period.range();
 
@@ -474,28 +470,12 @@ export default function TransactionsScreen() {
       });
     const closingBalance = openingBalance + netChange;
 
-    // Expense breakdown
-    const expenseMap = reportable.reduce((acc, transaction) => {
-      if (transaction.type !== "expense") return acc;
-      const current = acc.get(transaction.category) ?? 0;
-      acc.set(transaction.category, current + transaction.amount);
-      return acc;
-    }, new Map<string, number>());
-
-    const breakdown = Array.from(expenseMap.entries())
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 5)
-      .map(([category, amount]) => ({
-        category,
-        amount,
-        percentage: totals.expense ? Math.round((amount / totals.expense) * 100) : 0,
-      }));
-
     // Recurring transactions
     const recurring = recurringTransactions.filter((item) => {
       const occurrence = dayjs(item.nextOccurrence);
       const matchesAccount =
-        !selectedAccountId || item.accountId === selectedAccountId || item.toAccountId === selectedAccountId;
+        (!selectedAccountId || item.accountId === selectedAccountId || item.toAccountId === selectedAccountId) &&
+        item.isActive;
       return matchesAccount && !occurrence.isBefore(start) && !occurrence.isAfter(end);
     });
 
@@ -509,7 +489,6 @@ export default function TransactionsScreen() {
         closingBalance,
         percentageChange: formatPercentage(closingBalance, openingBalance),
       },
-      expenseBreakdown: breakdown,
       filteredRecurring: recurring,
     };
   }, [
@@ -601,6 +580,21 @@ export default function TransactionsScreen() {
                   </Text>
                 </View>
               </View>
+
+              <Pressable
+                style={styles.reportButton}
+                onPress={() => {
+                  const params: Record<string, string> = { period: selectedPeriod };
+                  if (selectedAccountId) {
+                    params.accountId = selectedAccountId;
+                  }
+                  router.push({ pathname: "/transactions/report", params });
+                }}
+                accessibilityRole="button"
+              >
+                <Text style={styles.reportButtonText}>View report for this period</Text>
+                <Ionicons name="arrow-forward" size={16} color={theme.colors.background} />
+              </Pressable>
             </View>
 
             {/* Period Selector */}
@@ -743,68 +737,46 @@ export default function TransactionsScreen() {
               })}
             </ScrollView>
 
-            {/* Expense Breakdown */}
-            {expenseBreakdown.length > 0 && (
-              <Pressable
-                style={styles.breakdownCard}
-                onPress={() => setCategoriesExpanded(!categoriesExpanded)}
-              >
-                <View style={styles.breakdownHeader}>
-                  <Text style={styles.breakdownTitle}>Top Categories</Text>
-                  <Ionicons
-                    name={categoriesExpanded ? "chevron-up" : "chevron-down"}
-                    size={16}
-                    color={theme.colors.textMuted}
-                  />
-                </View>
-                {categoriesExpanded && (
-                  <View style={styles.breakdownContent}>
-                    {expenseBreakdown.map((item) => (
-                      <View key={item.category} style={styles.breakdownRow}>
-                        <View style={styles.breakdownInfo}>
-                          <Text style={styles.breakdownCategory}>{item.category}</Text>
-                          <Text style={styles.breakdownAmount}>
-                            {formatCurrency(item.amount, currency || "USD")}
-                          </Text>
-                        </View>
-                        <View style={styles.progressBar}>
-                          <View style={styles.progressFill(item.percentage)} />
-                        </View>
-                        <Text style={styles.breakdownPercent}>{item.percentage}%</Text>
-                      </View>
-                    ))}
-                  </View>
-                )}
-              </Pressable>
-            )}
-
             {/* Recurring Transactions */}
             {filteredRecurring.length > 0 && (
               <View style={styles.recurringSection}>
-                <Text style={styles.sectionTitle}>
-                  Upcoming Recurring ({filteredRecurring.length})
-                </Text>
-                {filteredRecurring.map((item) => (
-                  <View key={item.id} style={styles.recurringItem}>
-                    <View style={styles.recurringInfo}>
-                      <Text style={styles.recurringCategory}>{item.category}</Text>
-                      {item.note ? (
-                        <Text style={styles.recurringNote} numberOfLines={2}>
-                          {truncateWords(item.note, 10)}
+                <Pressable
+                  onPress={() => setRecurringExpanded((prev) => !prev)}
+                  style={styles.recurringToggle}
+                  accessibilityRole="button"
+                  accessibilityState={{ expanded: recurringExpanded }}
+                >
+                  <Text style={styles.sectionTitle}>
+                    Upcoming Recurring ({filteredRecurring.length})
+                  </Text>
+                  <Ionicons
+                    name={recurringExpanded ? "chevron-up" : "chevron-down"}
+                    size={18}
+                    color={theme.colors.textMuted}
+                  />
+                </Pressable>
+                {recurringExpanded &&
+                  filteredRecurring.map((item) => (
+                    <View key={item.id} style={styles.recurringItem}>
+                      <View style={styles.recurringInfo}>
+                        <Text style={styles.recurringCategory}>{item.category}</Text>
+                        {item.note ? (
+                          <Text style={styles.recurringNote} numberOfLines={2}>
+                            {truncateWords(item.note, 10)}
+                          </Text>
+                        ) : null}
+                        <Text style={styles.recurringDate}>
+                          {dayjs(item.nextOccurrence).format("MMM D")} • {item.frequency}
                         </Text>
-                      ) : null}
-                      <Text style={styles.recurringDate}>
-                        {dayjs(item.nextOccurrence).format("MMM D")} • {item.frequency}
-                      </Text>
+                      </View>
+                      <Pressable
+                        onPress={() => logRecurringTransaction(item.id)}
+                        style={styles.logButton}
+                      >
+                        <Text style={styles.logButtonText}>Log</Text>
+                      </Pressable>
                     </View>
-                    <Pressable
-                      onPress={() => logRecurringTransaction(item.id)}
-                      style={styles.logButton}
-                    >
-                      <Text style={styles.logButtonText}>Log</Text>
-                    </Pressable>
-                  </View>
-                ))}
+                  ))}
               </View>
             )}
 
@@ -1287,67 +1259,31 @@ const createStyles = (theme: any, insets: any) =>
       color: `${theme.colors.background}CC`,
     },
     
-    // Breakdown Card
-    breakdownCard: {
-      backgroundColor: theme.colors.surface,
-      borderRadius: 16,
-      padding: 16,
-      marginBottom: 16,
-    },
-    breakdownHeader: {
+    reportButton: {
+      marginTop: 16,
       flexDirection: "row",
-      justifyContent: "space-between",
+      justifyContent: "center",
       alignItems: "center",
-    },
-    breakdownTitle: {
-      fontSize: 12,
-      fontWeight: "600",
-      color: theme.colors.textMuted,
-      textTransform: "uppercase",
-      letterSpacing: 0.5,
-    },
-    breakdownContent: {
-      marginTop: 12,
-    },
-    breakdownRow: {
-      marginBottom: 12,
-    },
-    breakdownInfo: {
-      flexDirection: "row",
-      justifyContent: "space-between",
-      marginBottom: 6,
-    },
-    breakdownCategory: {
-      fontSize: 14,
-      fontWeight: "600",
-      color: theme.colors.text,
-    },
-    breakdownAmount: {
-      fontSize: 14,
-      fontWeight: "600",
-      color: theme.colors.text,
-    },
-    progressBar: {
-      height: 4,
-      backgroundColor: theme.colors.border,
-      borderRadius: 2,
-      overflow: "hidden",
-      marginBottom: 4,
-    },
-    progressFill: (percentage: number) => ({
-      height: "100%",
-      width: `${percentage}%`,
+      gap: 8,
+      paddingVertical: 12,
+      borderRadius: 12,
       backgroundColor: theme.colors.primary,
-      borderRadius: 2,
-    }),
-    breakdownPercent: {
-      fontSize: 11,
-      color: theme.colors.textMuted,
+    },
+    reportButtonText: {
+      fontSize: 14,
+      fontWeight: "600",
+      color: theme.colors.background,
     },
     
     // Recurring Section
     recurringSection: {
       marginBottom: 24,
+    },
+    recurringToggle: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      marginBottom: 12,
     },
     sectionTitle: {
       fontSize: 12,

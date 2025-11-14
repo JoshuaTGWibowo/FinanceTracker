@@ -13,6 +13,8 @@ export interface DonutDatum {
 interface DonutChartProps {
   data: DonutDatum[];
   style?: ViewStyle;
+  centerLabel?: string;
+  formatCenterValue?: (value: number) => string;
 }
 
 const RADIUS = 60;
@@ -35,7 +37,7 @@ const describeArc = (x: number, y: number, radius: number, startAngle: number, e
   return [`M ${start.x} ${start.y}`, `A ${radius} ${radius} 0 ${largeArcFlag} 0 ${end.x} ${end.y}`].join(" ");
 };
 
-const DonutChartComponent = ({ data, style }: DonutChartProps) => {
+const DonutChartComponent = ({ data, style, centerLabel = "total spend", formatCenterValue }: DonutChartProps) => {
   const theme = useAppTheme();
 
   const { segments, total } = useMemo(() => {
@@ -72,6 +74,10 @@ const DonutChartComponent = ({ data, style }: DonutChartProps) => {
     return { segments, total: totalValue };
   }, [data, theme.colors]);
 
+  const valueFormatter = formatCenterValue
+    ? formatCenterValue
+    : (value: number) => (value ? Math.round(value).toLocaleString() : "0");
+
   return (
     <View style={style}>
       <Svg width={(RADIUS + STROKE_WIDTH) * 2} height={(RADIUS + STROKE_WIDTH) * 2}>
@@ -97,7 +103,7 @@ const DonutChartComponent = ({ data, style }: DonutChartProps) => {
           fill={theme.colors.text}
           textAnchor="middle"
         >
-          {total ? Math.round(total).toLocaleString() : "0"}
+          {valueFormatter(total)}
         </SvgText>
         <SvgText
           x={RADIUS + STROKE_WIDTH}
@@ -106,7 +112,7 @@ const DonutChartComponent = ({ data, style }: DonutChartProps) => {
           fill={theme.colors.textMuted}
           textAnchor="middle"
         >
-          total spend
+          {centerLabel}
         </SvgText>
       </Svg>
     </View>
