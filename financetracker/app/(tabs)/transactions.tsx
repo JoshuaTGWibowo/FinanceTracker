@@ -166,6 +166,11 @@ export default function TransactionsScreen() {
 
     return () => clearTimeout(timeout);
   }, []);
+
+  const selectedPeriodLabel = useMemo(() => {
+    const selected = periodOptions.find((option) => option.key === selectedPeriod);
+    return selected?.label ?? periodOptions[periodOptions.length - 1]?.label ?? "Current period";
+  }, [periodOptions, selectedPeriod]);
   
   const [searchTerm, setSearchTerm] = useState("");
   const [searchVisible, setSearchVisible] = useState(false);
@@ -539,6 +544,14 @@ export default function TransactionsScreen() {
     });
   }, [currency, summary.closingBalance]);
 
+  const trackedDays = sections.length;
+  const averageDailySpend = trackedDays ? summary.expense / trackedDays : 0;
+  const positiveDays = sections.reduce((acc, section) => (section.dailyNet >= 0 ? acc + 1 : acc), 0);
+  const positiveDayPercentage = trackedDays
+    ? Math.round((positiveDays / trackedDays) * 100)
+    : 0;
+  const topCategory = expenseBreakdown[0];
+
   const balanceFontSize = useMemo(() => {
     const digitCount = closingBalanceDisplay.replace(/[^0-9]/g, "").length;
     if (digitCount <= 6) return 32;
@@ -559,10 +572,11 @@ export default function TransactionsScreen() {
           <View style={styles.header}>
             {/* Primary Balance Display */}
             <View style={styles.balanceCard}>
+              <View style={styles.balanceGlow} />
               <View style={styles.balanceHeader}>
-                <View>
-                  <Text style={styles.balanceLabel}>Current Balance</Text>
-                  <Text style={styles.balanceValue(balanceFontSize)}>{closingBalanceDisplay}</Text>
+                <View style={styles.balanceBadge}>
+                  <Ionicons name="calendar-outline" size={14} color="#fff" />
+                  <Text style={styles.balanceBadgeText}>{selectedPeriodLabel}</Text>
                 </View>
                 <View style={styles.changeBadge(summary.net)}>
                   <Ionicons
@@ -573,29 +587,32 @@ export default function TransactionsScreen() {
                   <Text style={styles.changeValue(summary.net)}>
                     {formatCurrency(Math.abs(summary.net), currency || "USD")}
                   </Text>
-                  <Text style={styles.changePercent}>
-                    {summary.percentageChange}
-                  </Text>
+                  <Text style={styles.changePercent}>{summary.percentageChange}</Text>
                 </View>
               </View>
-              
+              <Text style={styles.balanceLabel}>Total balance</Text>
+              <Text style={styles.balanceValue(balanceFontSize)}>{closingBalanceDisplay}</Text>
+              <Text style={styles.balanceSubtitle}>
+                {visibleAccounts.length} active
+                {" "}
+                {visibleAccounts.length === 1 ? "account" : "accounts"}
+              </Text>
+
               <View style={styles.metricsRow}>
-                <View style={styles.metric}>
+                <View style={[styles.metric, styles.metricCard]}>
                   <Text style={styles.metricLabel}>Income</Text>
                   <Text style={styles.metricValue(theme.colors.success)}>
                     {formatCurrency(summary.income, currency || "USD")}
                   </Text>
                 </View>
-                <View style={styles.metricDivider} />
-                <View style={styles.metric}>
+                <View style={[styles.metric, styles.metricCard]}>
                   <Text style={styles.metricLabel}>Expenses</Text>
                   <Text style={styles.metricValue(theme.colors.danger)}>
                     {formatCurrency(summary.expense, currency || "USD")}
                   </Text>
                 </View>
-                <View style={styles.metricDivider} />
-                <View style={styles.metric}>
-                  <Text style={styles.metricLabel}>Previous</Text>
+                <View style={[styles.metric, styles.metricCard]}>
+                  <Text style={styles.metricLabel}>Opening</Text>
                   <Text style={styles.metricValue(theme.colors.text)}>
                     {formatCurrency(summary.openingBalance, currency || "USD")}
                   </Text>
@@ -603,7 +620,53 @@ export default function TransactionsScreen() {
               </View>
             </View>
 
+            {/* Insight Badges */}
+            <View style={styles.insightsRow}>
+              <View style={styles.insightCard}>
+                <View style={styles.insightChip(theme.colors.danger)}>
+                  <Ionicons name="flash" size={14} color="#fff" />
+                </View>
+                <Text style={styles.insightLabel}>Avg daily spend</Text>
+                <Text style={styles.insightValue}>
+                  {formatCurrency(averageDailySpend || 0, currency || "USD", {
+                    maximumFractionDigits: 0,
+                  })}
+                </Text>
+                <Text style={styles.insightMeta}>
+                  Across {trackedDays || 0} day{trackedDays === 1 ? "" : "s"}
+                </Text>
+              </View>
+              <View style={styles.insightCard}>
+                <View style={styles.insightChip(theme.colors.primary)}>
+                  <Ionicons name="pricetag" size={14} color="#fff" />
+                </View>
+                <Text style={styles.insightLabel}>Top category</Text>
+                <Text style={styles.insightValue}>
+                  {topCategory ? topCategory.category : "No expenses"}
+                </Text>
+                <Text style={styles.insightMeta}>
+                  {topCategory
+                    ? `${topCategory.percentage}% of spending` 
+                    : "Record a purchase to unlock insights"}
+                </Text>
+              </View>
+              <View style={styles.insightCard}>
+                <View style={styles.insightChip(theme.colors.success)}>
+                  <Ionicons name="trending-up" size={14} color="#fff" />
+                </View>
+                <Text style={styles.insightLabel}>Positive days</Text>
+                <Text style={styles.insightValue}>{positiveDayPercentage}%</Text>
+                <View style={styles.insightProgressTrack}>
+                  <View style={styles.insightProgressFill(positiveDayPercentage)} />
+                </View>
+                <Text style={styles.insightMeta}>
+                  {positiveDays} of {trackedDays || 0} days closed net positive
+                </Text>
+              </View>
+            </View>
+
             {/* Period Selector */}
+            <Text style={styles.sectionCaption}>Statement period</Text>
             <ScrollView
               ref={scrollViewRef}
               horizontal
@@ -628,6 +691,7 @@ export default function TransactionsScreen() {
             </ScrollView>
 
             {/* Search and Filters */}
+            <Text style={styles.sectionCaption}>Search & Filters</Text>
             <View style={styles.searchContainer}>
               <Pressable
                 style={styles.searchField}
@@ -690,6 +754,7 @@ export default function TransactionsScreen() {
               </ScrollView>
             )}
 
+            <Text style={styles.sectionCaption}>Accounts</Text>
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
@@ -1064,35 +1129,62 @@ const createStyles = (theme: any, insets: any) =>
     
     // Balance Card
     balanceCard: {
-      backgroundColor: theme.colors.surface,
-      borderRadius: 20,
-      padding: 20,
-      marginBottom: 16,
-      shadowColor: "#000",
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.05,
-      shadowRadius: 8,
-      elevation: 2,
+      backgroundColor: theme.colors.surfaceElevated,
+      borderRadius: 28,
+      padding: 24,
+      marginBottom: 20,
+      overflow: "hidden",
+    },
+    balanceGlow: {
+      position: "absolute",
+      top: -40,
+      right: -40,
+      width: 200,
+      height: 200,
+      borderRadius: 100,
+      backgroundColor: `${theme.colors.primary}30`,
+      opacity: 0.6,
+      pointerEvents: "none",
     },
     balanceHeader: {
       flexDirection: "row",
       justifyContent: "space-between",
-      alignItems: "flex-start",
-      marginBottom: 20,
+      alignItems: "center",
+      marginBottom: 16,
+    },
+    balanceBadge: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      borderRadius: 999,
+      backgroundColor: theme.colors.primary,
+    },
+    balanceBadgeText: {
+      fontSize: 12,
+      fontWeight: "600",
+      color: "#fff",
+      letterSpacing: 0.5,
     },
     balanceLabel: {
-      fontSize: 12,
-      fontWeight: "500",
+      fontSize: 13,
+      fontWeight: "600",
       color: theme.colors.textMuted,
       textTransform: "uppercase",
-      letterSpacing: 0.5,
-      marginBottom: 4,
+      letterSpacing: 0.8,
+      marginBottom: 6,
     },
     balanceValue: (fontSize: number) => ({
       fontSize,
       fontWeight: "700",
       color: theme.colors.text,
     }),
+    balanceSubtitle: {
+      fontSize: 14,
+      color: theme.colors.textMuted,
+      marginTop: 4,
+    },
     changeBadge: (positive: number) => ({
       flexDirection: "row",
       alignItems: "center",
@@ -1116,31 +1208,96 @@ const createStyles = (theme: any, insets: any) =>
     },
     metricsRow: {
       flexDirection: "row",
-      alignItems: "center",
+      gap: 12,
+      marginTop: 20,
     },
     metric: {
       flex: 1,
-      alignItems: "center",
+    },
+    metricCard: {
+      padding: 14,
+      borderRadius: 16,
+      backgroundColor: theme.colors.surface,
+      borderWidth: 1,
+      borderColor: `${theme.colors.border}55`,
     },
     metricLabel: {
-      fontSize: 11,
-      fontWeight: "500",
+      fontSize: 12,
+      fontWeight: "600",
       color: theme.colors.textMuted,
-      textTransform: "uppercase",
       letterSpacing: 0.5,
-      marginBottom: 4,
+      marginBottom: 6,
     },
     metricValue: (color: string) => ({
-      fontSize: 16,
+      fontSize: 18,
       fontWeight: "600",
       color,
     }),
-    metricDivider: {
-      width: 1,
-      height: 32,
-      backgroundColor: theme.colors.border,
-    },
     
+    sectionCaption: {
+      fontSize: 11,
+      fontWeight: "700",
+      color: theme.colors.textMuted,
+      textTransform: "uppercase",
+      letterSpacing: 0.8,
+      marginBottom: 8,
+      marginTop: 4,
+    },
+
+    // Insight Cards
+    insightsRow: {
+      flexDirection: "row",
+      gap: 12,
+      marginBottom: 20,
+      flexWrap: "wrap",
+    },
+    insightCard: {
+      flex: 1,
+      minWidth: 120,
+      backgroundColor: theme.colors.surface,
+      borderRadius: 20,
+      padding: 16,
+      borderWidth: 1,
+      borderColor: `${theme.colors.border}55`,
+    },
+    insightLabel: {
+      fontSize: 12,
+      fontWeight: "600",
+      color: theme.colors.textMuted,
+      marginBottom: 6,
+      textTransform: "uppercase",
+      letterSpacing: 0.5,
+    },
+    insightValue: {
+      fontSize: 20,
+      fontWeight: "700",
+      color: theme.colors.text,
+    },
+    insightMeta: {
+      marginTop: 6,
+      fontSize: 12,
+      color: theme.colors.textMuted,
+    },
+    insightChip: (color: string) => ({
+      alignSelf: "flex-start",
+      padding: 6,
+      borderRadius: 12,
+      backgroundColor: color,
+      marginBottom: 10,
+    }),
+    insightProgressTrack: {
+      height: 6,
+      backgroundColor: theme.colors.border,
+      borderRadius: 999,
+      overflow: "hidden",
+      marginTop: 8,
+    },
+    insightProgressFill: (percentage: number) => ({
+      height: "100%",
+      width: `${percentage}%`,
+      backgroundColor: theme.colors.success,
+    }),
+
     // Period Selector
     periodScroll: {
       marginBottom: 16,
