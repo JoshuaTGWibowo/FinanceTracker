@@ -4,6 +4,7 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 import { Ionicons } from "@expo/vector-icons";
 import dayjs from "dayjs";
 import { Link, useRouter } from "expo-router";
+import { LinearGradient } from "expo-linear-gradient";
 
 import { DonutChart } from "../../components/DonutChart";
 import { SpendingBarChart, SpendingLineChart } from "../../components/SpendingCharts";
@@ -67,6 +68,15 @@ const summarizeGoalProgress = (
     percentage: Math.min(1, savingsValue / goal.target || 0),
     direction: "save" as const,
   };
+};
+
+const formatPercentageChange = (current: number, previous: number) => {
+  if (previous === 0) {
+    return "—";
+  }
+  const change = ((current - previous) / Math.abs(previous)) * 100;
+  const prefix = change > 0 ? "+" : "";
+  return `${prefix}${change.toFixed(1)}%`;
 };
 
 export default function HomeScreen() {
@@ -426,6 +436,60 @@ export default function HomeScreen() {
     [recurringTransactions],
   );
 
+  const firstName = profile.name.split(" ")[0] || profile.name;
+
+  const quickActions = useMemo(
+    () => [
+      {
+        key: "add",
+        label: "Log transaction",
+        icon: "add-circle",
+        onPress: () => router.push("/transactions/new"),
+      },
+      {
+        key: "reports",
+        label: "View reports",
+        icon: "analytics",
+        onPress: () => router.push("/(tabs)/transactions"),
+      },
+      {
+        key: "settings",
+        label: "Preferences",
+        icon: "options",
+        onPress: () => router.push("/(tabs)/account"),
+      },
+    ],
+    [router],
+  );
+
+  const insights = useMemo(() => {
+    const spendDirectionLabel = spentLess ? "Under budget" : "Higher spend";
+    const spendChange = formatPercentageChange(periodExpense, previousExpense);
+    const avgDailySpend = dayjs().date() ? periodExpense / dayjs().date() : 0;
+    const runwayDays = avgDailySpend > 0 ? Math.round(balance / avgDailySpend) : null;
+
+    return [
+      {
+        key: "income",
+        title: "Income",
+        value: formatCurrency(summary.income, currency),
+        meta: "Deposits this month",
+      },
+      {
+        key: "expense",
+        title: "Spending",
+        value: formattedPeriodExpenses,
+        meta: `${spendDirectionLabel} · ${spendChange}`,
+      },
+      {
+        key: "runway",
+        title: "Cash runway",
+        value: runwayDays ? `${Math.max(7, runwayDays)} days` : "—",
+        meta: avgDailySpend ? `${formatCurrency(Math.round(avgDailySpend), currency)}/day burn` : "Track more spend",
+      },
+    ];
+  }, [balance, currency, formattedPeriodExpenses, periodExpense, previousExpense, spentLess, summary.income]);
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView
@@ -433,48 +497,31 @@ export default function HomeScreen() {
         contentInsetAdjustmentBehavior="automatic"
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.header}>
-          <Text style={styles.hello}>Welcome back, {profile.name.split(" ")[0]}</Text>
-          <Text style={styles.subtitle}>Here’s a tidy look at your money this month.</Text>
+        <View style={styles.pageHeader}>
+          <View style={styles.avatarBadge}>
+            <Ionicons name="sparkles" size={18} color={theme.colors.text} />
+          </View>
+          <View style={styles.pageHeaderCopy}>
+            <Text style={styles.pageGreeting}>Hi, {firstName}</Text>
+            <Text style={styles.pageSubtitle}>Here’s your curated money cockpit.</Text>
+          </View>
+          <Pressable
+            style={styles.headerAction}
+            accessibilityRole="button"
+            onPress={() => router.push("/(tabs)/account")}
+          >
+            <Ionicons name="settings-outline" size={18} color={theme.colors.text} />
+          </Pressable>
         </View>
 
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.accountChipRow}
-        >
-            <Pressable
-              onPress={() => setSelectedAccountId(null)}
-              style={[styles.accountChip, !selectedAccountId && styles.accountChipActive]}
-            >
-              <Text style={styles.accountChipTitle}>All accounts</Text>
-              <Text style={styles.accountChipBalance}>
-                {formatCurrency(allAccountsBalance, baseCurrency)}
-              </Text>
-            </Pressable>
-            {accounts.map((account) => {
-              const active = selectedAccountId === account.id;
-              return (
-                <Pressable
-                key={account.id}
-                onPress={() => setSelectedAccountId(account.id)}
-                style={[
-                  styles.accountChip,
-                  active && styles.accountChipActive,
-                  account.isArchived && styles.accountChipArchived,
-                ]}
-                  >
-                    <Text style={styles.accountChipTitle}>{account.name}</Text>
-                    <Text style={styles.accountChipBalance}>
-                      {formatCurrency(account.balance, account.currency || baseCurrency)}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-        </ScrollView>
-
-        <View style={[theme.components.card, styles.balanceCard]}>
-          <View style={styles.balanceHeader}>
+        <View style={styles.heroCard}>
+          <LinearGradient
+            colors={theme.effects.heroGradient}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.heroGradient}
+          />
+          <View style={styles.heroHeaderRow}>
             <Text style={styles.balanceLabel}>Total balance</Text>
             <Pressable
               onPress={() => setShowBalance((prev) => !prev)}
@@ -482,7 +529,7 @@ export default function HomeScreen() {
               accessibilityRole="button"
               accessibilityLabel={showBalance ? "Hide balance" : "Show balance"}
             >
-              <Ionicons name={showBalance ? "eye" : "eye-off"} size={18} color={theme.colors.textMuted} />
+              <Ionicons name={showBalance ? "eye" : "eye-off"} size={18} color={theme.colors.text} />
             </Pressable>
           </View>
           <Text style={styles.balanceValue}>{showBalance ? formattedBalance : "••••••"}</Text>
@@ -495,20 +542,24 @@ export default function HomeScreen() {
             </View>
             <Text style={styles.metaCaption}>{dayjs().format("MMMM YYYY")}</Text>
           </View>
-          <View style={styles.balanceBreakdown}>
+          <View style={styles.heroBreakdown}>
             <View style={styles.balanceColumn}>
-              <Text style={styles.breakdownLabel}>Opening balance</Text>
+              <Text style={styles.breakdownLabel}>Opening</Text>
               <Text style={styles.breakdownValue}>
                 {showBalance ? formatCurrency(summary.openingBalance, currency) : "••••"}
               </Text>
             </View>
             <View style={styles.balanceColumn}>
-              <Text style={styles.breakdownLabel}>Ending balance</Text>
+              <Text style={styles.breakdownLabel}>Projected</Text>
               <Text style={styles.breakdownValue}>
                 {showBalance
                   ? formatCurrency(summary.openingBalance + summary.monthNet, currency)
                   : "••••"}
               </Text>
+            </View>
+            <View style={styles.balanceColumn}>
+              <Text style={styles.breakdownLabel}>Accounts</Text>
+              <Text style={styles.breakdownValue}>{visibleAccounts.length}</Text>
             </View>
           </View>
           <Pressable
@@ -516,9 +567,78 @@ export default function HomeScreen() {
             accessibilityRole="button"
             onPress={() => router.push("/(tabs)/transactions")}
           >
-            <Text style={styles.reportsText}>View reports</Text>
-            <Ionicons name="chevron-forward" size={16} color={theme.colors.primary} />
+            <Text style={styles.reportsText}>View activity</Text>
+            <Ionicons name="arrow-forward" size={16} color={theme.colors.text} />
           </Pressable>
+        </View>
+
+        <View style={styles.quickActionsRow}>
+          {quickActions.map((action) => (
+            <Pressable
+              key={action.key}
+              onPress={action.onPress}
+              style={({ pressed }) => [styles.quickAction, pressed && styles.quickActionPressed]}
+              accessibilityRole="button"
+            >
+              <View style={styles.quickActionIcon}>
+                <Ionicons
+                  name={action.icon as keyof typeof Ionicons.glyphMap}
+                  size={20}
+                  color={theme.colors.text}
+                />
+              </View>
+              <Text style={styles.quickActionLabel}>{action.label}</Text>
+            </Pressable>
+          ))}
+        </View>
+
+        <View style={styles.sectionHeaderRow}>
+          <Text style={styles.sectionTitle}>Accounts</Text>
+          <Text style={styles.sectionCaption}>{visibleAccounts.length} connected</Text>
+        </View>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.accountChipRow}
+        >
+          <Pressable
+            onPress={() => setSelectedAccountId(null)}
+            style={[styles.accountChip, !selectedAccountId && styles.accountChipActive]}
+          >
+            <Text style={styles.accountChipTitle}>All accounts</Text>
+            <Text style={styles.accountChipBalance}>
+              {formatCurrency(allAccountsBalance, baseCurrency)}
+            </Text>
+          </Pressable>
+          {accounts.map((account) => {
+            const active = selectedAccountId === account.id;
+            return (
+              <Pressable
+                key={account.id}
+                onPress={() => setSelectedAccountId(account.id)}
+                style={[
+                  styles.accountChip,
+                  active && styles.accountChipActive,
+                  account.isArchived && styles.accountChipArchived,
+                ]}
+              >
+                <Text style={styles.accountChipTitle}>{account.name}</Text>
+                <Text style={styles.accountChipBalance}>
+                  {formatCurrency(account.balance, account.currency || baseCurrency)}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+
+        <View style={styles.insightsGrid}>
+          {insights.map((item) => (
+            <View key={item.key} style={styles.insightCard}>
+              <Text style={styles.insightLabel}>{item.title}</Text>
+              <Text style={styles.insightValue}>{item.value}</Text>
+              <Text style={styles.insightMeta}>{item.meta}</Text>
+            </View>
+          ))}
         </View>
 
         <View style={[theme.components.surface, styles.monthlyReport]}>
@@ -893,30 +1013,55 @@ const createStyles = (
       backgroundColor: theme.colors.background,
     },
     content: {
-      paddingHorizontal: theme.spacing.md,
+      paddingHorizontal: theme.spacing.xl,
       paddingTop: theme.spacing.lg,
       paddingBottom: theme.spacing.xxl + 96 + insets.bottom,
-      gap: theme.spacing.lg,
+      gap: theme.spacing.xl,
     },
-    header: {
-      gap: theme.spacing.xs,
+    pageHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: theme.spacing.md,
     },
-    hello: {
+    avatarBadge: {
+      width: 48,
+      height: 48,
+      borderRadius: 24,
+      backgroundColor: theme.colors.surfaceElevated,
+      alignItems: "center",
+      justifyContent: "center",
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+    },
+    pageHeaderCopy: {
+      flex: 1,
+      gap: 4,
+    },
+    pageGreeting: {
       ...theme.typography.title,
-      fontSize: 24,
+      fontSize: 26,
     },
-    subtitle: {
+    pageSubtitle: {
       ...theme.typography.subtitle,
       fontSize: 14,
+    },
+    headerAction: {
+      width: 44,
+      height: 44,
+      borderRadius: 22,
+      backgroundColor: theme.colors.surface,
+      alignItems: "center",
+      justifyContent: "center",
     },
     accountChipRow: {
       flexDirection: "row",
       gap: theme.spacing.sm,
-      marginBottom: theme.spacing.sm,
+      paddingVertical: theme.spacing.sm,
     },
     accountChip: {
+      minWidth: 140,
       paddingHorizontal: theme.spacing.md,
-      paddingVertical: theme.spacing.sm,
+      paddingVertical: theme.spacing.md,
       borderRadius: theme.radii.lg,
       backgroundColor: theme.colors.surface,
       borderWidth: 1,
@@ -924,7 +1069,12 @@ const createStyles = (
     },
     accountChipActive: {
       borderColor: theme.colors.primary,
-      backgroundColor: `${theme.colors.primary}22`,
+      backgroundColor: `${theme.colors.primary}26`,
+      shadowColor: theme.colors.primary,
+      shadowOpacity: 0.25,
+      shadowRadius: 12,
+      shadowOffset: { width: 0, height: 8 },
+      elevation: 4,
     },
     accountChipArchived: {
       opacity: 0.6,
@@ -938,24 +1088,35 @@ const createStyles = (
       fontSize: 12,
       color: theme.colors.textMuted,
     },
-    balanceCard: {
-      gap: theme.spacing.lg,
+    heroCard: {
+      padding: theme.spacing.xl,
+      borderRadius: theme.radii.lg + 4,
+      overflow: "hidden",
+      backgroundColor: theme.colors.surfaceElevated,
     },
-    balanceHeader: {
+    heroGradient: {
+      ...StyleSheet.absoluteFillObject,
+      borderRadius: theme.radii.lg + 4,
+      opacity: 0.9,
+    },
+    heroHeaderRow: {
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "space-between",
+      marginBottom: theme.spacing.sm,
     },
     balanceLabel: {
       ...theme.typography.subtitle,
       textTransform: "uppercase",
       letterSpacing: 1.2,
       fontSize: 12,
+      color: theme.colors.text,
     },
     balanceValue: {
-      fontSize: 36,
+      fontSize: 42,
       fontWeight: "700",
       color: theme.colors.text,
+      letterSpacing: 0.5,
     },
     balanceMetaRow: {
       flexDirection: "row",
@@ -966,22 +1127,25 @@ const createStyles = (
       flexDirection: "row",
       alignItems: "center",
       gap: 6,
-      paddingHorizontal: 10,
-      paddingVertical: 4,
+      paddingHorizontal: 12,
+      paddingVertical: 6,
       borderRadius: 999,
     },
     metaText: {
-      fontSize: 12,
+      fontSize: 13,
       fontWeight: "600",
     },
     metaCaption: {
       ...theme.typography.subtitle,
       fontSize: 12,
+      color: theme.colors.text,
     },
-    balanceBreakdown: {
+    heroBreakdown: {
       flexDirection: "row",
       justifyContent: "space-between",
-      gap: theme.spacing.lg,
+      gap: theme.spacing.md,
+      marginTop: theme.spacing.md,
+      marginBottom: theme.spacing.md,
     },
     balanceColumn: {
       flex: 1,
@@ -1005,7 +1169,66 @@ const createStyles = (
     reportsText: {
       fontSize: 14,
       fontWeight: "600",
-      color: theme.colors.primary,
+      color: theme.colors.text,
+    },
+    quickActionsRow: {
+      flexDirection: "row",
+      gap: theme.spacing.md,
+      justifyContent: "space-between",
+    },
+    quickAction: {
+      flex: 1,
+      borderRadius: theme.radii.lg,
+      borderWidth: 1,
+      borderColor: `${theme.colors.border}88`,
+      padding: theme.spacing.md,
+      backgroundColor: theme.colors.surface,
+      gap: theme.spacing.sm,
+      alignItems: "flex-start",
+    },
+    quickActionPressed: {
+      opacity: 0.85,
+    },
+    quickActionIcon: {
+      width: 36,
+      height: 36,
+      borderRadius: 18,
+      backgroundColor: theme.colors.overlay,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    quickActionLabel: {
+      fontSize: 13,
+      fontWeight: "600",
+      color: theme.colors.text,
+    },
+    insightsGrid: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: theme.spacing.md,
+    },
+    insightCard: {
+      flexBasis: "48%",
+      flexGrow: 1,
+      borderRadius: theme.radii.lg,
+      padding: theme.spacing.lg,
+      backgroundColor: theme.colors.surface,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      gap: 6,
+    },
+    insightLabel: {
+      ...theme.typography.label,
+      fontSize: 11,
+    },
+    insightValue: {
+      fontSize: 20,
+      fontWeight: "700",
+      color: theme.colors.text,
+    },
+    insightMeta: {
+      ...theme.typography.subtitle,
+      fontSize: 13,
     },
     monthlyReport: {
       gap: theme.spacing.md,

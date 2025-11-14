@@ -14,6 +14,7 @@ import {
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
 
 import { useAppTheme } from "../../theme";
 import {
@@ -215,8 +216,41 @@ export default function AccountScreen() {
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.header}>
-            <Text style={styles.title}>Account & preferences</Text>
+            <Text style={styles.title}>Control center</Text>
             <Text style={styles.subtitle}>Personalize how your finance world looks.</Text>
+          </View>
+
+          <View style={styles.heroCard}>
+            <LinearGradient
+              colors={theme.effects.heroGradient}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.heroGradient}
+            />
+            <View style={styles.heroHeader}>
+              <View>
+                <Text style={styles.heroEyebrow}>Profile</Text>
+                <Text style={styles.heroTitle}>{profile.name}</Text>
+              </View>
+              <Ionicons name="shield-checkmark" size={22} color={theme.colors.text} />
+            </View>
+            <Text style={styles.heroMeta}>{profile.currency} is set as your base currency.</Text>
+            <View style={styles.heroStatsRow}>
+              <View style={styles.heroStat}>
+                <Text style={styles.heroStatLabel}>Accounts</Text>
+                <Text style={styles.heroStatValue}>{accounts.length}</Text>
+              </View>
+              <View style={styles.heroDivider} />
+              <View style={styles.heroStat}>
+                <Text style={styles.heroStatLabel}>Goals</Text>
+                <Text style={styles.heroStatValue}>{budgetGoals.length}</Text>
+              </View>
+              <View style={styles.heroDivider} />
+              <View style={styles.heroStat}>
+                <Text style={styles.heroStatLabel}>Categories</Text>
+                <Text style={styles.heroStatValue}>{categories.length}</Text>
+              </View>
+            </View>
           </View>
 
           <View style={[theme.components.surface, styles.sectionCard]}>
@@ -670,6 +704,62 @@ const createStyles = (
     subtitle: {
       ...theme.typography.subtitle,
       fontSize: 14,
+    },
+    heroCard: {
+      borderRadius: theme.radii.lg + 4,
+      padding: theme.spacing.xl,
+      overflow: "hidden",
+      marginBottom: -theme.spacing.sm,
+    },
+    heroGradient: {
+      ...StyleSheet.absoluteFillObject,
+      borderRadius: theme.radii.lg + 4,
+      opacity: 0.9,
+    },
+    heroHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      marginBottom: theme.spacing.md,
+    },
+    heroEyebrow: {
+      ...theme.typography.label,
+      fontSize: 11,
+      color: theme.colors.text,
+    },
+    heroTitle: {
+      ...theme.typography.title,
+      fontSize: 24,
+      marginTop: 4,
+    },
+    heroMeta: {
+      ...theme.typography.subtitle,
+      color: theme.colors.text,
+      marginBottom: theme.spacing.md,
+    },
+    heroStatsRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: theme.spacing.md,
+    },
+    heroStat: {
+      flex: 1,
+      gap: 4,
+    },
+    heroStatLabel: {
+      ...theme.typography.label,
+      color: theme.colors.text,
+    },
+    heroStatValue: {
+      fontSize: 20,
+      fontWeight: "700",
+      color: theme.colors.text,
+    },
+    heroDivider: {
+      width: 1,
+      height: 44,
+      backgroundColor: `${theme.colors.text}22`,
     },
     sectionCard: {
       gap: theme.spacing.lg,

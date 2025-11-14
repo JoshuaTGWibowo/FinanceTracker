@@ -15,6 +15,7 @@ type Colors = {
   success: string;
   danger: string;
   border: string;
+  overlay: string;
 };
 
 export const spacing = {
@@ -34,58 +35,60 @@ export const radii = {
 } as const;
 
 const darkColors: Colors = {
-  background: "#050608",
-  surface: "#10121B",
-  surfaceElevated: "#161A26",
-  primary: "#3B82F6",
-  primaryMuted: "#2563EB",
-  accent: "#60A5FA",
-  text: "#F8FAFF",
-  textMuted: "#94A3B8",
-  success: "#34D399",
+  background: "#04050A",
+  surface: "#0B1020",
+  surfaceElevated: "#151B30",
+  primary: "#A855F7",
+  primaryMuted: "#7C3AED",
+  accent: "#38BDF8",
+  text: "#F4F6FF",
+  textMuted: "#8B9BB7",
+  success: "#4ADE80",
   danger: "#FB7185",
-  border: "#1F2937",
+  border: "#202840",
+  overlay: "rgba(15,20,40,0.7)",
 };
 
 const lightColors: Colors = {
-  background: "#F8FAFF",
+  background: "#F5F7FF",
   surface: "#FFFFFF",
-  surfaceElevated: "#EEF3FF",
-  primary: "#2563EB",
-  primaryMuted: "#1D4ED8",
-  accent: "#60A5FA",
+  surfaceElevated: "#EEF2FF",
+  primary: "#6D28D9",
+  primaryMuted: "#5B21B6",
+  accent: "#0EA5E9",
   text: "#0F172A",
-  textMuted: "#475569",
-  success: "#047857",
-  danger: "#B91C1C",
-  border: "#CBD5F5",
+  textMuted: "#4B5563",
+  success: "#059669",
+  danger: "#DC2626",
+  border: "#E2E8F0",
+  overlay: "rgba(255,255,255,0.8)",
 };
 
 const buildTypography = (colors: Colors) => ({
   title: {
-    fontSize: 28,
+    fontSize: 30,
     fontWeight: "700" as const,
     color: colors.text,
-    letterSpacing: 0.2,
+    letterSpacing: 0.4,
   },
   subtitle: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: "500" as const,
     color: colors.textMuted,
-    letterSpacing: 0.3,
+    letterSpacing: 0.4,
   },
   body: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: "400" as const,
     color: colors.text,
-    lineHeight: 22,
+    lineHeight: 24,
   },
   label: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: "600" as const,
     color: colors.textMuted,
     textTransform: "uppercase" as const,
-    letterSpacing: 1.8,
+    letterSpacing: 2,
   },
 });
 
@@ -97,13 +100,21 @@ const buildComponents = (colors: Colors) => ({
   },
   surface: {
     backgroundColor: colors.surfaceElevated,
-    borderRadius: radii.md,
+    borderRadius: radii.lg,
     padding: spacing.lg,
+  },
+  glassCard: {
+    borderRadius: radii.lg,
+    padding: spacing.xl,
+    borderWidth: 1,
+    borderColor: colors.overlay,
+    backgroundColor: colors.overlay,
   },
   buttonPrimary: {
     backgroundColor: colors.primary,
-    borderRadius: radii.md,
+    borderRadius: radii.pill,
     paddingVertical: spacing.md,
+    paddingHorizontal: spacing.xl,
     alignItems: "center" as const,
     justifyContent: "center" as const,
   },
@@ -113,7 +124,7 @@ const buildComponents = (colors: Colors) => ({
     fontWeight: "600" as const,
   },
   buttonSecondary: {
-    borderRadius: radii.md,
+    borderRadius: radii.pill,
     paddingVertical: spacing.md,
     paddingHorizontal: spacing.xl,
     alignItems: "center" as const,
@@ -144,6 +155,20 @@ const buildComponents = (colors: Colors) => ({
   },
 });
 
+const buildEffects = (mode: ThemeMode, colors: Colors) => ({
+  heroGradient:
+    mode === "light"
+      ? ["#8B5CF6", "#7C3AED", "#2563EB"]
+      : ["#312E81", "#4338CA", "#7C3AED"],
+  ambientGlow: {
+    shadowColor: colors.primary,
+    shadowOpacity: 0.35,
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: 16 },
+    elevation: 12,
+  },
+});
+
 const buildTheme = (mode: ThemeMode) => {
   const colors = mode === "light" ? lightColors : darkColors;
   return {
@@ -152,6 +177,7 @@ const buildTheme = (mode: ThemeMode) => {
     radii,
     typography: buildTypography(colors),
     components: buildComponents(colors),
+    effects: buildEffects(mode, colors),
   } as const;
 };
 
