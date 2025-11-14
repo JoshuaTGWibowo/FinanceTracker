@@ -171,7 +171,6 @@ export default function TransactionsScreen() {
   const [searchVisible, setSearchVisible] = useState(false);
   const [draftSearchTerm, setDraftSearchTerm] = useState("");
   const [filtersExpanded, setFiltersExpanded] = useState(false);
-  const [categoriesExpanded, setCategoriesExpanded] = useState(false);
   const [minAmount, setMinAmount] = useState("");
   const [maxAmount, setMaxAmount] = useState("");
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
@@ -180,6 +179,8 @@ export default function TransactionsScreen() {
   const [showStartPicker, setShowStartPicker] = useState(false);
   const [showEndPicker, setShowEndPicker] = useState(false);
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
+  const [recurringExpanded, setRecurringExpanded] = useState(true);
+  const [reportVisible, setReportVisible] = useState(false);
 
   useEffect(() => {
     if (!categoryParam) {
@@ -300,7 +301,7 @@ export default function TransactionsScreen() {
 
   const hasActiveFilters = activeFilters.length > 0;
 
-  const { sections, summary, expenseBreakdown, filteredRecurring } = useMemo(() => {
+  const { sections, summary, expenseBreakdown, filteredRecurring, reportStats } = useMemo(() => {
     const period = periodOptions.find((option) => option.key === selectedPeriod) ?? periodOptions[periodOptions.length - 1];
     const { start, end } = period.range();
 
@@ -432,13 +433,31 @@ export default function TransactionsScreen() {
         grouped.set(key, existing);
       });
 
-    const sectionData = Array.from(grouped.entries()).map(([key, value]) => ({
-      title: dayjs(key).format("dddd, MMM D"),
-      data: [{ ...value, id: key }],
-      dailyIncome: value.dailyIncome,
-      dailyExpense: value.dailyExpense,
-      dailyNet: value.dailyNet,
-    }));
+    const groupedEntries = Array.from(grouped.entries());
+    let busiestDayLabel = "—";
+    let busiestDayCount = 0;
+    let topSpendingDayLabel = "—";
+    let topSpendingAmount = 0;
+
+    const sectionData = groupedEntries.map(([key, value]) => {
+      if (value.transactions.length > busiestDayCount) {
+        busiestDayCount = value.transactions.length;
+        busiestDayLabel = dayjs(key).format("ddd, MMM D");
+      }
+
+      if (value.dailyExpense > topSpendingAmount) {
+        topSpendingAmount = value.dailyExpense;
+        topSpendingDayLabel = dayjs(key).format("ddd, MMM D");
+      }
+
+      return {
+        title: dayjs(key).format("dddd, MMM D"),
+        data: [{ ...value, id: key }],
+        dailyIncome: value.dailyIncome,
+        dailyExpense: value.dailyExpense,
+        dailyNet: value.dailyNet,
+      };
+    });
 
     // Calculate summary
     const totals = reportable.reduce(
@@ -499,6 +518,14 @@ export default function TransactionsScreen() {
       return matchesAccount && !occurrence.isBefore(start) && !occurrence.isAfter(end);
     });
 
+    const expenseTransactions = filtered.filter((transaction) => transaction.type === "expense");
+    const avgExpenseValue = expenseTransactions.length
+      ? totals.expense / expenseTransactions.length
+      : 0;
+    const activeDays = sectionData.length;
+    const avgDailySpend = activeDays ? totals.expense / activeDays : 0;
+    const savingsRate = totals.income ? ((totals.income - totals.expense) / totals.income) * 100 : null;
+
     return {
       sections: sectionData,
       summary: {
@@ -511,6 +538,18 @@ export default function TransactionsScreen() {
       },
       expenseBreakdown: breakdown,
       filteredRecurring: recurring,
+      reportStats: {
+        periodLabel: period.label,
+        avgDailySpend,
+        avgExpenseValue,
+        expenseTransactionCount: expenseTransactions.length,
+        activeDays,
+        totalTransactions: filtered.length,
+        busiestDay: { label: busiestDayLabel, count: busiestDayCount },
+        topSpendingDay: { label: topSpendingDayLabel, amount: topSpendingAmount },
+        savingsRate,
+        topCategory: breakdown[0] ?? null,
+      },
     };
   }, [
     endDate,
@@ -526,6 +565,19 @@ export default function TransactionsScreen() {
     transactions,
     visibleAccountIds,
   ]);
+
+  useEffect(() => {
+    const today = dayjs().startOf("day");
+    recurringTransactions.forEach((item) => {
+      if (!item.isActive) {
+        return;
+      }
+
+      if (dayjs(item.nextOccurrence).isSame(today, "day")) {
+        logRecurringTransaction(item.id);
+      }
+    });
+  }, [recurringTransactions, logRecurringTransaction]);
 
   const closingBalanceDisplay = useMemo(() => {
     const amount = summary.closingBalance;
@@ -546,6 +598,83 @@ export default function TransactionsScreen() {
     if (digitCount <= 12) return 24;
     return 20;
   }, [closingBalanceDisplay]);
+
+  const insightsPrimaryCards = useMemo(() => {
+    const resolvedCurrency = currency || "USD";
+    return [
+      {
+        title: "Net change",
+        subtitle: "vs opening balance",
+        value: formatCurrency(summary.net, resolvedCurrency),
+        meta: `Opening ${formatCurrency(summary.openingBalance, resolvedCurrency)}`,
+      },
+      {
+        title: "Avg daily spend",
+        subtitle: `${reportStats.activeDays || 0} active day${reportStats.activeDays === 1 ? "" : "s"}`,
+        value: formatCurrency(reportStats.avgDailySpend, resolvedCurrency),
+        meta: `${formatCurrency(summary.expense, resolvedCurrency)} total expenses`,
+      },
+      {
+        title: "Avg expense",
+        subtitle: `${reportStats.expenseTransactionCount || 0} expenses`,
+        value: formatCurrency(reportStats.avgExpenseValue, resolvedCurrency),
+        meta: reportStats.expenseTransactionCount
+          ? `${formatCurrency(summary.expense, resolvedCurrency)} spent`
+          : undefined,
+      },
+      {
+        title: "Top category",
+        subtitle: reportStats.topCategory
+          ? `${reportStats.topCategory.percentage}% of spend`
+          : "No category yet",
+        value: reportStats.topCategory ? reportStats.topCategory.category : "—",
+        meta: reportStats.topCategory
+          ? formatCurrency(reportStats.topCategory.amount, resolvedCurrency)
+          : undefined,
+      },
+    ];
+  }, [currency, reportStats, summary]);
+
+  const insightsDetailCards = useMemo(() => {
+    const resolvedCurrency = currency || "USD";
+    return [
+      {
+        title: "Total transactions",
+        subtitle: "Logged this period",
+        value: `${reportStats.totalTransactions}`,
+        meta: `${reportStats.activeDays || 0} active day${reportStats.activeDays === 1 ? "" : "s"}`,
+      },
+      {
+        title: "Busiest day",
+        subtitle: reportStats.busiestDay.count
+          ? `${reportStats.busiestDay.count} transactions`
+          : "No activity",
+        value: reportStats.busiestDay.label,
+        meta: undefined,
+      },
+      {
+        title: "Highest spend day",
+        subtitle: reportStats.topSpendingDay.amount
+          ? formatCurrency(reportStats.topSpendingDay.amount, resolvedCurrency)
+          : "No expenses",
+        value: reportStats.topSpendingDay.label,
+        meta: undefined,
+      },
+      {
+        title: "Savings rate",
+        subtitle: summary.income
+          ? `${formatCurrency(summary.income, resolvedCurrency)} income`
+          : "No income",
+        value:
+          reportStats.savingsRate === null
+            ? "—"
+            : `${reportStats.savingsRate >= 0 ? "+" : ""}${reportStats.savingsRate.toFixed(1)}%`,
+        meta: summary.expense
+          ? `${formatCurrency(summary.expense, resolvedCurrency)} spent`
+          : undefined,
+      },
+    ];
+  }, [currency, reportStats, summary]);
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -601,6 +730,16 @@ export default function TransactionsScreen() {
                   </Text>
                 </View>
               </View>
+
+              <Pressable style={styles.reportLink} onPress={() => setReportVisible(true)}>
+                <Text style={styles.reportLinkText}>View report for this period</Text>
+                <Ionicons
+                  name="arrow-forward"
+                  size={16}
+                  color={theme.colors.primary}
+                  style={styles.reportLinkIcon}
+                />
+              </Pressable>
             </View>
 
             {/* Period Selector */}
@@ -745,66 +884,72 @@ export default function TransactionsScreen() {
 
             {/* Expense Breakdown */}
             {expenseBreakdown.length > 0 && (
-              <Pressable
-                style={styles.breakdownCard}
-                onPress={() => setCategoriesExpanded(!categoriesExpanded)}
-              >
+              <View style={styles.breakdownCard}>
                 <View style={styles.breakdownHeader}>
                   <Text style={styles.breakdownTitle}>Top Categories</Text>
-                  <Ionicons
-                    name={categoriesExpanded ? "chevron-up" : "chevron-down"}
-                    size={16}
-                    color={theme.colors.textMuted}
-                  />
+                  {reportStats.topCategory ? (
+                    <Text style={styles.breakdownHighlight}>
+                      {reportStats.topCategory.category} • {reportStats.topCategory.percentage}% of spend
+                    </Text>
+                  ) : null}
                 </View>
-                {categoriesExpanded && (
-                  <View style={styles.breakdownContent}>
-                    {expenseBreakdown.map((item) => (
-                      <View key={item.category} style={styles.breakdownRow}>
-                        <View style={styles.breakdownInfo}>
-                          <Text style={styles.breakdownCategory}>{item.category}</Text>
-                          <Text style={styles.breakdownAmount}>
-                            {formatCurrency(item.amount, currency || "USD")}
-                          </Text>
-                        </View>
-                        <View style={styles.progressBar}>
-                          <View style={styles.progressFill(item.percentage)} />
-                        </View>
-                        <Text style={styles.breakdownPercent}>{item.percentage}%</Text>
+                <View style={styles.breakdownContent}>
+                  {expenseBreakdown.map((item) => (
+                    <View key={item.category} style={styles.breakdownRow}>
+                      <View style={styles.breakdownInfo}>
+                        <Text style={styles.breakdownCategory}>{item.category}</Text>
+                        <Text style={styles.breakdownAmount}>
+                          {formatCurrency(item.amount, currency || "USD")}
+                        </Text>
                       </View>
-                    ))}
-                  </View>
-                )}
-              </Pressable>
+                      <View style={styles.progressBar}>
+                        <View style={styles.progressFill(item.percentage)} />
+                      </View>
+                      <Text style={styles.breakdownPercent}>{item.percentage}%</Text>
+                    </View>
+                  ))}
+                </View>
+              </View>
             )}
 
             {/* Recurring Transactions */}
             {filteredRecurring.length > 0 && (
               <View style={styles.recurringSection}>
-                <Text style={styles.sectionTitle}>
-                  Upcoming Recurring ({filteredRecurring.length})
-                </Text>
-                {filteredRecurring.map((item) => (
-                  <View key={item.id} style={styles.recurringItem}>
-                    <View style={styles.recurringInfo}>
-                      <Text style={styles.recurringCategory}>{item.category}</Text>
-                      {item.note ? (
-                        <Text style={styles.recurringNote} numberOfLines={2}>
-                          {truncateWords(item.note, 10)}
+                <Pressable
+                  style={styles.recurringHeader}
+                  onPress={() => setRecurringExpanded((prev) => !prev)}
+                >
+                  <Text style={styles.sectionTitle}>
+                    Upcoming Recurring ({filteredRecurring.length})
+                  </Text>
+                  <Ionicons
+                    name={recurringExpanded ? "chevron-up" : "chevron-down"}
+                    size={18}
+                    color={theme.colors.textMuted}
+                  />
+                </Pressable>
+                {recurringExpanded &&
+                  filteredRecurring.map((item) => (
+                    <View key={item.id} style={styles.recurringItem}>
+                      <View style={styles.recurringInfo}>
+                        <Text style={styles.recurringCategory}>{item.category}</Text>
+                        {item.note ? (
+                          <Text style={styles.recurringNote} numberOfLines={2}>
+                            {truncateWords(item.note, 10)}
+                          </Text>
+                        ) : null}
+                        <Text style={styles.recurringDate}>
+                          {dayjs(item.nextOccurrence).format("MMM D")} • {item.frequency}
                         </Text>
-                      ) : null}
-                      <Text style={styles.recurringDate}>
-                        {dayjs(item.nextOccurrence).format("MMM D")} • {item.frequency}
-                      </Text>
+                      </View>
+                      <Pressable
+                        onPress={() => logRecurringTransaction(item.id)}
+                        style={styles.logButton}
+                      >
+                        <Text style={styles.logButtonText}>Log</Text>
+                      </Pressable>
                     </View>
-                    <Pressable
-                      onPress={() => logRecurringTransaction(item.id)}
-                      style={styles.logButton}
-                    >
-                      <Text style={styles.logButtonText}>Log</Text>
-                    </Pressable>
-                  </View>
-                ))}
+                  ))}
               </View>
             )}
 
@@ -899,6 +1044,55 @@ export default function TransactionsScreen() {
         )}
         ItemSeparatorComponent={() => <View style={styles.separator} />}
       />
+
+      {/* Period Insights Modal */}
+      <Modal
+        visible={reportVisible}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setReportVisible(false)}
+      >
+        <SafeAreaView style={styles.reportModal}>
+          <View style={styles.reportHeader}>
+            <View>
+              <Text style={styles.reportTitle}>Period insights</Text>
+              <Text style={styles.reportSubtitle}>For {reportStats.periodLabel}</Text>
+            </View>
+            <Pressable
+              onPress={() => setReportVisible(false)}
+              style={styles.reportClose}
+              accessibilityRole="button"
+              accessibilityLabel="Close insights"
+            >
+              <Ionicons name="close" size={22} color={theme.colors.text} />
+            </Pressable>
+          </View>
+
+          <ScrollView contentContainerStyle={styles.reportContent}>
+            <View style={styles.reportGrid}>
+              {insightsPrimaryCards.map((card) => (
+                <View key={card.title} style={styles.reportCard}>
+                  <Text style={styles.reportCardTitle}>{card.title}</Text>
+                  <Text style={styles.reportCardSubtitle}>{card.subtitle}</Text>
+                  <Text style={styles.reportCardValue}>{card.value}</Text>
+                  {card.meta ? <Text style={styles.reportCardMeta}>{card.meta}</Text> : null}
+                </View>
+              ))}
+            </View>
+
+            <View style={styles.reportGrid}>
+              {insightsDetailCards.map((card) => (
+                <View key={card.title} style={styles.reportCard}>
+                  <Text style={styles.reportCardTitle}>{card.title}</Text>
+                  <Text style={styles.reportCardSubtitle}>{card.subtitle}</Text>
+                  <Text style={styles.reportCardValue}>{card.value}</Text>
+                  {card.meta ? <Text style={styles.reportCardMeta}>{card.meta}</Text> : null}
+                </View>
+              ))}
+            </View>
+          </ScrollView>
+        </SafeAreaView>
+      </Modal>
 
       {/* Search Modal */}
       <Modal
@@ -1140,7 +1334,20 @@ const createStyles = (theme: any, insets: any) =>
       height: 32,
       backgroundColor: theme.colors.border,
     },
-    
+    reportLink: {
+      marginTop: 16,
+      flexDirection: "row",
+      alignItems: "center",
+    },
+    reportLinkText: {
+      fontSize: 14,
+      fontWeight: "600",
+      color: theme.colors.primary,
+    },
+    reportLinkIcon: {
+      marginLeft: 6,
+    },
+
     // Period Selector
     periodScroll: {
       marginBottom: 16,
@@ -1306,6 +1513,10 @@ const createStyles = (theme: any, insets: any) =>
       textTransform: "uppercase",
       letterSpacing: 0.5,
     },
+    breakdownHighlight: {
+      fontSize: 12,
+      color: theme.colors.textMuted,
+    },
     breakdownContent: {
       marginTop: 12,
     },
@@ -1348,6 +1559,15 @@ const createStyles = (theme: any, insets: any) =>
     // Recurring Section
     recurringSection: {
       marginBottom: 24,
+      padding: 16,
+      backgroundColor: theme.colors.surface,
+      borderRadius: 16,
+    },
+    recurringHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      marginBottom: 12,
     },
     sectionTitle: {
       fontSize: 12,
@@ -1355,13 +1575,12 @@ const createStyles = (theme: any, insets: any) =>
       color: theme.colors.textMuted,
       textTransform: "uppercase",
       letterSpacing: 0.5,
-      marginBottom: 12,
     },
     recurringItem: {
       flexDirection: "row",
       justifyContent: "space-between",
       alignItems: "center",
-      backgroundColor: theme.colors.surface,
+      backgroundColor: theme.colors.background,
       borderRadius: 12,
       padding: 14,
       marginBottom: 8,
@@ -1703,5 +1922,83 @@ const createStyles = (theme: any, insets: any) =>
       fontSize: 15,
       fontWeight: "600",
       color: "#fff",
+    },
+
+    // Report Modal
+    reportModal: {
+      flex: 1,
+      backgroundColor: theme.colors.background,
+    },
+    reportHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      paddingHorizontal: 20,
+      paddingTop: 16,
+      paddingBottom: 8,
+    },
+    reportTitle: {
+      fontSize: 24,
+      fontWeight: "700",
+      color: theme.colors.text,
+    },
+    reportSubtitle: {
+      fontSize: 14,
+      color: theme.colors.textMuted,
+      marginTop: 4,
+    },
+    reportClose: {
+      width: 36,
+      height: 36,
+      borderRadius: 18,
+      backgroundColor: theme.colors.surface,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    reportContent: {
+      paddingHorizontal: 20,
+      paddingTop: 12,
+      paddingBottom: Math.max(32, insets.bottom + 24),
+    },
+    reportGrid: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      justifyContent: "space-between",
+      marginTop: 16,
+    },
+    reportCard: {
+      width: "48%",
+      backgroundColor: theme.colors.surface,
+      borderRadius: 18,
+      padding: 16,
+      marginBottom: 16,
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.08,
+      shadowRadius: 6,
+      elevation: 2,
+    },
+    reportCardTitle: {
+      fontSize: 12,
+      fontWeight: "600",
+      color: theme.colors.textMuted,
+      textTransform: "uppercase",
+      letterSpacing: 0.5,
+    },
+    reportCardSubtitle: {
+      fontSize: 12,
+      color: theme.colors.textMuted,
+      marginTop: 4,
+    },
+    reportCardValue: {
+      fontSize: 22,
+      fontWeight: "700",
+      color: theme.colors.text,
+      marginTop: 12,
+    },
+    reportCardMeta: {
+      fontSize: 12,
+      color: theme.colors.textMuted,
+      marginTop: 8,
     },
   });
