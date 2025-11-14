@@ -171,7 +171,6 @@ export default function TransactionsScreen() {
   const [searchVisible, setSearchVisible] = useState(false);
   const [draftSearchTerm, setDraftSearchTerm] = useState("");
   const [filtersExpanded, setFiltersExpanded] = useState(false);
-  const [categoriesExpanded, setCategoriesExpanded] = useState(false);
   const [minAmount, setMinAmount] = useState("");
   const [maxAmount, setMaxAmount] = useState("");
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
@@ -180,6 +179,8 @@ export default function TransactionsScreen() {
   const [showStartPicker, setShowStartPicker] = useState(false);
   const [showEndPicker, setShowEndPicker] = useState(false);
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
+  const [recurringExpanded, setRecurringExpanded] = useState(true);
+  const [insightsVisible, setInsightsVisible] = useState(false);
 
   useEffect(() => {
     if (!categoryParam) {
@@ -207,6 +208,19 @@ export default function TransactionsScreen() {
 
   const insets = useSafeAreaInsets();
   const styles = useMemo(() => createStyles(theme, insets), [theme, insets]);
+
+  useEffect(() => {
+    const today = dayjs().startOf("day");
+    recurringTransactions.forEach((item) => {
+      if (!item.isActive) {
+        return;
+      }
+      const occurrence = dayjs(item.nextOccurrence).startOf("day");
+      if (occurrence.isSame(today)) {
+        logRecurringTransaction(item.id);
+      }
+    });
+  }, [logRecurringTransaction, recurringTransactions]);
 
   const accountLookup = useMemo(() => {
     const map = new Map<string, string>();
@@ -300,8 +314,10 @@ export default function TransactionsScreen() {
 
   const hasActiveFilters = activeFilters.length > 0;
 
-  const { sections, summary, expenseBreakdown, filteredRecurring } = useMemo(() => {
-    const period = periodOptions.find((option) => option.key === selectedPeriod) ?? periodOptions[periodOptions.length - 1];
+  const { sections, summary, expenseBreakdown, filteredRecurring, periodLabel, insights } = useMemo(() => {
+    const period =
+      periodOptions.find((option) => option.key === selectedPeriod) ??
+      periodOptions[periodOptions.length - 1];
     const { start, end } = period.range();
 
     const allowedAccountIds = selectedAccountId ? null : new Set(visibleAccountIds);
@@ -447,10 +463,11 @@ export default function TransactionsScreen() {
           acc.income += transaction.amount;
         } else if (transaction.type === "expense") {
           acc.expense += transaction.amount;
+          acc.expenseCount += 1;
         }
         return acc;
       },
-      { income: 0, expense: 0 },
+      { income: 0, expense: 0, expenseCount: 0 },
     );
 
     const netChange = reportable.reduce(
@@ -491,6 +508,46 @@ export default function TransactionsScreen() {
         percentage: totals.expense ? Math.round((amount / totals.expense) * 100) : 0,
       }));
 
+    const activeDays = sectionData.length;
+    const avgDailySpend = activeDays ? totals.expense / activeDays : 0;
+    const avgExpense = totals.expenseCount ? totals.expense / totals.expenseCount : 0;
+
+    const busiestDay = sectionData.reduce(
+      (best, section) => {
+        const count = section.data[0]?.transactions.length ?? 0;
+        if (count > best.count) {
+          return { label: section.title, count };
+        }
+        return best;
+      },
+      { label: "", count: 0 },
+    );
+
+    const highestSpendingDay = sectionData.reduce(
+      (best, section) => {
+        if (section.dailyExpense > best.amount) {
+          return { label: section.title, amount: section.dailyExpense };
+        }
+        return best;
+      },
+      { label: "", amount: 0 },
+    );
+
+    const savingsRate = totals.income
+      ? ((totals.income - totals.expense) / Math.abs(totals.income)) * 100
+      : 0;
+
+    const insightPayload = {
+      avgDailySpend,
+      avgExpense,
+      topCategory: breakdown[0] ?? null,
+      busiestDay,
+      highestSpendingDay,
+      totalTransactions: filtered.length,
+      savingsRate,
+      activeDays,
+    };
+
     // Recurring transactions
     const recurring = recurringTransactions.filter((item) => {
       const occurrence = dayjs(item.nextOccurrence);
@@ -511,6 +568,8 @@ export default function TransactionsScreen() {
       },
       expenseBreakdown: breakdown,
       filteredRecurring: recurring,
+      periodLabel: period.label,
+      insights: insightPayload,
     };
   }, [
     endDate,
@@ -546,6 +605,43 @@ export default function TransactionsScreen() {
     if (digitCount <= 12) return 24;
     return 20;
   }, [closingBalanceDisplay]);
+
+  const highlightCards = useMemo(
+    () => [
+      {
+        label: "Net change",
+        value: formatCurrency(summary.net, currency || "USD"),
+        caption: `vs opening balance ${formatCurrency(summary.openingBalance, currency || "USD")}`,
+      },
+      {
+        label: "Avg daily spend",
+        value: formatCurrency(insights.avgDailySpend, currency || "USD"),
+        caption: `${insights.activeDays || 0} active days`,
+      },
+      {
+        label: "Avg expense",
+        value: formatCurrency(insights.avgExpense, currency || "USD"),
+        caption: `${insights.totalTransactions} total transactions`,
+      },
+      {
+        label: "Top category",
+        value: insights.topCategory ? insights.topCategory.category : "—",
+        caption: insights.topCategory
+          ? `${insights.topCategory.percentage}% of spend`
+          : "No expenses logged",
+      },
+    ],
+    [currency, insights, summary],
+  );
+
+  const savingsRateLabel = useMemo(() => {
+    if (!Number.isFinite(insights.savingsRate)) {
+      return "—";
+    }
+    const rounded = insights.savingsRate.toFixed(1);
+    const prefix = insights.savingsRate > 0 ? "+" : "";
+    return `${prefix}${rounded}%`;
+  }, [insights.savingsRate]);
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -601,6 +697,13 @@ export default function TransactionsScreen() {
                   </Text>
                 </View>
               </View>
+              <Pressable
+                style={styles.viewReportButton}
+                onPress={() => setInsightsVisible(true)}
+              >
+                <Text style={styles.viewReportButtonText}>View report for this period</Text>
+                <Ionicons name="arrow-forward" size={16} color={theme.colors.primary} />
+              </Pressable>
             </View>
 
             {/* Period Selector */}
@@ -745,66 +848,68 @@ export default function TransactionsScreen() {
 
             {/* Expense Breakdown */}
             {expenseBreakdown.length > 0 && (
-              <Pressable
-                style={styles.breakdownCard}
-                onPress={() => setCategoriesExpanded(!categoriesExpanded)}
-              >
+              <View style={styles.breakdownCard}>
                 <View style={styles.breakdownHeader}>
                   <Text style={styles.breakdownTitle}>Top Categories</Text>
-                  <Ionicons
-                    name={categoriesExpanded ? "chevron-up" : "chevron-down"}
-                    size={16}
-                    color={theme.colors.textMuted}
-                  />
+                  <Text style={styles.breakdownSubtitle}>This period</Text>
                 </View>
-                {categoriesExpanded && (
-                  <View style={styles.breakdownContent}>
-                    {expenseBreakdown.map((item) => (
-                      <View key={item.category} style={styles.breakdownRow}>
-                        <View style={styles.breakdownInfo}>
-                          <Text style={styles.breakdownCategory}>{item.category}</Text>
-                          <Text style={styles.breakdownAmount}>
-                            {formatCurrency(item.amount, currency || "USD")}
-                          </Text>
-                        </View>
-                        <View style={styles.progressBar}>
-                          <View style={styles.progressFill(item.percentage)} />
-                        </View>
-                        <Text style={styles.breakdownPercent}>{item.percentage}%</Text>
+                <View style={styles.breakdownContent}>
+                  {expenseBreakdown.map((item) => (
+                    <View key={item.category} style={styles.breakdownRow}>
+                      <View style={styles.breakdownInfo}>
+                        <Text style={styles.breakdownCategory}>{item.category}</Text>
+                        <Text style={styles.breakdownAmount}>
+                          {formatCurrency(item.amount, currency || "USD")}
+                        </Text>
                       </View>
-                    ))}
-                  </View>
-                )}
-              </Pressable>
+                      <View style={styles.progressBar}>
+                        <View style={styles.progressFill(item.percentage)} />
+                      </View>
+                      <Text style={styles.breakdownPercent}>{item.percentage}%</Text>
+                    </View>
+                  ))}
+                </View>
+              </View>
             )}
 
             {/* Recurring Transactions */}
             {filteredRecurring.length > 0 && (
               <View style={styles.recurringSection}>
-                <Text style={styles.sectionTitle}>
-                  Upcoming Recurring ({filteredRecurring.length})
-                </Text>
-                {filteredRecurring.map((item) => (
-                  <View key={item.id} style={styles.recurringItem}>
-                    <View style={styles.recurringInfo}>
-                      <Text style={styles.recurringCategory}>{item.category}</Text>
-                      {item.note ? (
-                        <Text style={styles.recurringNote} numberOfLines={2}>
-                          {truncateWords(item.note, 10)}
+                <Pressable
+                  style={styles.recurringHeader}
+                  onPress={() => setRecurringExpanded((prev) => !prev)}
+                >
+                  <Text style={styles.sectionTitle}>
+                    Upcoming Recurring ({filteredRecurring.length})
+                  </Text>
+                  <Ionicons
+                    name={recurringExpanded ? "chevron-up" : "chevron-down"}
+                    size={18}
+                    color={theme.colors.textMuted}
+                  />
+                </Pressable>
+                {recurringExpanded &&
+                  filteredRecurring.map((item) => (
+                    <View key={item.id} style={styles.recurringItem}>
+                      <View style={styles.recurringInfo}>
+                        <Text style={styles.recurringCategory}>{item.category}</Text>
+                        {item.note ? (
+                          <Text style={styles.recurringNote} numberOfLines={2}>
+                            {truncateWords(item.note, 10)}
+                          </Text>
+                        ) : null}
+                        <Text style={styles.recurringDate}>
+                          {dayjs(item.nextOccurrence).format("MMM D")} • {item.frequency}
                         </Text>
-                      ) : null}
-                      <Text style={styles.recurringDate}>
-                        {dayjs(item.nextOccurrence).format("MMM D")} • {item.frequency}
-                      </Text>
+                      </View>
+                      <Pressable
+                        onPress={() => logRecurringTransaction(item.id)}
+                        style={styles.logButton}
+                      >
+                        <Text style={styles.logButtonText}>Log</Text>
+                      </Pressable>
                     </View>
-                    <Pressable
-                      onPress={() => logRecurringTransaction(item.id)}
-                      style={styles.logButton}
-                    >
-                      <Text style={styles.logButtonText}>Log</Text>
-                    </Pressable>
-                  </View>
-                ))}
+                  ))}
               </View>
             )}
 
@@ -1021,6 +1126,92 @@ export default function TransactionsScreen() {
         </SafeAreaView>
       </Modal>
 
+      {/* Period insights modal */}
+      <Modal
+        visible={insightsVisible}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setInsightsVisible(false)}
+      >
+        <SafeAreaView style={styles.modal}>
+          <View style={styles.modalHeader}>
+            <Pressable onPress={() => setInsightsVisible(false)} style={styles.modalClose}>
+              <Ionicons name="close" size={24} color={theme.colors.text} />
+            </Pressable>
+            <Text style={styles.modalTitle}>Period insights</Text>
+            <View style={styles.modalSpacer} />
+          </View>
+
+          <ScrollView contentContainerStyle={styles.insightsContent}>
+            <View style={styles.insightsIntro}>
+              <Text style={styles.insightsKicker}>For {periodLabel}</Text>
+              <Text style={styles.insightsHeading}>Detailed report</Text>
+              <Text style={styles.insightsDescription}>
+                Understand how you are spending, saving, and trending during this period.
+              </Text>
+            </View>
+
+            <View style={styles.insightGrid}>
+              {highlightCards.map((card) => (
+                <View key={card.label} style={styles.insightCard}>
+                  <Text style={styles.insightLabel}>{card.label}</Text>
+                  <Text style={styles.insightValue}>{card.value}</Text>
+                  <Text style={styles.insightCaption}>{card.caption}</Text>
+                </View>
+              ))}
+            </View>
+
+            <View style={styles.insightDetailsCard}>
+              <Text style={styles.insightDetailsTitle}>Activity highlights</Text>
+
+              <View style={styles.detailRow}>
+                <View>
+                  <Text style={styles.detailLabel}>Busiest day</Text>
+                  <Text style={styles.detailValue}>
+                    {insights.busiestDay.label || "No activity"}
+                  </Text>
+                </View>
+                <Text style={styles.detailMeta}>
+                  {insights.busiestDay.count
+                    ? `${insights.busiestDay.count} transactions`
+                    : "—"}
+                </Text>
+              </View>
+
+              <View style={styles.detailRow}>
+                <View>
+                  <Text style={styles.detailLabel}>Day with most spending</Text>
+                  <Text style={styles.detailValue}>
+                    {insights.highestSpendingDay.label || "No spending"}
+                  </Text>
+                </View>
+                <Text style={styles.detailMeta}>
+                  {insights.highestSpendingDay.label
+                    ? formatCurrency(insights.highestSpendingDay.amount, currency || "USD")
+                    : "—"}
+                </Text>
+              </View>
+
+              <View style={styles.detailRow}>
+                <View>
+                  <Text style={styles.detailLabel}>Total transactions</Text>
+                  <Text style={styles.detailValue}>{insights.totalTransactions}</Text>
+                </View>
+                <Text style={styles.detailMeta}>entries logged</Text>
+              </View>
+
+              <View style={styles.detailRow}>
+                <View>
+                  <Text style={styles.detailLabel}>Savings rate</Text>
+                  <Text style={styles.detailValue}>{savingsRateLabel}</Text>
+                </View>
+                <Text style={styles.detailMeta}>Income vs expenses</Text>
+              </View>
+            </View>
+          </ScrollView>
+        </SafeAreaView>
+      </Modal>
+
       {showStartPicker && (
         <DateTimePicker
           value={(startDate ?? dayjs()).toDate()}
@@ -1139,6 +1330,23 @@ const createStyles = (theme: any, insets: any) =>
       width: 1,
       height: 32,
       backgroundColor: theme.colors.border,
+    },
+    viewReportButton: {
+      marginTop: 16,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 8,
+      paddingVertical: 12,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: theme.colors.primary,
+      backgroundColor: `${theme.colors.primary}10`,
+    },
+    viewReportButtonText: {
+      fontSize: 14,
+      fontWeight: "600",
+      color: theme.colors.primary,
     },
     
     // Period Selector
@@ -1306,6 +1514,11 @@ const createStyles = (theme: any, insets: any) =>
       textTransform: "uppercase",
       letterSpacing: 0.5,
     },
+    breakdownSubtitle: {
+      fontSize: 12,
+      fontWeight: "500",
+      color: theme.colors.textMuted,
+    },
     breakdownContent: {
       marginTop: 12,
     },
@@ -1348,6 +1561,12 @@ const createStyles = (theme: any, insets: any) =>
     // Recurring Section
     recurringSection: {
       marginBottom: 24,
+    },
+    recurringHeader: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      marginBottom: 12,
     },
     sectionTitle: {
       fontSize: 12,
@@ -1578,6 +1797,98 @@ const createStyles = (theme: any, insets: any) =>
     modalContent: {
       flex: 1,
       padding: 16,
+    },
+    insightsContent: {
+      padding: 16,
+      gap: 16,
+    },
+    insightsIntro: {
+      backgroundColor: theme.colors.surface,
+      borderRadius: 16,
+      padding: 20,
+      gap: 6,
+    },
+    insightsKicker: {
+      fontSize: 12,
+      fontWeight: "600",
+      color: theme.colors.textMuted,
+      textTransform: "uppercase",
+      letterSpacing: 0.5,
+    },
+    insightsHeading: {
+      fontSize: 24,
+      fontWeight: "700",
+      color: theme.colors.text,
+    },
+    insightsDescription: {
+      fontSize: 14,
+      color: theme.colors.textMuted,
+    },
+    insightGrid: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 12,
+    },
+    insightCard: {
+      flexBasis: "47%",
+      backgroundColor: theme.colors.surface,
+      borderRadius: 16,
+      padding: 16,
+      gap: 8,
+      minWidth: 150,
+    },
+    insightLabel: {
+      fontSize: 12,
+      fontWeight: "600",
+      color: theme.colors.textMuted,
+      textTransform: "uppercase",
+      letterSpacing: 0.5,
+    },
+    insightValue: {
+      fontSize: 20,
+      fontWeight: "700",
+      color: theme.colors.text,
+    },
+    insightCaption: {
+      fontSize: 13,
+      color: theme.colors.textMuted,
+    },
+    insightDetailsCard: {
+      backgroundColor: theme.colors.surface,
+      borderRadius: 16,
+      padding: 20,
+      marginBottom: insets.bottom + 16,
+    },
+    insightDetailsTitle: {
+      fontSize: 16,
+      fontWeight: "700",
+      color: theme.colors.text,
+      marginBottom: 8,
+    },
+    detailRow: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      paddingVertical: 10,
+      borderBottomWidth: 1,
+      borderBottomColor: `${theme.colors.border}80`,
+    },
+    detailLabel: {
+      fontSize: 12,
+      fontWeight: "600",
+      color: theme.colors.textMuted,
+      textTransform: "uppercase",
+      letterSpacing: 0.5,
+    },
+    detailValue: {
+      fontSize: 16,
+      fontWeight: "600",
+      color: theme.colors.text,
+    },
+    detailMeta: {
+      fontSize: 13,
+      fontWeight: "600",
+      color: theme.colors.text,
     },
     searchInputContainer: {
       flexDirection: "row",
