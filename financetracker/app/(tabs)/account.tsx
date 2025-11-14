@@ -13,6 +13,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 
 import { useAppTheme } from "../../theme";
@@ -214,12 +215,22 @@ export default function AccountScreen() {
           contentInsetAdjustmentBehavior="automatic"
           showsVerticalScrollIndicator={false}
         >
-          <View style={styles.header}>
+          <LinearGradient colors={theme.gradients.hero} style={styles.heroCard}>
             <Text style={styles.title}>Account & preferences</Text>
             <Text style={styles.subtitle}>Personalize how your finance world looks.</Text>
-          </View>
+            <View style={styles.heroMetrics}>
+              <View style={styles.heroMetric}>
+                <Text style={styles.heroMetricLabel}>Active accounts</Text>
+                <Text style={styles.heroMetricValue}>{accounts.filter((account) => !account.isArchived).length}</Text>
+              </View>
+              <View style={styles.heroMetric}>
+                <Text style={styles.heroMetricLabel}>Base currency</Text>
+                <Text style={styles.heroMetricValue}>{currency.toUpperCase()}</Text>
+              </View>
+            </View>
+          </LinearGradient>
 
-          <View style={[theme.components.surface, styles.sectionCard]}>
+          <View style={styles.sectionCard}>
             <Text style={styles.sectionTitle}>Profile</Text>
             <View style={styles.fieldGroup}>
               <Text style={styles.label}>Profile name</Text>
@@ -267,7 +278,7 @@ export default function AccountScreen() {
             </Pressable>
           </View>
 
-          <View style={[theme.components.surface, styles.sectionCard]}>
+          <View style={styles.sectionCard}>
             <Text style={styles.sectionTitle}>Theme</Text>
             <View style={styles.themeRow}>
               {(["dark", "light"] as ThemeMode[]).map((mode) => {
@@ -294,7 +305,7 @@ export default function AccountScreen() {
             </View>
           </View>
 
-          <View style={[theme.components.surface, styles.sectionCard]}>
+          <View style={styles.sectionCard}>
             <View style={styles.sectionHeaderRow}>
               <View>
                 <Text style={styles.sectionTitle}>Accounts</Text>
@@ -353,7 +364,7 @@ export default function AccountScreen() {
             )}
           </View>
 
-          <View style={[theme.components.surface, styles.sectionCard]}>
+          <View style={styles.sectionCard}>
             <Text style={styles.sectionTitle}>Custom categories</Text>
             <View style={styles.fieldGroup}>
               <Text style={styles.label}>Add new category</Text>
@@ -398,7 +409,7 @@ export default function AccountScreen() {
             </View>
           </View>
 
-          <View style={[theme.components.surface, styles.sectionCard]}>
+          <View style={styles.sectionCard}>
             <Text style={styles.sectionTitle}>Budget goals</Text>
             <View style={styles.fieldGroup}>
               <Text style={styles.label}>Goal name</Text>
@@ -660,8 +671,10 @@ const createStyles = (
       paddingBottom: theme.spacing.xl + insets.bottom,
       gap: theme.spacing.xl,
     },
-    header: {
-      gap: theme.spacing.sm,
+    heroCard: {
+      borderRadius: theme.radii.lg,
+      padding: theme.spacing.xl,
+      gap: theme.spacing.md,
     },
     title: {
       ...theme.typography.title,
@@ -671,8 +684,31 @@ const createStyles = (
       ...theme.typography.subtitle,
       fontSize: 14,
     },
+    heroMetrics: {
+      flexDirection: "row",
+      gap: theme.spacing.lg,
+    },
+    heroMetric: {
+      flex: 1,
+    },
+    heroMetricLabel: {
+      ...theme.typography.subtitle,
+      fontSize: 12,
+      textTransform: "uppercase",
+      letterSpacing: 1,
+    },
+    heroMetricValue: {
+      fontSize: 20,
+      fontWeight: "700",
+      color: theme.colors.text,
+    },
     sectionCard: {
       gap: theme.spacing.lg,
+      padding: theme.spacing.xl,
+      borderRadius: theme.radii.lg,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: theme.colors.outline,
+      backgroundColor: theme.colors.backgroundMuted,
     },
     sectionHeaderRow: {
       flexDirection: "row",

@@ -5,6 +5,7 @@ import { ThemeMode, useFinanceStore } from "./lib/store";
 
 type Colors = {
   background: string;
+  backgroundMuted: string;
   surface: string;
   surfaceElevated: string;
   primary: string;
@@ -15,6 +16,8 @@ type Colors = {
   success: string;
   danger: string;
   border: string;
+  outline: string;
+  glow: string;
 };
 
 export const spacing = {
@@ -34,31 +37,37 @@ export const radii = {
 } as const;
 
 const darkColors: Colors = {
-  background: "#050608",
-  surface: "#10121B",
-  surfaceElevated: "#161A26",
-  primary: "#3B82F6",
-  primaryMuted: "#2563EB",
-  accent: "#60A5FA",
-  text: "#F8FAFF",
+  background: "#030614",
+  backgroundMuted: "#050B1F",
+  surface: "#0D1324",
+  surfaceElevated: "#151C33",
+  primary: "#7C5CFF",
+  primaryMuted: "#6241FF",
+  accent: "#22D3EE",
+  text: "#F5F7FF",
   textMuted: "#94A3B8",
-  success: "#34D399",
+  success: "#22C55E",
   danger: "#FB7185",
-  border: "#1F2937",
+  border: "#1F2A40",
+  outline: "rgba(255,255,255,0.06)",
+  glow: "rgba(124,92,255,0.4)",
 };
 
 const lightColors: Colors = {
-  background: "#F8FAFF",
+  background: "#F5F7FF",
+  backgroundMuted: "#EEF2FF",
   surface: "#FFFFFF",
-  surfaceElevated: "#EEF3FF",
-  primary: "#2563EB",
-  primaryMuted: "#1D4ED8",
-  accent: "#60A5FA",
+  surfaceElevated: "#EEF2FF",
+  primary: "#5B21FF",
+  primaryMuted: "#4338CA",
+  accent: "#0EA5E9",
   text: "#0F172A",
   textMuted: "#475569",
-  success: "#047857",
+  success: "#16A34A",
   danger: "#B91C1C",
   border: "#CBD5F5",
+  outline: "rgba(15,23,42,0.08)",
+  glow: "rgba(91,33,255,0.14)",
 };
 
 const buildTypography = (colors: Colors) => ({
@@ -94,11 +103,19 @@ const buildComponents = (colors: Colors) => ({
     backgroundColor: colors.surface,
     borderRadius: radii.lg,
     padding: spacing.xl,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.outline,
+    shadowColor: colors.glow,
+    shadowOpacity: 0.12,
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: 16 },
   },
   surface: {
     backgroundColor: colors.surfaceElevated,
-    borderRadius: radii.md,
+    borderRadius: radii.lg,
     padding: spacing.lg,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.outline,
   },
   buttonPrimary: {
     backgroundColor: colors.primary,
@@ -118,9 +135,9 @@ const buildComponents = (colors: Colors) => ({
     paddingHorizontal: spacing.xl,
     alignItems: "center" as const,
     justifyContent: "center" as const,
-    backgroundColor: colors.surface,
+    backgroundColor: colors.backgroundMuted,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.outline,
   },
   buttonSecondaryText: {
     color: colors.text,
@@ -131,7 +148,7 @@ const buildComponents = (colors: Colors) => ({
     backgroundColor: colors.surface,
     borderRadius: radii.md,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.outline,
     color: colors.text,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
@@ -140,9 +157,27 @@ const buildComponents = (colors: Colors) => ({
     borderRadius: radii.pill,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
-    backgroundColor: colors.surface,
+    backgroundColor: colors.backgroundMuted,
+    borderWidth: 1,
+    borderColor: colors.outline,
   },
 });
+
+const buildGradients = (mode: ThemeMode) => {
+  if (mode === "light") {
+    return {
+      hero: ["#EEF2FF", "#FFFFFF"],
+      highlight: ["rgba(91,33,255,0.12)", "rgba(14,165,233,0.12)"],
+      action: ["#5B21FF", "#2563EB"],
+    } as const;
+  }
+
+  return {
+    hero: ["#090B1F", "#04030D"],
+    highlight: ["rgba(124,92,255,0.2)", "rgba(34,211,238,0.08)"],
+    action: ["#A855F7", "#6366F1"],
+  } as const;
+};
 
 const buildTheme = (mode: ThemeMode) => {
   const colors = mode === "light" ? lightColors : darkColors;
@@ -152,6 +187,7 @@ const buildTheme = (mode: ThemeMode) => {
     radii,
     typography: buildTypography(colors),
     components: buildComponents(colors),
+    gradients: buildGradients(mode),
   } as const;
 };
 

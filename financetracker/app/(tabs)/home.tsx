@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import dayjs from "dayjs";
 import { Link, useRouter } from "expo-router";
@@ -68,6 +69,12 @@ const summarizeGoalProgress = (
     direction: "save" as const,
   };
 };
+
+const quickActions = [
+  { key: "add", label: "Add expense", icon: "add-circle", destination: "/transactions/new" },
+  { key: "transactions", label: "View log", icon: "receipt", destination: "/(tabs)/transactions" },
+  { key: "accounts", label: "Accounts", icon: "wallet", destination: "/(tabs)/account" },
+] as const;
 
 export default function HomeScreen() {
   const theme = useAppTheme();
@@ -397,7 +404,7 @@ export default function HomeScreen() {
   const netChangeThisMonth = summary.income - summary.expense;
   const netIsPositive = netChangeThisMonth >= 0;
   const netBadgeColor = netIsPositive ? theme.colors.success : theme.colors.danger;
-  const netBadgeBackground = netIsPositive ? "rgba(52,211,153,0.16)" : "rgba(251,113,133,0.16)";
+  const netBadgeBackground = netIsPositive ? "rgba(34,197,94,0.15)" : "rgba(248,113,113,0.15)";
   const netIcon = netIsPositive ? "trending-up" : "trending-down";
   const netLabel = `${formatCurrency(netChangeThisMonth, currency, { signDisplay: "always" })} this month`;
 
@@ -433,259 +440,212 @@ export default function HomeScreen() {
         contentInsetAdjustmentBehavior="automatic"
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.header}>
-          <Text style={styles.hello}>Welcome back, {profile.name.split(" ")[0]}</Text>
-          <Text style={styles.subtitle}>Here’s a tidy look at your money this month.</Text>
-        </View>
+        <View style={styles.heroSection}>
+          <LinearGradient colors={theme.gradients.hero} style={styles.heroCard}>
+            <View style={styles.heroHeader}>
+              <View style={styles.heroTitleBlock}>
+                <Text style={styles.eyebrow}>Total balance</Text>
+                <Text style={styles.balanceValue}>{showBalance ? formattedBalance : "••••••"}</Text>
+              </View>
+              <Pressable
+                onPress={() => setShowBalance((prev) => !prev)}
+                style={({ pressed }) => [styles.iconButton, pressed && styles.iconButtonPressed]}
+              >
+                <Ionicons name={showBalance ? "eye" : "eye-off"} size={18} color={theme.colors.text} />
+              </Pressable>
+            </View>
+            <View style={styles.heroStatsRow}>
+              <View style={styles.heroStat}>
+                <Text style={styles.eyebrow}>Income</Text>
+                <Text style={styles.heroStatValue}>{formatCurrency(summary.income, currency)}</Text>
+              </View>
+              <View style={styles.heroStat}>
+                <Text style={styles.eyebrow}>Spend</Text>
+                <Text style={styles.heroStatValue}>{formatCurrency(summary.expense, currency)}</Text>
+              </View>
+              <View style={[styles.heroBadge, { backgroundColor: netBadgeBackground }]}>
+                <Ionicons name={netIcon} size={16} color={netBadgeColor} />
+                <Text style={[styles.heroBadgeText, { color: netBadgeColor }]}>
+                  {showBalance ? netLabel : "Hidden"}
+                </Text>
+              </View>
+            </View>
+          </LinearGradient>
 
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.accountChipRow}
-        >
-            <Pressable
-              onPress={() => setSelectedAccountId(null)}
-              style={[styles.accountChip, !selectedAccountId && styles.accountChipActive]}
-            >
-              <Text style={styles.accountChipTitle}>All accounts</Text>
-              <Text style={styles.accountChipBalance}>
-                {formatCurrency(allAccountsBalance, baseCurrency)}
-              </Text>
-            </Pressable>
-            {accounts.map((account) => {
-              const active = selectedAccountId === account.id;
-              return (
-                <Pressable
-                key={account.id}
-                onPress={() => setSelectedAccountId(account.id)}
-                style={[
-                  styles.accountChip,
-                  active && styles.accountChipActive,
-                  account.isArchived && styles.accountChipArchived,
-                ]}
+          <View style={styles.accountSwitchRow}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.accountChipRow}>
+              <Pressable
+                onPress={() => setSelectedAccountId(null)}
+                style={[styles.accountChip, !selectedAccountId && styles.accountChipActive]}
+              >
+                <Text style={styles.accountChipLabel}>All accounts</Text>
+                <Text style={styles.accountChipValue}>{formatCurrency(allAccountsBalance, baseCurrency)}</Text>
+              </Pressable>
+              {accounts.map((account) => {
+                const active = selectedAccountId === account.id;
+                return (
+                  <Pressable
+                    key={account.id}
+                    onPress={() => setSelectedAccountId(account.id)}
+                    style={[styles.accountChip, active && styles.accountChipActive, account.isArchived && styles.accountChipArchived]}
                   >
-                    <Text style={styles.accountChipTitle}>{account.name}</Text>
-                    <Text style={styles.accountChipBalance}>
+                    <Text style={styles.accountChipLabel}>{account.name}</Text>
+                    <Text style={styles.accountChipValue}>
                       {formatCurrency(account.balance, account.currency || baseCurrency)}
                     </Text>
                   </Pressable>
                 );
               })}
-        </ScrollView>
+            </ScrollView>
+          </View>
 
-        <View style={[theme.components.card, styles.balanceCard]}>
-          <View style={styles.balanceHeader}>
-            <Text style={styles.balanceLabel}>Total balance</Text>
-            <Pressable
-              onPress={() => setShowBalance((prev) => !prev)}
-              hitSlop={8}
-              accessibilityRole="button"
-              accessibilityLabel={showBalance ? "Hide balance" : "Show balance"}
-            >
-              <Ionicons name={showBalance ? "eye" : "eye-off"} size={18} color={theme.colors.textMuted} />
-            </Pressable>
+          <View style={styles.actionRow}>
+            {quickActions.map((action) => (
+              <Pressable
+                key={action.key}
+                onPress={() => router.push(action.destination)}
+                style={({ pressed }) => [styles.actionButton, pressed && styles.actionButtonPressed]}
+              >
+                <Ionicons name={action.icon as keyof typeof Ionicons.glyphMap} size={18} color={theme.colors.text} />
+                <Text style={styles.actionLabel}>{action.label}</Text>
+              </Pressable>
+            ))}
           </View>
-          <Text style={styles.balanceValue}>{showBalance ? formattedBalance : "••••••"}</Text>
-          <View style={styles.balanceMetaRow}>
-            <View style={[styles.metaBadge, { backgroundColor: netBadgeBackground }]}>
-              <Ionicons name={netIcon} size={16} color={netBadgeColor} />
-              <Text style={[styles.metaText, { color: netBadgeColor }]}>
-                {showBalance ? netLabel : "Balance hidden"}
-              </Text>
-            </View>
-            <Text style={styles.metaCaption}>{dayjs().format("MMMM YYYY")}</Text>
-          </View>
-          <View style={styles.balanceBreakdown}>
-            <View style={styles.balanceColumn}>
-              <Text style={styles.breakdownLabel}>Opening balance</Text>
-              <Text style={styles.breakdownValue}>
-                {showBalance ? formatCurrency(summary.openingBalance, currency) : "••••"}
-              </Text>
-            </View>
-            <View style={styles.balanceColumn}>
-              <Text style={styles.breakdownLabel}>Ending balance</Text>
-              <Text style={styles.breakdownValue}>
-                {showBalance
-                  ? formatCurrency(summary.openingBalance + summary.monthNet, currency)
-                  : "••••"}
-              </Text>
-            </View>
-          </View>
-          <Pressable
-            style={styles.reportsLink}
-            accessibilityRole="button"
-            onPress={() => router.push("/(tabs)/transactions")}
-          >
-            <Text style={styles.reportsText}>View reports</Text>
-            <Ionicons name="chevron-forward" size={16} color={theme.colors.primary} />
-          </Pressable>
         </View>
 
-        <View style={[theme.components.surface, styles.monthlyReport]}>
-          <View style={styles.monthlyHeader}>
+        <View style={styles.sectionCard}>
+          <View style={styles.sectionHeaderRow}>
             <View>
-              <Text style={styles.monthlyTitle}>
-                {overviewPeriod === "week" ? "This week" : "This month"}
-              </Text>
-              <Text style={styles.monthlyCaption}>Spending overview</Text>
+              <Text style={styles.sectionTitle}>Spending focus</Text>
+              <Text style={styles.sectionSubtitle}>Monitor cash burn and cadence</Text>
             </View>
-            <View style={styles.periodSwitch}>
-              {["week", "month"].map((period) => {
-                const active = overviewPeriod === period;
-                const handlePress = () => {
-                  if (period === "week") {
-                    setOverviewPeriod("week");
-                    setOverviewChart("bar");
-                  } else {
-                    setOverviewPeriod("month");
-                  }
-                };
-                return (
-                  <Pressable
-                    key={period}
-                    onPress={handlePress}
-                    style={[styles.periodPill, active && styles.periodPillActive]}
-                    accessibilityRole="button"
-                    accessibilityState={{ selected: active }}
-                  >
-                    <Text style={[styles.periodLabel, active && styles.periodLabelActive]}>
-                      {period === "week" ? "Week" : "Month"}
-                    </Text>
-                  </Pressable>
-                );
-              })}
+            <View style={styles.segmentedControl}>
+              {(["week", "month"] as const).map((period) => (
+                <Pressable
+                  key={period}
+                  onPress={() => setOverviewPeriod(period)}
+                  style={[styles.segmentButton, overviewPeriod === period && styles.segmentButtonActive]}
+                >
+                  <Text style={[styles.segmentLabel, overviewPeriod === period && styles.segmentLabelActive]}>
+                    {period === "week" ? "7d" : "30d"}
+                  </Text>
+                </Pressable>
+              ))}
             </View>
           </View>
-          <View style={styles.reportTotals}>
-            <View style={styles.reportStat}>
-              <Text style={styles.reportLabel}>Total spent</Text>
-              <Text style={[styles.reportValue, styles.reportValueNegative]}>
-                {formattedPeriodExpenses}
-              </Text>
-            </View>
-            <View style={[styles.reportStat, styles.trendStat]}>
-              <Text style={styles.reportLabel}>Trend</Text>
-              <View style={styles.trendRow}>
+
+          <View style={styles.chartToggleRow}>
+            {(["bar", "line"] as const).map((chartType) => (
+              <Pressable
+                key={chartType}
+                onPress={() => setOverviewChart(chartType)}
+                disabled={overviewPeriod === "week" && chartType === "line"}
+                style={[styles.chartToggle, overviewChart === chartType && styles.chartToggleActive]}
+              >
                 <Ionicons
-                  name={spentLess ? "arrow-down" : "arrow-up"}
+                  name={chartType === "bar" ? "stats-chart" : "analytics"}
                   size={16}
-                  color={spentLess ? theme.colors.success : theme.colors.danger}
+                  color={overviewChart === chartType ? theme.colors.text : theme.colors.textMuted}
                 />
                 <Text
                   style={[
-                    styles.trendValue,
-                    { color: spentLess ? theme.colors.success : theme.colors.danger },
+                    styles.chartToggleLabel,
+                    overviewChart === chartType && styles.chartToggleLabelActive,
                   ]}
                 >
-                  {`${formatCurrency(Math.abs(trendDelta), currency, { maximumFractionDigits: 0 })} ${
-                    spentLess ? "less" : "more"
-                  }`}
+                  {chartType === "bar" ? "Bars" : "Lines"}
                 </Text>
-              </View>
-              <Text style={styles.trendCaption}>
-                than {overviewPeriod === "week" ? "last week" : "last month"}
-              </Text>
-            </View>
+              </Pressable>
+            ))}
           </View>
-          <View style={styles.chartSwitch}>
-            {(overviewPeriod === "month" ? ["bar", "line"] : ["bar"]).map((type) => {
-              const active = overviewChart === type;
-              return (
-                <Pressable
-                  key={type}
-                  onPress={() => setOverviewChart(type as typeof overviewChart)}
-                  style={[styles.chartPill, active && styles.chartPillActive]}
-                >
-                  <Text style={[styles.chartLabel, active && styles.chartLabelActive]}>
-                    {type === "bar" ? "Bar" : "Line"}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
-          <View style={styles.chartContainer}>
-            {overviewChart === "line" ? (
+
+          <View style={styles.chartCard}>
+            {overviewChart === "bar" ? (
+              <SpendingBarChart
+                data={periodDailySpending}
+                formatValue={(value) => formatCurrency(value, currency)}
+                style={styles.chart}
+                onActiveChange={() => {}}
+              />
+            ) : (
               <SpendingLineChart
                 data={monthlyLineSeries.current}
                 comparison={monthlyLineSeries.previous}
-                formatValue={(value) =>
-                  formatCurrency(value, currency, { maximumFractionDigits: 0 })
-                }
+                formatValue={(value) => formatCurrency(value, currency)}
                 style={styles.chart}
+                onActiveChange={() => {}}
               />
-            ) : (
-              <SpendingBarChart
-                data={overviewPeriod === "month" ? monthlyComparison : periodDailySpending}
-                style={styles.chart}
-                formatValue={(value) =>
-                  formatCurrency(value, currency, { maximumFractionDigits: 0 })
-                }
-              />
+            )}
+          </View>
+
+          <View style={styles.metricRow}>
+            <View style={styles.metricCard}>
+              <Text style={styles.eyebrow}>Spent this {overviewPeriod === "week" ? "week" : "month"}</Text>
+              <Text style={styles.metricValue}>{formattedPeriodExpenses}</Text>
+              <View style={styles.metricBadge}>
+                <Ionicons name={spentLess ? "sparkles" : "warning"} size={14} color={theme.colors.text} />
+                <Text style={styles.metricBadgeText}>
+                  {spentLess
+                    ? `${formatCurrency(trendDelta, currency, { signDisplay: "always" })} vs last period`
+                    : `${formatCurrency(Math.abs(trendDelta), currency)} more than last period`}
+                </Text>
+              </View>
+            </View>
+            {monthlyComparison.length > 0 && (
+              <View style={styles.metricCard}>
+                <Text style={styles.eyebrow}>5 month trend</Text>
+                <SpendingBarChart
+                  data={monthlyComparison}
+                  formatValue={(value) => formatCurrency(value, currency)}
+                  style={styles.miniChart}
+                  onActiveChange={() => {}}
+                />
+              </View>
             )}
           </View>
         </View>
 
-        <View style={[theme.components.surface, styles.topSpendingCard]}>
+        <View style={styles.sectionCard}>
           <View style={styles.sectionHeaderRow}>
             <View>
-              <Text style={styles.sectionTitle}>Top spending</Text>
-              <Text style={styles.sectionCaption}>
-                {topSpending.totalSpent ? formatCurrency(topSpending.totalSpent, currency) : "No spend"}
-              </Text>
+              <Text style={styles.sectionTitle}>Top categories</Text>
+              <Text style={styles.sectionSubtitle}>Where your cash is flowing</Text>
             </View>
-            <View style={styles.periodSwitch}>
-              {["week", "month"].map((period) => {
-                const active = topSpendingPeriod === period;
-                return (
-                  <Pressable
-                    key={period}
-                    onPress={() => setTopSpendingPeriod(period as typeof topSpendingPeriod)}
-                    style={[styles.periodPill, active && styles.periodPillActive]}
-                    accessibilityRole="button"
-                    accessibilityState={{ selected: active }}
-                  >
-                    <Text style={[styles.periodLabel, active && styles.periodLabelActive]}>
-                      {period === "week" ? "Week" : "Month"}
-                    </Text>
-                  </Pressable>
-                );
-              })}
+            <View style={styles.segmentedControl}>
+              {(["week", "month"] as const).map((period) => (
+                <Pressable
+                  key={period}
+                  onPress={() => setTopSpendingPeriod(period)}
+                  style={[styles.segmentButton, topSpendingPeriod === period && styles.segmentButtonActive]}
+                >
+                  <Text style={[styles.segmentLabel, topSpendingPeriod === period && styles.segmentLabelActive]}>
+                    {period === "week" ? "7d" : "30d"}
+                  </Text>
+                </Pressable>
+              ))}
             </View>
           </View>
-          {topSpendingEntries.length ? (
+
+          {topSpendingEntries.length > 0 ? (
             <View style={styles.topSpendingContent}>
-              <DonutChart
-                data={topSpendingEntries.map((entry) => ({
-                  label: entry.label,
-                  value: entry.amount,
-                  color: entry.color,
-                }))}
-              />
+              <DonutChart data={topSpendingEntries} />
               <View style={styles.topSpendingList}>
                 {topSpendingEntries.map((entry) => {
                   const isCategory = entry.key !== "__others__";
                   const content = (
-                    <>
-                      <View style={styles.topSpendingItemHeader}>
-                        <Text style={styles.topSpendingName}>{entry.label}</Text>
-                        <Text style={[styles.topSpendingAmount, styles.topSpendingAmountOffset]}>
-                          {formatCurrency(entry.amount, currency)}
-                        </Text>
+                    <View style={styles.topSpendingItem}>
+                      <View style={[styles.colorDot, { backgroundColor: entry.color }]} />
+                      <View style={styles.topSpendingCopy}>
+                        <Text style={styles.topSpendingLabel}>{entry.label}</Text>
+                        <Text style={styles.topSpendingMeta}>{entry.percentage}% of spend</Text>
                       </View>
-                      <Text style={[styles.spendingPercentage, { color: entry.color }]}>
-                        {entry.percentage}% of spend
-                      </Text>
-                    </>
+                      <Text style={styles.topSpendingValue}>{formatCurrency(entry.amount, currency)}</Text>
+                    </View>
                   );
 
                   if (!isCategory) {
                     return (
-                      <View
-                        key={entry.key}
-                        style={styles.topSpendingItem}
-                        accessibilityRole="text"
-                        accessibilityLabel={`${entry.label}: ${formatCurrency(entry.amount, currency)}, ${entry.percentage}% of spend`}
-                      >
+                      <View key={entry.key} style={styles.topSpendingRowStatic}>
                         {content}
                       </View>
                     );
@@ -697,14 +657,7 @@ export default function HomeScreen() {
                       href={{ pathname: "/(tabs)/transactions", params: { category: entry.key } }}
                       asChild
                     >
-                      <Pressable
-                        accessibilityRole="button"
-                        style={({ pressed }) => [
-                          styles.topSpendingItem,
-                          styles.topSpendingItemInteractive,
-                          pressed && styles.topSpendingItemPressed,
-                        ]}
-                      >
+                      <Pressable style={({ pressed }) => [styles.topSpendingRowInteractive, pressed && styles.topSpendingRowPressed]}>
                         {content}
                       </Pressable>
                     </Link>
@@ -715,65 +668,27 @@ export default function HomeScreen() {
           ) : (
             <View style={styles.emptyState}>
               <Ionicons name="leaf-outline" size={20} color={theme.colors.textMuted} />
-              <Text style={styles.emptyStateText}>Track a few expenses to see insights.</Text>
+              <Text style={styles.emptyStateText}>Track a few expenses to unlock insights.</Text>
             </View>
           )}
         </View>
 
-        {upcomingRecurring.length > 0 && (
-          <View style={[theme.components.surface, styles.recurringCard]}>
-            <View style={styles.sectionHeaderRow}>
-              <Text style={styles.sectionTitle}>Upcoming recurring</Text>
-              <Text style={styles.sectionCaption}>Next {upcomingRecurring.length}</Text>
-            </View>
-            <View style={styles.recurringList}>
-              {upcomingRecurring.map((item) => (
-                <View key={item.id} style={styles.recurringRow}>
-                  <View style={styles.recurringCopy}>
-                    <Text style={styles.recurringCategory}>{item.category}</Text>
-                    {item.note ? (
-                      <Text style={styles.recurringNote} numberOfLines={2}>
-                        {truncateWords(item.note, 10)}
-                      </Text>
-                    ) : null}
-                    <Text style={styles.recurringMeta}>
-                      {dayjs(item.nextOccurrence).format("MMM D")} •
-                      {` ${item.frequency.charAt(0).toUpperCase()}${item.frequency.slice(1)}`}
-                    </Text>
-                  </View>
-                  <Pressable
-                    onPress={() => logRecurringTransaction(item.id)}
-                    style={styles.recurringAction}
-                    accessibilityRole="button"
-                  >
-                    <Ionicons name="download-outline" size={16} color={theme.colors.primary} />
-                    <Text style={styles.recurringActionText}>Log</Text>
-                  </Pressable>
-                </View>
-              ))}
-            </View>
-          </View>
-        )}
-
         {budgetGoals.length > 0 && (
-          <View style={[theme.components.surface, styles.goalsCard]}>
+          <View style={styles.sectionCard}>
             <View style={styles.sectionHeaderRow}>
-              <Text style={styles.sectionTitle}>Budget goals</Text>
-              <Text style={styles.sectionCaption}>Stay on track</Text>
+              <View>
+                <Text style={styles.sectionTitle}>Budget goals</Text>
+                <Text style={styles.sectionSubtitle}>Micro targets keep you honest</Text>
+              </View>
             </View>
             <View style={styles.goalList}>
               {budgetGoals.map((goal) => {
-                const progress = summarizeGoalProgress(
-                  goal,
-                  currency,
-                  scopedTransactions,
-                  selectedAccountId,
-                );
+                const progress = summarizeGoalProgress(goal, currency, scopedTransactions, selectedAccountId);
                 const progressPercent = Math.round(progress.percentage * 100);
                 const goalComplete = progressPercent >= 100;
 
                 return (
-                  <View key={goal.id} style={styles.goalRow}>
+                  <View key={goal.id} style={styles.goalCard}>
                     <View style={styles.goalCopy}>
                       <Text style={styles.goalName}>{goal.name}</Text>
                       <Text style={styles.goalMeta}>
@@ -786,21 +701,13 @@ export default function HomeScreen() {
                           styles.goalMeterFill,
                           {
                             width: `${Math.min(100, progressPercent)}%`,
-                            backgroundColor:
-                              progress.direction === "save"
-                                ? theme.colors.success
-                                : theme.colors.primary,
+                            backgroundColor: progress.direction === "save" ? theme.colors.success : theme.colors.primary,
                           },
                         ]}
                       />
                     </View>
-                    <Text
-                      style={[
-                        styles.goalPercentage,
-                        goalComplete && { color: theme.colors.success },
-                      ]}
-                    >
-                      {Math.min(100, progressPercent)}%
+                    <Text style={[styles.goalPercentage, goalComplete && { color: theme.colors.success }]}>
+                      {progressPercent}%
                     </Text>
                   </View>
                 );
@@ -809,521 +716,524 @@ export default function HomeScreen() {
           </View>
         )}
 
-        <View style={[theme.components.surface, styles.recentCard]}>
-          <View style={styles.sectionHeaderRow}>
-            <Text style={styles.sectionTitle}>Recent transactions</Text>
-            <Text style={styles.sectionCaption}>Last {recentTransactions.length || 0}</Text>
-          </View>
-          {recentTransactions.length ? (
-            <View style={styles.recentList}>
-              {recentTransactions.map((transaction) => {
-                const visual = getTransactionVisualState(transaction, selectedAccountId);
-                const isTransfer = transaction.type === "transfer";
-                const transferLabel = isTransfer
-                  ? `${resolveAccountName(transaction.accountId)} → ${resolveAccountName(transaction.toAccountId)}`
-                  : transaction.category;
-                const amountColor =
-                  visual.variant === "income"
-                    ? styles.reportValuePositive
-                    : visual.variant === "expense"
-                      ? styles.reportValueNegative
-                      : styles.reportValueNeutral;
-                const avatarVariant =
-                  visual.variant === "income"
-                    ? styles.avatarIncome
-                    : visual.variant === "expense"
-                      ? styles.avatarExpense
-                      : styles.avatarNeutral;
-
-                return (
-                  <Pressable
-                    key={transaction.id}
-                    style={({ pressed }) => [styles.recentRow, pressed && styles.recentRowPressed]}
-                    onPress={() => router.push(`/transactions/${transaction.id}`)}
-                    accessibilityRole="button"
-                  >
-                    <View
-                      style={[
-                        styles.recentAvatar,
-                        avatarVariant,
-                      ]}
-                    >
-                      <Text style={styles.avatarText}>{transaction.category.charAt(0)}</Text>
-                    </View>
-                    <View style={styles.recentCopy}>
-                      <Text style={styles.recentNote}>{transaction.note}</Text>
-                      <Text style={styles.recentMeta}>
-                        {dayjs(transaction.date).format("ddd, D MMM")} •
-                        {" "}
-                        {isTransfer ? `Transfer · ${transferLabel}` : transaction.category}
+        {upcomingRecurring.length > 0 && (
+          <View style={styles.sectionCard}>
+            <View style={styles.sectionHeaderRow}>
+              <View>
+                <Text style={styles.sectionTitle}>Upcoming autopay</Text>
+                <Text style={styles.sectionSubtitle}>Prep for the next few debits</Text>
+              </View>
+              <Text style={styles.sectionSubtitle}>Next {upcomingRecurring.length}</Text>
+            </View>
+            <View style={styles.recurringList}>
+              {upcomingRecurring.map((item) => (
+                <View key={item.id} style={styles.recurringRow}>
+                  <View style={styles.recurringCopy}>
+                    <Text style={styles.recurringCategory}>{item.category}</Text>
+                    {item.note ? (
+                      <Text style={styles.recurringNote} numberOfLines={2}>
+                        {truncateWords(item.note, 10)}
                       </Text>
-                    </View>
-                    <Text
-                      style={[
-                        styles.recentAmount,
-                        amountColor,
-                      ]}
-                    >
-                      {visual.prefix}
-                      {formatCurrency(transaction.amount, currency)}
+                    ) : null}
+                    <Text style={styles.recurringMeta}>
+                      {dayjs(item.nextOccurrence).format("MMM D")} • {` ${item.frequency.charAt(0).toUpperCase()}${item.frequency.slice(1)}`}
                     </Text>
+                  </View>
+                  <Pressable onPress={() => logRecurringTransaction(item.id)} style={styles.recurringAction}>
+                    <Ionicons name="download-outline" size={16} color={theme.colors.primary} />
+                    <Text style={styles.recurringActionText}>Log</Text>
                   </Pressable>
-                );
-              })}
+                </View>
+              ))}
             </View>
-          ) : (
-            <View style={styles.emptyState}>
-              <Ionicons name="documents-outline" size={20} color={theme.colors.textMuted} />
-              <Text style={styles.emptyStateText}>No transactions logged yet.</Text>
+          </View>
+        )}
+
+        <View style={styles.sectionCard}>
+          <View style={styles.sectionHeaderRow}>
+            <View>
+              <Text style={styles.sectionTitle}>Latest activity</Text>
+              <Text style={styles.sectionSubtitle}>Most recent five transactions</Text>
             </View>
-          )}
+            <Pressable onPress={() => router.push("/(tabs)/transactions")}>
+              <Text style={styles.linkText}>View all</Text>
+            </Pressable>
+          </View>
+          <View style={styles.timeline}>
+            {recentTransactions.map((transaction, index) => {
+              const visualState = getTransactionVisualState(transaction);
+              const isLast = index === recentTransactions.length - 1;
+              return (
+                <View key={transaction.id} style={styles.timelineRow}>
+                  <View style={styles.timelineIndicator}>
+                    <View style={styles.timelineBullet} />
+                    {!isLast && <View style={styles.timelineConnector} />}
+                  </View>
+                  <View style={styles.timelineCard}>
+                    <Text style={styles.timelineTitle}>{transaction.note || transaction.category}</Text>
+                    <Text style={styles.timelineMeta}>
+                      {dayjs(transaction.date).format("MMM D")} {transaction.accountId ? `• ${resolveAccountName(transaction.accountId)}` : ""}
+                    </Text>
+                  </View>
+                  <Text
+                    style={[
+                      styles.timelineAmount,
+                      visualState === "income"
+                        ? styles.timelineIncome
+                        : visualState === "expense"
+                          ? styles.timelineExpense
+                          : styles.timelineTransfer,
+                    ]}
+                  >
+                    {formatCurrency(transaction.amount, currency)}
+                  </Text>
+                </View>
+              );
+            })}
+          </View>
         </View>
       </ScrollView>
     </SafeAreaView>
   );
 }
 
-const createStyles = (
-  theme: ReturnType<typeof useAppTheme>,
-  insets: ReturnType<typeof useSafeAreaInsets>,
-) =>
+const createStyles = (theme: ReturnType<typeof useAppTheme>, insets: ReturnType<typeof useSafeAreaInsets>) =>
   StyleSheet.create({
     safeArea: {
       flex: 1,
       backgroundColor: theme.colors.background,
     },
     content: {
-      paddingHorizontal: theme.spacing.md,
-      paddingTop: theme.spacing.lg,
-      paddingBottom: theme.spacing.xxl + 96 + insets.bottom,
+      paddingBottom: theme.spacing.xxl + insets.bottom + 48,
+      paddingTop: theme.spacing.xl,
+      paddingHorizontal: theme.spacing.xl,
+      gap: theme.spacing.xl,
+    },
+    heroSection: {
       gap: theme.spacing.lg,
     },
-    header: {
-      gap: theme.spacing.xs,
-    },
-    hello: {
-      ...theme.typography.title,
-      fontSize: 24,
-    },
-    subtitle: {
-      ...theme.typography.subtitle,
-      fontSize: 14,
-    },
-    accountChipRow: {
-      flexDirection: "row",
-      gap: theme.spacing.sm,
-      marginBottom: theme.spacing.sm,
-    },
-    accountChip: {
-      paddingHorizontal: theme.spacing.md,
-      paddingVertical: theme.spacing.sm,
+    heroCard: {
       borderRadius: theme.radii.lg,
-      backgroundColor: theme.colors.surface,
-      borderWidth: 1,
-      borderColor: theme.colors.border,
+      padding: theme.spacing.xl,
     },
-    accountChipActive: {
-      borderColor: theme.colors.primary,
-      backgroundColor: `${theme.colors.primary}22`,
-    },
-    accountChipArchived: {
-      opacity: 0.6,
-    },
-    accountChipTitle: {
-      fontSize: 13,
-      fontWeight: "600",
-      color: theme.colors.text,
-    },
-    accountChipBalance: {
-      fontSize: 12,
-      color: theme.colors.textMuted,
-    },
-    balanceCard: {
-      gap: theme.spacing.lg,
-    },
-    balanceHeader: {
+    heroHeader: {
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "space-between",
+      marginBottom: theme.spacing.lg,
     },
-    balanceLabel: {
-      ...theme.typography.subtitle,
-      textTransform: "uppercase",
-      letterSpacing: 1.2,
-      fontSize: 12,
+    heroTitleBlock: {
+      gap: 6,
     },
     balanceValue: {
-      fontSize: 36,
+      fontSize: 34,
       fontWeight: "700",
       color: theme.colors.text,
+      letterSpacing: 0.4,
     },
-    balanceMetaRow: {
-      flexDirection: "row",
-      justifyContent: "space-between",
-      alignItems: "center",
-    },
-    metaBadge: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 6,
-      paddingHorizontal: 10,
-      paddingVertical: 4,
-      borderRadius: 999,
-    },
-    metaText: {
-      fontSize: 12,
-      fontWeight: "600",
-    },
-    metaCaption: {
-      ...theme.typography.subtitle,
+    eyebrow: {
+      ...theme.typography.label,
       fontSize: 12,
     },
-    balanceBreakdown: {
+    heroStatsRow: {
       flexDirection: "row",
-      justifyContent: "space-between",
+      alignItems: "center",
       gap: theme.spacing.lg,
     },
-    balanceColumn: {
+    heroStat: {
       flex: 1,
       gap: 4,
     },
-    breakdownLabel: {
-      ...theme.typography.label,
-      letterSpacing: 1.2,
-    },
-    breakdownValue: {
+    heroStatValue: {
       fontSize: 18,
       fontWeight: "600",
       color: theme.colors.text,
     },
-    reportsLink: {
+    heroBadge: {
       flexDirection: "row",
       alignItems: "center",
-      justifyContent: "flex-start",
+      gap: 6,
+      paddingHorizontal: theme.spacing.md,
+      paddingVertical: theme.spacing.xs,
+      borderRadius: theme.radii.pill,
+    },
+    heroBadgeText: {
+      fontSize: 12,
+      fontWeight: "600",
+    },
+    iconButton: {
+      width: 36,
+      height: 36,
+      borderRadius: 18,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: "rgba(0,0,0,0.18)",
+    },
+    iconButtonPressed: {
+      opacity: 0.7,
+    },
+    accountSwitchRow: {
+      marginTop: -theme.spacing.sm,
+    },
+    accountChipRow: {
+      gap: theme.spacing.sm,
+      paddingRight: theme.spacing.md,
+    },
+    accountChip: {
+      paddingVertical: theme.spacing.sm,
+      paddingHorizontal: theme.spacing.lg,
+      borderRadius: theme.radii.lg,
+      backgroundColor: theme.colors.backgroundMuted,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: theme.colors.outline,
+      gap: 4,
+      minWidth: 150,
+    },
+    accountChipActive: {
+      backgroundColor: "rgba(255,255,255,0.08)",
+      borderColor: theme.colors.primary,
+    },
+    accountChipArchived: {
+      opacity: 0.5,
+    },
+    accountChipLabel: {
+      ...theme.typography.subtitle,
+      fontSize: 13,
+      textTransform: "none",
+      letterSpacing: 0,
+    },
+    accountChipValue: {
+      fontSize: 18,
+      fontWeight: "600",
+      color: theme.colors.text,
+    },
+    actionRow: {
+      flexDirection: "row",
+      gap: theme.spacing.md,
+    },
+    actionButton: {
+      flex: 1,
+      paddingVertical: theme.spacing.md,
+      borderRadius: theme.radii.md,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: theme.colors.outline,
+      backgroundColor: theme.colors.surface,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
       gap: 8,
     },
-    reportsText: {
+    actionButtonPressed: {
+      opacity: 0.7,
+    },
+    actionLabel: {
       fontSize: 14,
       fontWeight: "600",
-      color: theme.colors.primary,
-    },
-    monthlyReport: {
-      gap: theme.spacing.md,
-    },
-    monthlyHeader: {
-      flexDirection: "row",
-      justifyContent: "space-between",
-      alignItems: "center",
-    },
-    monthlyTitle: {
-      ...theme.typography.title,
-      fontSize: 20,
-    },
-    monthlyCaption: {
-      ...theme.typography.subtitle,
-      fontSize: 13,
-    },
-    periodSwitch: {
-      flexDirection: "row",
-      backgroundColor: theme.colors.surface,
-      borderRadius: 999,
-      padding: 4,
-      gap: 4,
-    },
-    periodPill: {
-      paddingHorizontal: theme.spacing.md,
-      paddingVertical: 6,
-      borderRadius: 999,
-    },
-    periodPillActive: {
-      backgroundColor: theme.colors.primary,
-    },
-    periodLabel: {
-      fontSize: 12,
-      fontWeight: "600",
-      color: theme.colors.textMuted,
-    },
-    periodLabelActive: {
       color: theme.colors.text,
     },
-    reportTotals: {
-      flexDirection: "row",
-      justifyContent: "space-between",
-      alignItems: "flex-start",
-      gap: theme.spacing.md,
-    },
-    reportStat: {
-      gap: 6,
-      alignItems: "flex-start",
-    },
-    trendStat: {
-      alignItems: "flex-end",
-    },
-    reportLabel: {
-      ...theme.typography.subtitle,
-      fontSize: 13,
-      textTransform: "uppercase",
-      letterSpacing: 1.4,
-    },
-    reportValue: {
-      fontSize: 18,
-      fontWeight: "700",
-      letterSpacing: 0.2,
-    },
-    reportValueNegative: {
-      color: theme.colors.danger,
-    },
-    reportValuePositive: {
-      color: theme.colors.success,
-    },
-    reportValueNeutral: {
-      color: theme.colors.textMuted,
-    },
-    trendRow: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 6,
-    },
-    trendValue: {
-      fontSize: 18,
-      fontWeight: "600",
-    },
-    trendCaption: {
-      ...theme.typography.subtitle,
-      fontSize: 13,
-      marginTop: 2,
-      textAlign: "right",
-    },
-    chartSwitch: {
-      flexDirection: "row",
-      gap: theme.spacing.sm,
-      marginTop: theme.spacing.sm,
-    },
-    chartPill: {
-      paddingHorizontal: 14,
-      paddingVertical: 6,
-      borderRadius: 999,
-      borderWidth: 1,
-      borderColor: theme.colors.border,
-      backgroundColor: theme.colors.surface,
-    },
-    chartPillActive: {
-      borderColor: theme.colors.primary,
-      backgroundColor: `${theme.colors.primary}14`,
-    },
-    chartLabel: {
-      ...theme.typography.subtitle,
-      fontSize: 13,
-      color: theme.colors.textMuted,
-    },
-    chartLabelActive: {
-      color: theme.colors.primary,
-      fontWeight: "600",
-    },
-    chartContainer: {
-      marginTop: theme.spacing.md,
-    },
-    chart: {
-      width: "100%",
-    },
-    topSpendingCard: {
+    sectionCard: {
+      ...theme.components.card,
+      padding: theme.spacing.xl,
       gap: theme.spacing.lg,
-    },
-    topSpendingContent: {
-      flexDirection: "row",
-      gap: theme.spacing.lg,
-      alignItems: "center",
-    },
-    topSpendingList: {
-      flex: 1,
-      gap: theme.spacing.md,
-    },
-    topSpendingItem: {
-      gap: 4,
-    },
-    topSpendingItemInteractive: {
-      borderRadius: theme.radii.md,
-      paddingHorizontal: theme.spacing.sm,
-      paddingVertical: theme.spacing.xs,
-    },
-    topSpendingItemPressed: {
-      backgroundColor: `${theme.colors.primary}1A`,
-    },
-    topSpendingItemHeader: {
-      flexDirection: "row",
-      justifyContent: "space-between",
-    },
-    topSpendingName: {
-      ...theme.typography.body,
-      fontWeight: "600",
-    },
-    topSpendingAmount: {
-      ...theme.typography.subtitle,
-      fontSize: 14,
-      color: theme.colors.text,
-    },
-    topSpendingAmountOffset: {
-      marginTop: 4,
-    },
-    spendingPercentage: {
-      ...theme.typography.subtitle,
-      fontSize: 12,
     },
     sectionHeaderRow: {
       flexDirection: "row",
-      justifyContent: "space-between",
       alignItems: "center",
+      justifyContent: "space-between",
     },
     sectionTitle: {
       ...theme.typography.title,
       fontSize: 20,
     },
-    sectionCaption: {
+    sectionSubtitle: {
       ...theme.typography.subtitle,
-      fontSize: 13,
+      fontSize: 14,
     },
-    emptyState: {
+    segmentedControl: {
+      flexDirection: "row",
+      borderRadius: theme.radii.pill,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: theme.colors.outline,
+      overflow: "hidden",
+    },
+    segmentButton: {
+      paddingHorizontal: theme.spacing.md,
+      paddingVertical: theme.spacing.xs,
+    },
+    segmentButtonActive: {
+      backgroundColor: theme.colors.backgroundMuted,
+    },
+    segmentLabel: {
+      fontSize: 12,
+      color: theme.colors.textMuted,
+      fontWeight: "600",
+    },
+    segmentLabelActive: {
+      color: theme.colors.text,
+    },
+    chartToggleRow: {
+      flexDirection: "row",
+      gap: theme.spacing.sm,
+      alignItems: "center",
+    },
+    chartToggle: {
+      flex: 1,
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "center",
+      gap: 6,
+      paddingVertical: theme.spacing.sm,
+      borderRadius: theme.radii.md,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: theme.colors.outline,
+    },
+    chartToggleActive: {
+      backgroundColor: theme.colors.backgroundMuted,
+      borderColor: theme.colors.primary,
+    },
+    chartToggleLabel: {
+      fontSize: 13,
+      color: theme.colors.textMuted,
+      fontWeight: "600",
+    },
+    chartToggleLabelActive: {
+      color: theme.colors.text,
+    },
+    chartCard: {
+      borderRadius: theme.radii.lg,
+      backgroundColor: theme.colors.backgroundMuted,
+      padding: theme.spacing.lg,
+    },
+    chart: {
+      width: "100%",
+    },
+    metricRow: {
+      flexDirection: "row",
+      gap: theme.spacing.lg,
+      flexWrap: "wrap",
+    },
+    metricCard: {
+      flex: 1,
+      minWidth: 160,
+      backgroundColor: theme.colors.backgroundMuted,
+      borderRadius: theme.radii.md,
+      padding: theme.spacing.lg,
       gap: theme.spacing.sm,
-      paddingVertical: theme.spacing.md,
+    },
+    metricValue: {
+      fontSize: 24,
+      fontWeight: "700",
+      color: theme.colors.text,
+    },
+    metricBadge: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+    },
+    metricBadgeText: {
+      fontSize: 13,
+      color: theme.colors.text,
+    },
+    miniChart: {
+      width: "100%",
+      height: 120,
+    },
+    topSpendingContent: {
+      flexDirection: "row",
+      gap: theme.spacing.lg,
+      flexWrap: "wrap",
+    },
+    topSpendingList: {
+      flex: 1,
+      gap: theme.spacing.sm,
+      minWidth: 200,
+    },
+    topSpendingItem: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: theme.spacing.md,
+      flex: 1,
+    },
+    colorDot: {
+      width: 12,
+      height: 12,
+      borderRadius: 6,
+    },
+    topSpendingCopy: {
+      flex: 1,
+      gap: 2,
+    },
+    topSpendingLabel: {
+      fontWeight: "600",
+      color: theme.colors.text,
+    },
+    topSpendingMeta: {
+      fontSize: 12,
+      color: theme.colors.textMuted,
+    },
+    topSpendingValue: {
+      fontWeight: "600",
+      color: theme.colors.text,
+    },
+    topSpendingRowStatic: {
+      paddingVertical: theme.spacing.sm,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderColor: theme.colors.outline,
+    },
+    topSpendingRowInteractive: {
+      paddingVertical: theme.spacing.sm,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderColor: theme.colors.outline,
+    },
+    topSpendingRowPressed: {
+      opacity: 0.7,
+    },
+    emptyState: {
+      alignItems: "center",
+      gap: 6,
+      paddingVertical: theme.spacing.lg,
     },
     emptyStateText: {
-      ...theme.typography.subtitle,
-      fontSize: 13,
+      color: theme.colors.textMuted,
     },
-    recurringCard: {
+    goalList: {
+      gap: theme.spacing.lg,
+    },
+    goalCard: {
+      backgroundColor: theme.colors.backgroundMuted,
+      borderRadius: theme.radii.md,
+      padding: theme.spacing.lg,
       gap: theme.spacing.md,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: theme.colors.outline,
+    },
+    goalCopy: {
+      gap: 4,
+    },
+    goalName: {
+      fontSize: 16,
+      fontWeight: "600",
+      color: theme.colors.text,
+    },
+    goalMeta: {
+      fontSize: 13,
+      color: theme.colors.textMuted,
+    },
+    goalMeter: {
+      width: "100%",
+      height: 6,
+      borderRadius: 4,
+      backgroundColor: "rgba(255,255,255,0.06)",
+      overflow: "hidden",
+    },
+    goalMeterFill: {
+      height: "100%",
+      borderRadius: 4,
+    },
+    goalPercentage: {
+      fontSize: 13,
+      color: theme.colors.text,
+      fontWeight: "600",
     },
     recurringList: {
       gap: theme.spacing.md,
     },
     recurringRow: {
       flexDirection: "row",
-      justifyContent: "space-between",
       alignItems: "center",
+      justifyContent: "space-between",
       gap: theme.spacing.md,
+      paddingVertical: theme.spacing.sm,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderColor: theme.colors.outline,
     },
     recurringCopy: {
       flex: 1,
       gap: 4,
     },
     recurringCategory: {
-      ...theme.typography.body,
+      fontSize: 16,
       fontWeight: "600",
+      color: theme.colors.text,
     },
     recurringNote: {
-      ...theme.typography.subtitle,
+      color: theme.colors.textMuted,
       fontSize: 13,
     },
     recurringMeta: {
-      ...theme.typography.subtitle,
+      color: theme.colors.textMuted,
       fontSize: 12,
     },
     recurringAction: {
       flexDirection: "row",
       alignItems: "center",
-      gap: 6,
-      paddingHorizontal: 12,
-      paddingVertical: 6,
-      borderRadius: 999,
-      borderWidth: 1,
+      gap: 4,
+      paddingHorizontal: theme.spacing.md,
+      paddingVertical: theme.spacing.sm,
+      borderRadius: theme.radii.pill,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: theme.colors.primary,
     },
     recurringActionText: {
-      fontSize: 13,
-      fontWeight: "600",
       color: theme.colors.primary,
+      fontWeight: "600",
     },
-    goalsCard: {
+    timeline: {
       gap: theme.spacing.md,
     },
-    goalList: {
-      gap: theme.spacing.lg,
+    timelineRow: {
+      flexDirection: "row",
+      alignItems: "flex-start",
+      gap: theme.spacing.md,
     },
-    goalRow: {
-      gap: theme.spacing.sm,
+    timelineIndicator: {
+      width: 24,
+      alignItems: "center",
     },
-    goalCopy: {
+    timelineBullet: {
+      width: 10,
+      height: 10,
+      borderRadius: 5,
+      backgroundColor: theme.colors.primary,
+    },
+    timelineConnector: {
+      width: 2,
+      flex: 1,
+      backgroundColor: theme.colors.outline,
+      marginTop: 2,
+    },
+    timelineCard: {
+      flex: 1,
+      backgroundColor: theme.colors.backgroundMuted,
+      borderRadius: theme.radii.md,
+      padding: theme.spacing.md,
       gap: 4,
     },
-    goalName: {
-      ...theme.typography.body,
+    timelineTitle: {
       fontWeight: "600",
-    },
-    goalMeta: {
-      ...theme.typography.subtitle,
-      fontSize: 13,
-    },
-    goalMeter: {
-      width: "100%",
-      height: 8,
-      borderRadius: 999,
-      backgroundColor: theme.colors.border,
-      overflow: "hidden",
-    },
-    goalMeterFill: {
-      height: "100%",
-      borderRadius: 999,
-    },
-    goalPercentage: {
-      ...theme.typography.subtitle,
-      fontSize: 12,
-      alignSelf: "flex-end",
-    },
-    recentCard: {
-      gap: theme.spacing.md,
-    },
-    recentList: {
-      gap: theme.spacing.md,
-    },
-    recentRow: {
-      flexDirection: "row",
-      alignItems: "center",
-      justifyContent: "space-between",
-      gap: theme.spacing.md,
-    },
-    recentRowPressed: {
-      opacity: 0.7,
-    },
-    recentAvatar: {
-      width: 42,
-      height: 42,
-      borderRadius: 21,
-      alignItems: "center",
-      justifyContent: "center",
-    },
-    avatarIncome: {
-      backgroundColor: `${theme.colors.success}33`,
-    },
-    avatarExpense: {
-      backgroundColor: `${theme.colors.danger}33`,
-    },
-    avatarNeutral: {
-      backgroundColor: `${theme.colors.border}66`,
-    },
-    avatarText: {
-      fontSize: 16,
-      fontWeight: "700",
       color: theme.colors.text,
     },
-    recentCopy: {
-      flex: 1,
-      gap: 2,
-    },
-    recentNote: {
-      ...theme.typography.body,
-      fontWeight: "600",
-    },
-    recentMeta: {
-      ...theme.typography.subtitle,
+    timelineMeta: {
       fontSize: 12,
+      color: theme.colors.textMuted,
     },
-    recentAmount: {
-      fontSize: 16,
-      fontWeight: "600",
-      minWidth: 96,
+    timelineAmount: {
+      fontWeight: "700",
+      fontSize: 15,
+      minWidth: 90,
       textAlign: "right",
+    },
+    timelineIncome: {
+      color: theme.colors.success,
+    },
+    timelineExpense: {
+      color: theme.colors.danger,
+    },
+    timelineTransfer: {
+      color: theme.colors.accent,
+    },
+    linkText: {
+      color: theme.colors.accent,
+      fontWeight: "600",
     },
   });

@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { FlatList, StyleSheet, Text, View } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 
@@ -18,19 +19,27 @@ export default function LeaderboardScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <View style={styles.header}>
+      <LinearGradient colors={theme.gradients.hero} style={styles.heroCard}>
         <Text style={styles.title}>Leaderboard</Text>
-        <Text style={styles.subtitle}>
-          Celebrate wins with your crew. Challenge incoming soon.
-        </Text>
-      </View>
+        <Text style={styles.subtitle}>Celebrate wins with your crew. Challenges arrive weekly.</Text>
+        <View style={styles.heroMetrics}>
+          <View style={styles.heroMetric}>
+            <Text style={styles.metricLabel}>Avg. streak</Text>
+            <Text style={styles.metricValue}>6 wks</Text>
+          </View>
+          <View style={styles.heroMetric}>
+            <Text style={styles.metricLabel}>Collective saved</Text>
+            <Text style={styles.metricValue}>$12.8k</Text>
+          </View>
+        </View>
+      </LinearGradient>
       <FlatList
         data={mockLeaders}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.listContent}
-        ItemSeparatorComponent={() => <View style={{ height: theme.spacing.lg }} />}
+        ItemSeparatorComponent={() => <View style={{ height: theme.spacing.md }} />}
         renderItem={({ item, index }) => (
-          <View style={[theme.components.surface, styles.card]}>
+          <LinearGradient colors={theme.gradients.highlight} style={styles.card}>
             <View style={styles.rankBadge}>
               <Text style={styles.rankText}>{index + 1}</Text>
             </View>
@@ -39,7 +48,7 @@ export default function LeaderboardScreen() {
               <Text style={styles.leaderMeta}>{item.progress}</Text>
             </View>
             <Ionicons name="sparkles" size={18} color={theme.colors.accent} />
-          </View>
+          </LinearGradient>
         )}
       />
     </SafeAreaView>
@@ -58,8 +67,10 @@ const createStyles = (
       paddingHorizontal: theme.spacing.xl,
       paddingBottom: theme.spacing.xl + insets.bottom,
     },
-    header: {
-      gap: theme.spacing.sm,
+    heroCard: {
+      borderRadius: theme.radii.lg,
+      padding: theme.spacing.xl,
+      gap: theme.spacing.md,
       marginBottom: theme.spacing.xl,
     },
     title: {
@@ -67,10 +78,28 @@ const createStyles = (
     },
     subtitle: {
       ...theme.typography.subtitle,
+      fontSize: 14,
+    },
+    heroMetrics: {
+      flexDirection: "row",
+      gap: theme.spacing.lg,
+    },
+    heroMetric: {
+      flex: 1,
+    },
+    metricLabel: {
+      ...theme.typography.subtitle,
+      fontSize: 12,
+      textTransform: "uppercase",
+    },
+    metricValue: {
+      fontSize: 20,
+      fontWeight: "700",
+      color: theme.colors.text,
     },
     listContent: {
       paddingBottom: theme.spacing.xxl * 1.5 + insets.bottom,
-      gap: theme.spacing.lg,
+      gap: theme.spacing.md,
     },
     card: {
       flexDirection: "row",
@@ -78,6 +107,9 @@ const createStyles = (
       paddingHorizontal: theme.spacing.xl,
       paddingVertical: theme.spacing.lg,
       gap: theme.spacing.lg,
+      borderRadius: theme.radii.lg,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: theme.colors.outline,
     },
     rankBadge: {
       width: 46,

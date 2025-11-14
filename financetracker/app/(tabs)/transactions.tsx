@@ -10,6 +10,7 @@ import {
   TextInput,
   View,
 } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -558,7 +559,7 @@ export default function TransactionsScreen() {
         ListHeaderComponent={
           <View style={styles.header}>
             {/* Primary Balance Display */}
-            <View style={styles.balanceCard}>
+            <LinearGradient colors={theme.gradients.hero} style={styles.balanceCard}>
               <View style={styles.balanceHeader}>
                 <View>
                   <Text style={styles.balanceLabel}>Current Balance</Text>
@@ -601,7 +602,7 @@ export default function TransactionsScreen() {
                   </Text>
                 </View>
               </View>
-            </View>
+            </LinearGradient>
 
             {/* Period Selector */}
             <ScrollView
@@ -1055,30 +1056,25 @@ const createStyles = (theme: any, insets: any) =>
       backgroundColor: theme.colors.background,
     },
     listContent: {
-      paddingBottom: 100,
+      paddingBottom: theme.spacing.xxl + insets.bottom + 40,
     },
     header: {
-      paddingHorizontal: 16,
-      paddingTop: 16,
+      paddingHorizontal: theme.spacing.xl,
+      paddingTop: theme.spacing.xl,
+      gap: theme.spacing.lg,
     },
     
     // Balance Card
     balanceCard: {
-      backgroundColor: theme.colors.surface,
-      borderRadius: 20,
-      padding: 20,
-      marginBottom: 16,
-      shadowColor: "#000",
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.05,
-      shadowRadius: 8,
-      elevation: 2,
+      borderRadius: theme.radii.lg,
+      padding: theme.spacing.xl,
+      gap: theme.spacing.lg,
     },
     balanceHeader: {
       flexDirection: "row",
       justifyContent: "space-between",
       alignItems: "flex-start",
-      marginBottom: 20,
+      marginBottom: theme.spacing.lg,
     },
     balanceLabel: {
       fontSize: 12,
@@ -1117,6 +1113,9 @@ const createStyles = (theme: any, insets: any) =>
     metricsRow: {
       flexDirection: "row",
       alignItems: "center",
+      backgroundColor: "rgba(0,0,0,0.12)",
+      borderRadius: theme.radii.md,
+      paddingVertical: theme.spacing.sm,
     },
     metric: {
       flex: 1,
@@ -1136,63 +1135,63 @@ const createStyles = (theme: any, insets: any) =>
       color,
     }),
     metricDivider: {
-      width: 1,
-      height: 32,
-      backgroundColor: theme.colors.border,
+      width: StyleSheet.hairlineWidth,
+      height: 36,
+      backgroundColor: "rgba(255,255,255,0.2)",
     },
     
     // Period Selector
     periodScroll: {
-      marginBottom: 16,
-      marginHorizontal: -16,
+      marginBottom: theme.spacing.md,
+      marginHorizontal: -theme.spacing.xl,
     },
     periodContent: {
-      paddingHorizontal: 16,
-      gap: 8,
+      paddingHorizontal: theme.spacing.xl,
+      gap: theme.spacing.sm,
     },
     periodChip: (active: boolean) => ({
-      paddingHorizontal: 16,
-      paddingVertical: 8,
-      borderRadius: 20,
-      backgroundColor: active ? theme.colors.primary : theme.colors.surface,
-      borderWidth: 1,
-      borderColor: active ? theme.colors.primary : theme.colors.border,
+      paddingHorizontal: theme.spacing.lg,
+      paddingVertical: theme.spacing.sm,
+      borderRadius: theme.radii.pill,
+      backgroundColor: active ? theme.colors.primary : theme.colors.backgroundMuted,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: active ? theme.colors.primary : theme.colors.outline,
     }),
     periodText: (active: boolean) => ({
       fontSize: 13,
       fontWeight: "600",
-      color: active ? "#fff" : theme.colors.text,
+      color: active ? theme.colors.text : theme.colors.text,
     }),
     
     // Search and Filters
     searchContainer: {
       flexDirection: "row",
-      gap: 12,
-      marginBottom: 16,
+      gap: theme.spacing.md,
+      marginBottom: theme.spacing.lg,
     },
     searchField: {
       flex: 1,
       flexDirection: "row",
       alignItems: "center",
-      gap: 8,
-      backgroundColor: theme.colors.surface,
-      borderRadius: 12,
-      paddingHorizontal: 16,
-      paddingVertical: 12,
-      borderWidth: 1,
-      borderColor: theme.colors.border,
+      gap: theme.spacing.sm,
+      backgroundColor: theme.colors.backgroundMuted,
+      borderRadius: theme.radii.md,
+      paddingHorizontal: theme.spacing.lg,
+      paddingVertical: theme.spacing.md,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: theme.colors.outline,
     },
     searchPlaceholder: {
-      fontSize: 15,
+      fontSize: 14,
       color: theme.colors.textMuted,
     },
     filterButton: (active: boolean) => ({
-      width: 44,
-      height: 44,
-      borderRadius: 12,
-      backgroundColor: active ? theme.colors.primaryMuted : theme.colors.surface,
-      borderWidth: 1,
-      borderColor: active ? theme.colors.primary : theme.colors.border,
+      width: 48,
+      height: 48,
+      borderRadius: 20,
+      backgroundColor: active ? `${theme.colors.primary}30` : theme.colors.backgroundMuted,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: active ? theme.colors.primary : theme.colors.outline,
       alignItems: "center",
       justifyContent: "center",
       position: "relative",
@@ -1222,25 +1221,26 @@ const createStyles = (theme: any, insets: any) =>
       flexDirection: "row",
       alignItems: "center",
       gap: 6,
-      paddingHorizontal: 12,
-      paddingVertical: 6,
-      borderRadius: 16,
-      backgroundColor: theme.colors.primary,
-      borderWidth: 0,
+      paddingHorizontal: theme.spacing.md,
+      paddingVertical: theme.spacing.xs,
+      borderRadius: theme.radii.pill,
+      backgroundColor: theme.colors.backgroundMuted,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: theme.colors.outline,
     },
     filterChipText: {
       fontSize: 12,
       fontWeight: "600",
-      color: theme.colors.background,
+      color: theme.colors.text,
     },
     filterChipClose: {
       padding: 2,
     },
     clearButton: {
-      paddingHorizontal: 12,
-      paddingVertical: 6,
-      borderRadius: 16,
-      backgroundColor: theme.colors.surface,
+      paddingHorizontal: theme.spacing.md,
+      paddingVertical: theme.spacing.xs,
+      borderRadius: theme.radii.pill,
+      backgroundColor: theme.colors.backgroundMuted,
     },
     clearButtonText: {
       fontSize: 12,
@@ -1250,23 +1250,23 @@ const createStyles = (theme: any, insets: any) =>
     accountChipRow: {
       flexDirection: "row",
       flexWrap: "wrap",
-      gap: 8,
-      paddingVertical: 8,
-      marginBottom: 16,
+      gap: theme.spacing.sm,
+      paddingVertical: theme.spacing.sm,
+      marginBottom: theme.spacing.lg,
     },
     accountChip: {
-      paddingHorizontal: 16,
-      paddingVertical: 12,
-      borderRadius: 999,
-      borderWidth: 1,
-      borderColor: theme.colors.border,
-      backgroundColor: theme.colors.surface,
+      paddingHorizontal: theme.spacing.lg,
+      paddingVertical: theme.spacing.sm,
+      borderRadius: theme.radii.pill,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: theme.colors.outline,
+      backgroundColor: theme.colors.backgroundMuted,
       minWidth: 140,
       flexShrink: 1,
     },
     accountChipActive: {
       borderColor: theme.colors.primary,
-      backgroundColor: theme.colors.primary,
+      backgroundColor: `${theme.colors.primary}25`,
     },
     accountChipArchived: {
       opacity: 0.6,
@@ -1277,22 +1277,24 @@ const createStyles = (theme: any, insets: any) =>
       color: theme.colors.text,
     },
     accountChipTitleActive: {
-      color: theme.colors.background,
+      color: theme.colors.text,
     },
     accountChipBalance: {
       fontSize: 12,
       color: theme.colors.textMuted,
     },
     accountChipBalanceActive: {
-      color: `${theme.colors.background}CC`,
+      color: theme.colors.text,
     },
     
     // Breakdown Card
     breakdownCard: {
-      backgroundColor: theme.colors.surface,
-      borderRadius: 16,
-      padding: 16,
-      marginBottom: 16,
+      backgroundColor: theme.colors.backgroundMuted,
+      borderRadius: theme.radii.md,
+      padding: theme.spacing.lg,
+      marginBottom: theme.spacing.lg,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: theme.colors.outline,
     },
     breakdownHeader: {
       flexDirection: "row",

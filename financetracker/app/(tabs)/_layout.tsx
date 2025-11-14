@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef } from "react";
-import { Animated, Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import { Animated, Platform, Pressable, StyleSheet, Text } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
 import { Tabs, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import type { BottomTabBarButtonProps } from "@react-navigation/bottom-tabs";
@@ -22,9 +23,9 @@ function AddTransactionTabButton({ style, ...props }: BottomTabBarButtonProps) {
       accessibilityRole="button"
       accessibilityState={{ selected: false }}
     >
-      <View style={styles.addButtonIconWrapper}>
-        <Ionicons name="add" size={22} color={theme.colors.background} />
-      </View>
+      <LinearGradient colors={theme.gradients.action} style={styles.addButtonIconWrapper}>
+        <Ionicons name="add" size={22} color="#FFFFFF" />
+      </LinearGradient>
       <Text style={styles.addButtonLabel}>Add</Text>
     </Pressable>
   );
@@ -159,17 +160,19 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>) =>
       right: 12,
       bottom: Platform.select({ ios: 26, default: 18 }),
       alignSelf: "center",
-      backgroundColor: theme.colors.surface,
+      backgroundColor: theme.colors.backgroundMuted,
       borderTopWidth: 0,
-      borderRadius: theme.radii.lg + 6,
-      elevation: 12,
-      shadowColor: theme.colors.background,
-      shadowOpacity: Platform.OS === "ios" ? 0.18 : 0.2,
-      shadowRadius: 16,
-      shadowOffset: { width: 0, height: 10 },
+      borderRadius: theme.radii.lg + 10,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: theme.colors.outline,
+      elevation: 0,
+      shadowColor: theme.colors.glow,
+      shadowOpacity: 0.25,
+      shadowRadius: 22,
+      shadowOffset: { width: 0, height: 8 },
       height: Platform.select({ ios: 70, default: 66 }),
-      paddingHorizontal: 4,
-      paddingTop: 6,
+      paddingHorizontal: 12,
+      paddingTop: 10,
       paddingBottom: Platform.select({ ios: 16, default: 10 }),
     },
     tabLabel: {
@@ -192,7 +195,7 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>) =>
     addButtonWrapper: {
       alignItems: "center",
       justifyContent: "center",
-      gap: 4,
+      gap: 6,
       flex: 1,
       minWidth: 0,
     },
@@ -200,22 +203,16 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>) =>
       opacity: 0.8,
     },
     addButtonIconWrapper: {
-      width: 40,
-      height: 40,
-      borderRadius: 20,
-      backgroundColor: theme.colors.success,
+      width: 48,
+      height: 48,
+      borderRadius: 24,
       alignItems: "center",
       justifyContent: "center",
-      shadowColor: theme.colors.success,
-      shadowOpacity: Platform.OS === "ios" ? 0.35 : 0.18,
-      shadowRadius: 10,
-      shadowOffset: { width: 0, height: 6 },
-      elevation: 4,
     },
     addButtonLabel: {
       fontSize: 10,
-      fontWeight: "600",
-      color: theme.colors.textMuted,
+      fontWeight: "700",
+      color: theme.colors.text,
       letterSpacing: 0.2,
     },
   });
