@@ -106,6 +106,19 @@ interface PeriodOption {
 
 const MONTHS_TO_DISPLAY = 12;
 
+type InsightVariant = "base" | "primary" | "success" | "danger";
+
+interface InsightCardConfig {
+  key: string;
+  label: string;
+  value: string;
+  helper: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  variant: InsightVariant;
+  accentColor: string;
+  prefix?: string;
+}
+
 const buildMonthlyPeriods = (): PeriodOption[] => {
   const currentMonth = dayjs().startOf("month");
   return Array.from({ length: MONTHS_TO_DISPLAY }).map((_, index) => {
@@ -547,6 +560,111 @@ export default function TransactionsScreen() {
     return 20;
   }, [closingBalanceDisplay]);
 
+  const selectedPeriodLabel = useMemo(() => {
+    const match = periodOptions.find((option) => option.key === selectedPeriod);
+    return match?.label ?? periodOptions[periodOptions.length - 1]?.label ?? "";
+  }, [periodOptions, selectedPeriod]);
+
+  const metricItems = useMemo(
+    () => [
+      {
+        key: "income",
+        label: "Income",
+        value: formatCurrency(summary.income, currency || "USD"),
+        icon: "arrow-down-circle-outline" as const,
+        color: theme.colors.success,
+      },
+      {
+        key: "expense",
+        label: "Expenses",
+        value: formatCurrency(summary.expense, currency || "USD"),
+        icon: "arrow-up-circle-outline" as const,
+        color: theme.colors.danger,
+      },
+      {
+        key: "opening",
+        label: "Opening balance",
+        value: formatCurrency(summary.openingBalance, currency || "USD"),
+        icon: "time-outline" as const,
+        color: theme.colors.text,
+      },
+    ],
+    [currency, summary.expense, summary.income, summary.openingBalance, theme.colors.danger, theme.colors.success, theme.colors.text],
+  );
+
+  const insightCards = useMemo<InsightCardConfig[]>(() => {
+    const transactionCount = sections.reduce((count, section) => {
+      const dayCount = section.data.reduce((total, entry) => total + entry.transactions.length, 0);
+      return count + dayCount;
+    }, 0);
+    const daysTracked = sections.length;
+    const averageDailySpend = daysTracked ? summary.expense / daysTracked : 0;
+    const topCategory = expenseBreakdown[0];
+    const hasSpend = summary.expense > 0;
+    const hasTransactions = transactionCount > 0;
+    const positiveNet = summary.net > 0;
+    const negativeNet = summary.net < 0;
+
+    const netIcon = positiveNet
+      ? "trending-up-outline"
+      : negativeNet
+        ? "trending-down-outline"
+        : "remove-outline";
+
+    return [
+      {
+        key: "volume",
+        label: "Transactions",
+        value: hasTransactions ? transactionCount.toString() : "0",
+        helper: daysTracked
+          ? `Across ${daysTracked} day${daysTracked === 1 ? "" : "s"}`
+          : "No activity yet",
+        icon: "receipt-outline",
+        variant: "base",
+        accentColor: hasTransactions ? theme.colors.primary : theme.colors.textMuted,
+      },
+      {
+        key: "daily",
+        label: "Avg daily spend",
+        value: hasSpend && daysTracked ? formatCurrency(averageDailySpend, currency || "USD") : "—",
+        helper:
+          hasSpend && daysTracked ? "This period" : "Track spending to unlock insights",
+        icon: "calendar-outline",
+        variant: "primary",
+        accentColor: hasSpend ? theme.colors.primary : theme.colors.textMuted,
+      },
+      {
+        key: "net",
+        label: "Net change",
+        value: formatCurrency(Math.abs(summary.net), currency || "USD"),
+        helper: positiveNet
+          ? "You're up this period"
+          : negativeNet
+            ? "Spending is higher"
+            : "Perfectly balanced",
+        icon: netIcon,
+        variant: positiveNet ? "success" : negativeNet ? "danger" : "base",
+        accentColor: positiveNet
+          ? theme.colors.success
+          : negativeNet
+            ? theme.colors.danger
+            : theme.colors.text,
+        prefix: positiveNet ? "+" : negativeNet ? "−" : "",
+      },
+      {
+        key: "top",
+        label: "Top category",
+        value: topCategory ? topCategory.category : "No spending",
+        helper: topCategory
+          ? formatCurrency(topCategory.amount, currency || "USD")
+          : "Log an expense to see trends",
+        icon: "star-outline",
+        variant: "base",
+        accentColor: topCategory ? theme.colors.primary : theme.colors.textMuted,
+      },
+    ];
+  }, [currency, expenseBreakdown, sections, summary.expense, summary.net, theme.colors.danger, theme.colors.primary, theme.colors.success, theme.colors.text, theme.colors.textMuted]);
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <SectionList
@@ -559,46 +677,59 @@ export default function TransactionsScreen() {
           <View style={styles.header}>
             {/* Primary Balance Display */}
             <View style={styles.balanceCard}>
-              <View style={styles.balanceHeader}>
-                <View>
-                  <Text style={styles.balanceLabel}>Current Balance</Text>
-                  <Text style={styles.balanceValue(balanceFontSize)}>{closingBalanceDisplay}</Text>
+              <View style={styles.balanceCardContent}>
+                <View style={styles.balanceHeader}>
+                  <View>
+                    <Text style={styles.balanceLabel}>Current Balance</Text>
+                    <Text style={styles.balanceValue(balanceFontSize)}>{closingBalanceDisplay}</Text>
+                  </View>
+                  <View style={styles.balanceHighlights}>
+                    <View style={styles.periodPill}>
+                      <Ionicons name="calendar-outline" size={14} color={theme.colors.textMuted} />
+                      <Text style={styles.periodPillText}>{selectedPeriodLabel}</Text>
+                    </View>
+                  </View>
                 </View>
-                <View style={styles.changeBadge(summary.net)}>
-                  <Ionicons
-                    name={summary.net >= 0 ? "arrow-up" : "arrow-down"}
-                    size={14}
-                    color={summary.net >= 0 ? theme.colors.success : theme.colors.danger}
-                  />
-                  <Text style={styles.changeValue(summary.net)}>
-                    {formatCurrency(Math.abs(summary.net), currency || "USD")}
-                  </Text>
-                  <Text style={styles.changePercent}>
-                    {summary.percentageChange}
-                  </Text>
+
+                <View style={styles.balanceMetaRow}>
+                  <View style={styles.balanceMetaChip}>
+                    <View style={styles.balanceMetaChipHeader}>
+                      <Ionicons name="wallet-outline" size={14} color={theme.colors.textMuted} />
+                      <Text style={styles.balanceMetaLabel}>Opening</Text>
+                    </View>
+                    <Text style={styles.balanceMetaValue}>
+                      {formatCurrency(summary.openingBalance, currency || "USD")}
+                    </Text>
+                  </View>
+                  <View style={[styles.balanceMetaChip, styles.balanceMetaAccent(summary.net)]}>
+                    <View style={styles.balanceMetaChipHeader}>
+                      <Ionicons
+                        name={summary.net >= 0 ? "trending-up-outline" : "trending-down-outline"}
+                        size={14}
+                        color={summary.net >= 0 ? theme.colors.success : theme.colors.danger}
+                      />
+                      <Text style={styles.balanceMetaLabel}>Net change</Text>
+                    </View>
+                    <View style={styles.balanceMetaValueRow}>
+                      <Text style={styles.balanceMetaValue}>
+                        {summary.net > 0 ? "+" : summary.net < 0 ? "−" : ""}
+                        {formatCurrency(Math.abs(summary.net), currency || "USD")}
+                      </Text>
+                      <Text style={styles.balanceMetaPercent}>{summary.percentageChange}</Text>
+                    </View>
+                  </View>
                 </View>
-              </View>
-              
-              <View style={styles.metricsRow}>
-                <View style={styles.metric}>
-                  <Text style={styles.metricLabel}>Income</Text>
-                  <Text style={styles.metricValue(theme.colors.success)}>
-                    {formatCurrency(summary.income, currency || "USD")}
-                  </Text>
-                </View>
-                <View style={styles.metricDivider} />
-                <View style={styles.metric}>
-                  <Text style={styles.metricLabel}>Expenses</Text>
-                  <Text style={styles.metricValue(theme.colors.danger)}>
-                    {formatCurrency(summary.expense, currency || "USD")}
-                  </Text>
-                </View>
-                <View style={styles.metricDivider} />
-                <View style={styles.metric}>
-                  <Text style={styles.metricLabel}>Previous</Text>
-                  <Text style={styles.metricValue(theme.colors.text)}>
-                    {formatCurrency(summary.openingBalance, currency || "USD")}
-                  </Text>
+
+                <View style={styles.metricsRow}>
+                  {metricItems.map((metric) => (
+                    <View key={metric.key} style={styles.metric}>
+                      <View style={styles.metricIcon(metric.color)}>
+                        <Ionicons name={metric.icon} size={16} color={metric.color} />
+                      </View>
+                      <Text style={styles.metricLabel}>{metric.label}</Text>
+                      <Text style={styles.metricValue(metric.color)}>{metric.value}</Text>
+                    </View>
+                  ))}
                 </View>
               </View>
             </View>
@@ -619,107 +750,136 @@ export default function TransactionsScreen() {
                     style={styles.periodChip(active)}
                     onPress={() => setSelectedPeriod(option.key)}
                   >
-                    <Text style={styles.periodText(active)}>
-                      {option.label}
-                    </Text>
+                    <Text style={styles.periodText(active)}>{option.label}</Text>
                   </Pressable>
                 );
               })}
             </ScrollView>
 
-            {/* Search and Filters */}
-            <View style={styles.searchContainer}>
-              <Pressable
-                style={styles.searchField}
-                onPress={() => openSearch(false)}
-              >
-                <Ionicons name="search" size={18} color={theme.colors.textMuted} />
-                <Text style={styles.searchPlaceholder}>
-                  {searchTerm || "Search transactions..."}
-                </Text>
-              </Pressable>
-              <Pressable
-                style={styles.filterButton(hasActiveFilters)}
-                onPress={() => openSearch(true)}
-              >
-                <Ionicons
-                  name="filter"
-                  size={18}
-                  color={hasActiveFilters ? theme.colors.primary : theme.colors.text}
-                />
-                {hasActiveFilters && (
-                  <View style={styles.filterBadge}>
-                    <Text style={styles.filterBadgeText}>{activeFilters.length}</Text>
-                  </View>
-                )}
-              </Pressable>
-            </View>
-
-            {/* Active Filters */}
-            {hasActiveFilters && (
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.filterChips}
-              >
-                {activeFilters.map((filter) => (
-                  <View key={filter.key} style={styles.filterChip}>
-                    <Text style={styles.filterChipText}>{filter.label}</Text>
-                    <Pressable
-                      onPress={() => {
-                        if (filter.type === "search") setSearchTerm("");
-                        else if (filter.type === "min") setMinAmount("");
-                        else if (filter.type === "max") setMaxAmount("");
-                        else if (filter.type === "start") setStartDate(null);
-                        else if (filter.type === "end") setEndDate(null);
-                        else if (filter.type === "category" && filter.value) {
-                          setSelectedCategories((prev) =>
-                            prev.filter((c) => c !== filter.value),
-                          );
-                        }
-                      }}
-                      style={styles.filterChipClose}
-                    >
-                      <Ionicons name="close" size={12} color={theme.colors.background} />
-                    </Pressable>
-                  </View>
-                ))}
-                <Pressable onPress={clearFilters} style={styles.clearButton}>
-                  <Text style={styles.clearButtonText}>Clear all</Text>
-                </Pressable>
-              </ScrollView>
+            {insightCards.length > 0 && (
+              <View style={styles.insightsWrapper}>
+                <View style={styles.sectionHeadingRow}>
+                  <Text style={styles.sectionHeading}>Period insights</Text>
+                  <Text style={styles.sectionCaption}>Updated automatically</Text>
+                </View>
+                <View style={styles.insightsGrid}>
+                  {insightCards.map((card) => (
+                    <View key={card.key} style={styles.insightCard(card.variant)}>
+                      <View style={styles.insightIcon(card.variant)}>
+                        <Ionicons name={card.icon} size={16} color={card.accentColor} />
+                      </View>
+                      <Text style={styles.insightLabel}>{card.label}</Text>
+                      <Text style={[styles.insightValue, { color: card.accentColor }]}>
+                        {card.prefix ?? ""}
+                        {card.value}
+                      </Text>
+                      <Text style={styles.insightHelper}>{card.helper}</Text>
+                    </View>
+                  ))}
+                </View>
+              </View>
             )}
 
+            {/* Search and Filters */}
+            <View style={styles.toolsCard}>
+              <View style={styles.sectionHeadingRow}>
+                <Text style={styles.sectionHeading}>Search & filters</Text>
+                <Text style={styles.sectionCaption}>
+                  {hasActiveFilters ? `${activeFilters.length} applied` : "Find anything instantly"}
+                </Text>
+              </View>
+              <View style={styles.searchContainer}>
+                <Pressable style={styles.searchField} onPress={() => openSearch(false)}>
+                  <Ionicons name="search" size={18} color={theme.colors.textMuted} />
+                  <Text style={styles.searchPlaceholder}>
+                    {searchTerm || "Search transactions..."}
+                  </Text>
+                </Pressable>
+                <Pressable
+                  style={styles.filterButton(hasActiveFilters)}
+                  onPress={() => openSearch(true)}
+                >
+                  <Ionicons
+                    name="filter"
+                    size={18}
+                    color={hasActiveFilters ? theme.colors.primary : theme.colors.text}
+                  />
+                  {hasActiveFilters && (
+                    <View style={styles.filterBadge}>
+                      <Text style={styles.filterBadgeText}>{activeFilters.length}</Text>
+                    </View>
+                  )}
+                </Pressable>
+              </View>
+
+              {hasActiveFilters && (
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.filterChips}
+                >
+                  {activeFilters.map((filter) => (
+                    <View key={filter.key} style={styles.filterChip}>
+                      <Text style={styles.filterChipText}>{filter.label}</Text>
+                      <Pressable
+                        onPress={() => {
+                          if (filter.type === "search") setSearchTerm("");
+                          else if (filter.type === "min") setMinAmount("");
+                          else if (filter.type === "max") setMaxAmount("");
+                          else if (filter.type === "start") setStartDate(null);
+                          else if (filter.type === "end") setEndDate(null);
+                          else if (filter.type === "category" && filter.value) {
+                            setSelectedCategories((prev) => prev.filter((c) => c !== filter.value));
+                          }
+                        }}
+                        style={styles.filterChipClose}
+                      >
+                        <Ionicons name="close" size={12} color={theme.colors.background} />
+                      </Pressable>
+                    </View>
+                  ))}
+                  <Pressable onPress={clearFilters} style={styles.clearButton}>
+                    <Text style={styles.clearButtonText}>Clear all</Text>
+                  </Pressable>
+                </ScrollView>
+              )}
+            </View>
+
+            <View style={styles.sectionHeadingRow}>
+              <Text style={styles.sectionHeading}>Accounts</Text>
+              <Text style={styles.sectionCaption}>
+                {selectedAccountId
+                  ? resolveAccountName(selectedAccountId)
+                  : `${visibleAccounts.length} in view`}
+              </Text>
+            </View>
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.accountChipRow}
             >
-            <Pressable
-              onPress={() => setSelectedAccountId(null)}
-              style={[styles.accountChip, !selectedAccountId && styles.accountChipActive]}
-            >
-              <Text
-                style={[
-                  styles.accountChipTitle,
-                  !selectedAccountId && styles.accountChipTitleActive,
-                ]}
+              <Pressable
+                onPress={() => setSelectedAccountId(null)}
+                style={[styles.accountChip, !selectedAccountId && styles.accountChipActive]}
               >
-                All accounts
-              </Text>
-              <Text
-                style={[
-                  styles.accountChipBalance,
-                  !selectedAccountId && styles.accountChipBalanceActive,
-                ]}
-              >
-                {formatCurrency(allAccountsBalance, baseCurrency)}
-              </Text>
-            </Pressable>
-            {accounts.map((account) => {
-              const active = selectedAccountId === account.id;
-              return (
-                <Pressable
+                <Text
+                  style={[styles.accountChipTitle, !selectedAccountId && styles.accountChipTitleActive]}
+                >
+                  All accounts
+                </Text>
+                <Text
+                  style={[
+                    styles.accountChipBalance,
+                    !selectedAccountId && styles.accountChipBalanceActive,
+                  ]}
+                >
+                  {formatCurrency(allAccountsBalance, baseCurrency)}
+                </Text>
+              </Pressable>
+              {accounts.map((account) => {
+                const active = selectedAccountId === account.id;
+                return (
+                  <Pressable
                     key={account.id}
                     onPress={() => setSelectedAccountId(account.id)}
                     style={[
@@ -728,9 +888,7 @@ export default function TransactionsScreen() {
                       account.isArchived && styles.accountChipArchived,
                     ]}
                   >
-                    <Text
-                      style={[styles.accountChipTitle, active && styles.accountChipTitleActive]}
-                    >
+                    <Text style={[styles.accountChipTitle, active && styles.accountChipTitleActive]}>
                       {account.name}
                     </Text>
                     <Text
@@ -1064,21 +1222,28 @@ const createStyles = (theme: any, insets: any) =>
     
     // Balance Card
     balanceCard: {
-      backgroundColor: theme.colors.surface,
-      borderRadius: 20,
-      padding: 20,
-      marginBottom: 16,
+      backgroundColor: theme.colors.surfaceElevated,
+      borderRadius: 24,
+      padding: 24,
+      marginBottom: 20,
+      borderWidth: 1,
+      borderColor: `${theme.colors.border}80`,
       shadowColor: "#000",
-      shadowOffset: { width: 0, height: 2 },
+      shadowOffset: { width: 0, height: 4 },
       shadowOpacity: 0.05,
-      shadowRadius: 8,
-      elevation: 2,
+      shadowRadius: 12,
+      elevation: 3,
+    },
+    balanceCardContent: {
+      gap: 20,
     },
     balanceHeader: {
       flexDirection: "row",
       justifyContent: "space-between",
       alignItems: "flex-start",
-      marginBottom: 20,
+    },
+    balanceHighlights: {
+      alignItems: "flex-end",
     },
     balanceLabel: {
       fontSize: 12,
@@ -1093,54 +1258,103 @@ const createStyles = (theme: any, insets: any) =>
       fontWeight: "700",
       color: theme.colors.text,
     }),
-    changeBadge: (positive: number) => ({
+    balanceMetaRow: {
       flexDirection: "row",
-      alignItems: "center",
-      gap: 4,
-      paddingHorizontal: 10,
-      paddingVertical: 6,
-      borderRadius: 12,
-      backgroundColor: positive >= 0 
-        ? `${theme.colors.success}15` 
-        : `${theme.colors.danger}15`,
-    }),
-    changeValue: (positive: number) => ({
-      fontSize: 14,
-      fontWeight: "600",
-      color: positive >= 0 ? theme.colors.success : theme.colors.danger,
-    }),
-    changePercent: {
-      fontSize: 12,
-      fontWeight: "500",
-      color: theme.colors.textMuted,
+      gap: 12,
     },
-    metricsRow: {
-      flexDirection: "row",
-      alignItems: "center",
-    },
-    metric: {
+    balanceMetaChip: {
       flex: 1,
-      alignItems: "center",
+      backgroundColor: theme.colors.surface,
+      borderRadius: 18,
+      padding: 14,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      gap: 4,
     },
-    metricLabel: {
+    balanceMetaChipHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+      marginBottom: 8,
+    },
+    balanceMetaLabel: {
       fontSize: 11,
-      fontWeight: "500",
+      fontWeight: "600",
       color: theme.colors.textMuted,
       textTransform: "uppercase",
       letterSpacing: 0.5,
-      marginBottom: 4,
+    },
+    balanceMetaValue: {
+      fontSize: 18,
+      fontWeight: "700",
+      color: theme.colors.text,
+    },
+    balanceMetaValueRow: {
+      flexDirection: "row",
+      alignItems: "baseline",
+      justifyContent: "space-between",
+      gap: 8,
+    },
+    balanceMetaPercent: {
+      fontSize: 12,
+      fontWeight: "600",
+      color: theme.colors.textMuted,
+    },
+    balanceMetaAccent: (net: number) => ({
+      borderColor: net >= 0 ? `${theme.colors.success}55` : `${theme.colors.danger}55`,
+      backgroundColor: net >= 0 ? `${theme.colors.success}10` : `${theme.colors.danger}10`,
+    }),
+    metricsRow: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 12,
+    },
+    metric: {
+      flexBasis: "48%",
+      borderRadius: 18,
+      padding: 14,
+      backgroundColor: theme.colors.surface,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      gap: 4,
+    },
+    metricIcon: (color: string) => ({
+      width: 28,
+      height: 28,
+      borderRadius: 14,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: `${color}25`,
+    }),
+    metricLabel: {
+      fontSize: 11,
+      fontWeight: "600",
+      color: theme.colors.textMuted,
+      textTransform: "uppercase",
+      letterSpacing: 0.5,
     },
     metricValue: (color: string) => ({
       fontSize: 16,
-      fontWeight: "600",
+      fontWeight: "700",
       color,
     }),
-    metricDivider: {
-      width: 1,
-      height: 32,
-      backgroundColor: theme.colors.border,
+    periodPill: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      borderRadius: theme.radii.pill,
+      backgroundColor: theme.colors.surface,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
     },
-    
+    periodPillText: {
+      fontSize: 12,
+      fontWeight: "600",
+      color: theme.colors.text,
+    },
+
     // Period Selector
     periodScroll: {
       marginBottom: 16,
@@ -1164,11 +1378,100 @@ const createStyles = (theme: any, insets: any) =>
       color: active ? "#fff" : theme.colors.text,
     }),
     
+    insightsWrapper: {
+      marginBottom: 20,
+    },
+    insightsGrid: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 12,
+    },
+    insightCard: (variant: InsightVariant) => {
+      const backgroundMap = {
+        base: theme.colors.surface,
+        primary: `${theme.colors.primary}15`,
+        success: `${theme.colors.success}12`,
+        danger: `${theme.colors.danger}12`,
+      } as const;
+      const borderMap = {
+        base: theme.colors.border,
+        primary: `${theme.colors.primary}55`,
+        success: `${theme.colors.success}55`,
+        danger: `${theme.colors.danger}55`,
+      } as const;
+      return {
+        flexBasis: "48%",
+        borderRadius: 18,
+        padding: 16,
+        backgroundColor: backgroundMap[variant],
+        borderWidth: 1,
+        borderColor: borderMap[variant],
+        gap: 6,
+      };
+    },
+    insightIcon: (variant: InsightVariant) => {
+      const iconBackground = {
+        base: `${theme.colors.border}55`,
+        primary: `${theme.colors.primary}30`,
+        success: `${theme.colors.success}30`,
+        danger: `${theme.colors.danger}30`,
+      } as const;
+      return {
+        width: 32,
+        height: 32,
+        borderRadius: 16,
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundColor: iconBackground[variant],
+        marginBottom: 6,
+      };
+    },
+    insightLabel: {
+      fontSize: 12,
+      fontWeight: "600",
+      color: theme.colors.textMuted,
+      textTransform: "uppercase",
+      letterSpacing: 0.5,
+    },
+    insightValue: {
+      fontSize: 18,
+      fontWeight: "700",
+    },
+    insightHelper: {
+      fontSize: 12,
+      color: theme.colors.textMuted,
+      lineHeight: 16,
+    },
+
+    sectionHeadingRow: {
+      flexDirection: "row",
+      alignItems: "baseline",
+      justifyContent: "space-between",
+      marginBottom: 12,
+    },
+    sectionHeading: {
+      fontSize: 16,
+      fontWeight: "700",
+      color: theme.colors.text,
+    },
+    sectionCaption: {
+      fontSize: 12,
+      color: theme.colors.textMuted,
+    },
+
     // Search and Filters
+    toolsCard: {
+      backgroundColor: theme.colors.surface,
+      borderRadius: 20,
+      padding: 16,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      marginBottom: 20,
+    },
     searchContainer: {
       flexDirection: "row",
       gap: 12,
-      marginBottom: 16,
+      marginBottom: 12,
     },
     searchField: {
       flex: 1,
@@ -1249,10 +1552,10 @@ const createStyles = (theme: any, insets: any) =>
     },
     accountChipRow: {
       flexDirection: "row",
-      flexWrap: "wrap",
-      gap: 8,
-      paddingVertical: 8,
-      marginBottom: 16,
+      gap: 12,
+      paddingVertical: 12,
+      paddingHorizontal: 4,
+      marginBottom: 20,
     },
     accountChip: {
       paddingHorizontal: 16,
