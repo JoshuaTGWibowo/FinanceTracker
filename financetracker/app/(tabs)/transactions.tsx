@@ -135,6 +135,12 @@ export default function TransactionsScreen() {
   const baseCurrency = currency || "USD";
 
   const periodOptions = useMemo(() => buildMonthlyPeriods(), []);
+  const activePeriod = useMemo(
+    () =>
+      periodOptions.find((option) => option.key === selectedPeriod) ??
+      periodOptions[periodOptions.length - 1],
+    [periodOptions, selectedPeriod],
+  );
   const scrollViewRef = useRef<ScrollView>(null);
 
   const visibleAccounts = useMemo(
@@ -547,6 +553,10 @@ export default function TransactionsScreen() {
     return 20;
   }, [closingBalanceDisplay]);
 
+  const accountSummaryLabel = `${visibleAccounts.length} ${
+    visibleAccounts.length === 1 ? "account" : "accounts"
+  }`;
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <SectionList
@@ -557,259 +567,309 @@ export default function TransactionsScreen() {
         contentInsetAdjustmentBehavior="automatic"
         ListHeaderComponent={
           <View style={styles.header}>
-            {/* Primary Balance Display */}
-            <View style={styles.balanceCard}>
-              <View style={styles.balanceHeader}>
-                <View>
-                  <Text style={styles.balanceLabel}>Current Balance</Text>
-                  <Text style={styles.balanceValue(balanceFontSize)}>{closingBalanceDisplay}</Text>
-                </View>
-                <View style={styles.changeBadge(summary.net)}>
-                  <Ionicons
-                    name={summary.net >= 0 ? "arrow-up" : "arrow-down"}
-                    size={14}
-                    color={summary.net >= 0 ? theme.colors.success : theme.colors.danger}
-                  />
-                  <Text style={styles.changeValue(summary.net)}>
-                    {formatCurrency(Math.abs(summary.net), currency || "USD")}
-                  </Text>
-                  <Text style={styles.changePercent}>
-                    {summary.percentageChange}
-                  </Text>
-                </View>
-              </View>
-              
-              <View style={styles.metricsRow}>
-                <View style={styles.metric}>
-                  <Text style={styles.metricLabel}>Income</Text>
-                  <Text style={styles.metricValue(theme.colors.success)}>
-                    {formatCurrency(summary.income, currency || "USD")}
-                  </Text>
-                </View>
-                <View style={styles.metricDivider} />
-                <View style={styles.metric}>
-                  <Text style={styles.metricLabel}>Expenses</Text>
-                  <Text style={styles.metricValue(theme.colors.danger)}>
-                    {formatCurrency(summary.expense, currency || "USD")}
-                  </Text>
-                </View>
-                <View style={styles.metricDivider} />
-                <View style={styles.metric}>
-                  <Text style={styles.metricLabel}>Previous</Text>
-                  <Text style={styles.metricValue(theme.colors.text)}>
-                    {formatCurrency(summary.openingBalance, currency || "USD")}
-                  </Text>
-                </View>
-              </View>
-            </View>
-
-            {/* Period Selector */}
-            <ScrollView
-              ref={scrollViewRef}
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              style={styles.periodScroll}
-              contentContainerStyle={styles.periodContent}
-            >
-              {periodOptions.map((option) => {
-                const active = option.key === selectedPeriod;
-                return (
-                  <Pressable
-                    key={option.key}
-                    style={styles.periodChip(active)}
-                    onPress={() => setSelectedPeriod(option.key)}
-                  >
-                    <Text style={styles.periodText(active)}>
-                      {option.label}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </ScrollView>
-
-            {/* Search and Filters */}
-            <View style={styles.searchContainer}>
-              <Pressable
-                style={styles.searchField}
-                onPress={() => openSearch(false)}
-              >
-                <Ionicons name="search" size={18} color={theme.colors.textMuted} />
-                <Text style={styles.searchPlaceholder}>
-                  {searchTerm || "Search transactions..."}
-                </Text>
-              </Pressable>
-              <Pressable
-                style={styles.filterButton(hasActiveFilters)}
-                onPress={() => openSearch(true)}
-              >
-                <Ionicons
-                  name="filter"
-                  size={18}
-                  color={hasActiveFilters ? theme.colors.primary : theme.colors.text}
-                />
-                {hasActiveFilters && (
-                  <View style={styles.filterBadge}>
-                    <Text style={styles.filterBadgeText}>{activeFilters.length}</Text>
+            <View style={styles.heroWrapper}>
+              <View style={styles.heroAccent} />
+              <View style={styles.balanceCard}>
+                <View style={styles.balanceHeader}>
+                  <View style={styles.balanceTitleGroup}>
+                    <Text style={styles.balanceLabel}>Portfolio balance</Text>
+                    <Text style={styles.balanceValue(balanceFontSize)}>{closingBalanceDisplay}</Text>
+                    <Text style={styles.balanceSubtitle}>{accountSummaryLabel}</Text>
                   </View>
-                )}
-              </Pressable>
+                  <View style={styles.balanceHeaderRight}>
+                    <View style={styles.changeBadge(summary.net)}>
+                      <View style={styles.changeIconWrapper(summary.net)}>
+                        <Ionicons
+                          name={summary.net >= 0 ? "arrow-up" : "arrow-down"}
+                          size={12}
+                          color={summary.net >= 0 ? theme.colors.success : theme.colors.danger}
+                        />
+                      </View>
+                      <View>
+                        <Text style={styles.badgeLabel}>Net change</Text>
+                        <Text style={styles.changeValue(summary.net)}>
+                          {formatCurrency(Math.abs(summary.net), currency || "USD")} · {summary.percentageChange}
+                        </Text>
+                      </View>
+                    </View>
+                    <View style={styles.periodBadge}>
+                      <Ionicons name="calendar-clear" size={14} color={theme.colors.textMuted} />
+                      <Text style={styles.periodBadgeText}>{activePeriod?.label ?? "Current period"}</Text>
+                    </View>
+                  </View>
+                </View>
+
+                <View style={styles.metricGrid}>
+                  <View style={styles.metricCard}>
+                    <Text style={styles.metricLabel}>Income</Text>
+                    <Text style={styles.metricValue(theme.colors.success)}>
+                      {formatCurrency(summary.income, currency || "USD")}
+                    </Text>
+                    <Text style={styles.metricHint}>Deposited this period</Text>
+                  </View>
+                  <View style={styles.metricCard}>
+                    <Text style={styles.metricLabel}>Expenses</Text>
+                    <Text style={styles.metricValue(theme.colors.danger)}>
+                      {formatCurrency(summary.expense, currency || "USD")}
+                    </Text>
+                    <Text style={styles.metricHint}>Money out</Text>
+                  </View>
+                  <View style={styles.metricCard}>
+                    <Text style={styles.metricLabel}>Opening balance</Text>
+                    <Text style={styles.metricValue(theme.colors.text)}>
+                      {formatCurrency(summary.openingBalance, currency || "USD")}
+                    </Text>
+                    <Text style={styles.metricHint}>Starting point</Text>
+                  </View>
+                </View>
+
+                <View style={styles.balanceFootnoteRow}>
+                  <View style={styles.balanceFootnote}>
+                    <Ionicons name="trending-up" size={14} color={theme.colors.success} />
+                    <Text style={styles.balanceFootnoteText}>Auto-refreshes with every transaction.</Text>
+                  </View>
+                  <View style={styles.balanceFootnote}>
+                    <Ionicons name="shield-checkmark" size={14} color={theme.colors.primary} />
+                    <Text style={styles.balanceFootnoteText}>Matching accounts in your base currency.</Text>
+                  </View>
+                </View>
+              </View>
             </View>
 
-            {/* Active Filters */}
-            {hasActiveFilters && (
+            <View style={styles.sectionCard}>
+              <View style={styles.sectionHeadingRow}>
+                <Text style={styles.sectionTitle}>Monthly overview</Text>
+                <Text style={styles.sectionCaption}>Tap to focus on a specific month</Text>
+              </View>
+              <ScrollView
+                ref={scrollViewRef}
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={styles.periodScroll}
+                contentContainerStyle={styles.periodContent}
+              >
+                {periodOptions.map((option) => {
+                  const active = option.key === selectedPeriod;
+                  return (
+                    <Pressable
+                      key={option.key}
+                      style={styles.periodChip(active)}
+                      onPress={() => setSelectedPeriod(option.key)}
+                    >
+                      <Text style={styles.periodText(active)}>{option.label}</Text>
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
+            </View>
+
+            <View style={styles.toolsCard}>
+              <View style={styles.sectionHeadingRow}>
+                <Text style={styles.sectionTitle}>Search & Filters</Text>
+                {hasActiveFilters ? (
+                  <Pressable onPress={clearFilters}>
+                    <Text style={styles.sectionAction}>Reset all</Text>
+                  </Pressable>
+                ) : (
+                  <Text style={styles.sectionCaption}>Find transactions instantly</Text>
+                )}
+              </View>
+              <View style={styles.searchContainer}>
+                <Pressable style={styles.searchField} onPress={() => openSearch(false)}>
+                  <Ionicons name="search" size={18} color={theme.colors.textMuted} />
+                  <Text style={styles.searchPlaceholder}>
+                    {searchTerm || "Search transactions..."}
+                  </Text>
+                </Pressable>
+                <Pressable
+                  style={styles.filterButton(hasActiveFilters)}
+                  onPress={() => openSearch(true)}
+                >
+                  <Ionicons
+                    name="options"
+                    size={18}
+                    color={hasActiveFilters ? theme.colors.primary : theme.colors.text}
+                  />
+                  {hasActiveFilters && (
+                    <View style={styles.filterBadge}>
+                      <Text style={styles.filterBadgeText}>{activeFilters.length}</Text>
+                    </View>
+                  )}
+                </Pressable>
+              </View>
+
+              {hasActiveFilters && (
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.filterChips}
+                >
+                  {activeFilters.map((filter) => (
+                    <View key={filter.key} style={styles.filterChip}>
+                      <Text style={styles.filterChipText}>{filter.label}</Text>
+                      <Pressable
+                        onPress={() => {
+                          if (filter.type === "search") setSearchTerm("");
+                          else if (filter.type === "min") setMinAmount("");
+                          else if (filter.type === "max") setMaxAmount("");
+                          else if (filter.type === "start") setStartDate(null);
+                          else if (filter.type === "end") setEndDate(null);
+                          else if (filter.type === "category" && filter.value) {
+                            setSelectedCategories((prev) => prev.filter((c) => c !== filter.value));
+                          }
+                        }}
+                        style={styles.filterChipClose}
+                      >
+                        <Ionicons name="close" size={12} color={theme.colors.background} />
+                      </Pressable>
+                    </View>
+                  ))}
+                </ScrollView>
+              )}
+            </View>
+
+            <View style={styles.sectionCard}>
+              <View style={styles.sectionHeadingRow}>
+                <Text style={styles.sectionTitle}>Accounts</Text>
+                <Text style={styles.sectionCaption}>Tap to scope balances</Text>
+              </View>
               <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.filterChips}
+                contentContainerStyle={styles.accountChipRow}
               >
-                {activeFilters.map((filter) => (
-                  <View key={filter.key} style={styles.filterChip}>
-                    <Text style={styles.filterChipText}>{filter.label}</Text>
-                    <Pressable
-                      onPress={() => {
-                        if (filter.type === "search") setSearchTerm("");
-                        else if (filter.type === "min") setMinAmount("");
-                        else if (filter.type === "max") setMaxAmount("");
-                        else if (filter.type === "start") setStartDate(null);
-                        else if (filter.type === "end") setEndDate(null);
-                        else if (filter.type === "category" && filter.value) {
-                          setSelectedCategories((prev) =>
-                            prev.filter((c) => c !== filter.value),
-                          );
-                        }
-                      }}
-                      style={styles.filterChipClose}
-                    >
-                      <Ionicons name="close" size={12} color={theme.colors.background} />
-                    </Pressable>
-                  </View>
-                ))}
-                <Pressable onPress={clearFilters} style={styles.clearButton}>
-                  <Text style={styles.clearButtonText}>Clear all</Text>
-                </Pressable>
-              </ScrollView>
-            )}
-
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.accountChipRow}
-            >
-            <Pressable
-              onPress={() => setSelectedAccountId(null)}
-              style={[styles.accountChip, !selectedAccountId && styles.accountChipActive]}
-            >
-              <Text
-                style={[
-                  styles.accountChipTitle,
-                  !selectedAccountId && styles.accountChipTitleActive,
-                ]}
-              >
-                All accounts
-              </Text>
-              <Text
-                style={[
-                  styles.accountChipBalance,
-                  !selectedAccountId && styles.accountChipBalanceActive,
-                ]}
-              >
-                {formatCurrency(allAccountsBalance, baseCurrency)}
-              </Text>
-            </Pressable>
-            {accounts.map((account) => {
-              const active = selectedAccountId === account.id;
-              return (
                 <Pressable
-                    key={account.id}
-                    onPress={() => setSelectedAccountId(account.id)}
+                  onPress={() => setSelectedAccountId(null)}
+                  style={[styles.accountChip, !selectedAccountId && styles.accountChipActive]}
+                >
+                  <Text
                     style={[
-                      styles.accountChip,
-                      active && styles.accountChipActive,
-                      account.isArchived && styles.accountChipArchived,
+                      styles.accountChipTitle,
+                      !selectedAccountId && styles.accountChipTitleActive,
                     ]}
                   >
-                    <Text
-                      style={[styles.accountChipTitle, active && styles.accountChipTitleActive]}
+                    All accounts
+                  </Text>
+                  <Text
+                    style={[
+                      styles.accountChipBalance,
+                      !selectedAccountId && styles.accountChipBalanceActive,
+                    ]}
+                  >
+                    {formatCurrency(allAccountsBalance, baseCurrency)}
+                  </Text>
+                </Pressable>
+                {accounts.map((account) => {
+                  const active = selectedAccountId === account.id;
+                  return (
+                    <Pressable
+                      key={account.id}
+                      onPress={() => setSelectedAccountId(account.id)}
+                      style={[
+                        styles.accountChip,
+                        active && styles.accountChipActive,
+                        account.isArchived && styles.accountChipArchived,
+                      ]}
                     >
-                      {account.name}
-                    </Text>
-                    <Text
-                      style={[styles.accountChipBalance, active && styles.accountChipBalanceActive]}
-                    >
-                      {formatCurrency(account.balance, account.currency || baseCurrency)}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </ScrollView>
+                      <Text style={[styles.accountChipTitle, active && styles.accountChipTitleActive]}>
+                        {account.name}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.accountChipBalance,
+                          active && styles.accountChipBalanceActive,
+                        ]}
+                      >
+                        {formatCurrency(account.balance, account.currency || baseCurrency)}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
+            </View>
 
-            {/* Expense Breakdown */}
-            {expenseBreakdown.length > 0 && (
-              <Pressable
-                style={styles.breakdownCard}
-                onPress={() => setCategoriesExpanded(!categoriesExpanded)}
-              >
-                <View style={styles.breakdownHeader}>
-                  <Text style={styles.breakdownTitle}>Top Categories</Text>
-                  <Ionicons
-                    name={categoriesExpanded ? "chevron-up" : "chevron-down"}
-                    size={16}
-                    color={theme.colors.textMuted}
-                  />
-                </View>
-                {categoriesExpanded && (
-                  <View style={styles.breakdownContent}>
-                    {expenseBreakdown.map((item) => (
-                      <View key={item.category} style={styles.breakdownRow}>
-                        <View style={styles.breakdownInfo}>
-                          <Text style={styles.breakdownCategory}>{item.category}</Text>
-                          <Text style={styles.breakdownAmount}>
-                            {formatCurrency(item.amount, currency || "USD")}
+            {(expenseBreakdown.length > 0 || filteredRecurring.length > 0) && (
+              <View style={styles.insightsGrid}>
+                {expenseBreakdown.length > 0 && (
+                  <Pressable
+                    style={styles.breakdownCard}
+                    onPress={() => setCategoriesExpanded(!categoriesExpanded)}
+                  >
+                    <View style={styles.breakdownHeader}>
+                      <View>
+                        <Text style={styles.breakdownTitle}>Top categories</Text>
+                        <Text style={styles.breakdownSubtitle}>Tap to see share of spend</Text>
+                      </View>
+                      <Ionicons
+                        name={categoriesExpanded ? "chevron-up" : "chevron-down"}
+                        size={16}
+                        color={theme.colors.textMuted}
+                      />
+                    </View>
+                    {categoriesExpanded && (
+                      <View style={styles.breakdownContent}>
+                        {expenseBreakdown.map((item) => (
+                          <View key={item.category} style={styles.breakdownRow}>
+                            <View style={styles.breakdownInfo}>
+                              <Text style={styles.breakdownCategory}>{item.category}</Text>
+                              <Text style={styles.breakdownAmount}>
+                                {formatCurrency(item.amount, currency || "USD")}
+                              </Text>
+                            </View>
+                            <View style={styles.progressBar}>
+                              <View style={styles.progressFill(item.percentage)} />
+                            </View>
+                            <Text style={styles.breakdownPercent}>{item.percentage}%</Text>
+                          </View>
+                        ))}
+                      </View>
+                    )}
+                  </Pressable>
+                )}
+
+                {filteredRecurring.length > 0 && (
+                  <View style={styles.recurringSection}>
+                    <View style={styles.breakdownHeader}>
+                      <View>
+                        <Text style={styles.breakdownTitle}>Upcoming recurring</Text>
+                        <Text style={styles.breakdownSubtitle}>
+                          {filteredRecurring.length} scheduled this period
+                        </Text>
+                      </View>
+                    </View>
+                    {filteredRecurring.map((item) => (
+                      <View key={item.id} style={styles.recurringItem}>
+                        <View style={styles.recurringInfo}>
+                          <Text style={styles.recurringCategory}>{item.category}</Text>
+                          {item.note ? (
+                            <Text style={styles.recurringNote} numberOfLines={2}>
+                              {truncateWords(item.note, 10)}
+                            </Text>
+                          ) : null}
+                          <Text style={styles.recurringDate}>
+                            {dayjs(item.nextOccurrence).format("MMM D")} • {item.frequency}
                           </Text>
                         </View>
-                        <View style={styles.progressBar}>
-                          <View style={styles.progressFill(item.percentage)} />
-                        </View>
-                        <Text style={styles.breakdownPercent}>{item.percentage}%</Text>
+                        <Pressable
+                          onPress={() => logRecurringTransaction(item.id)}
+                          style={styles.logButton}
+                        >
+                          <Text style={styles.logButtonText}>Log</Text>
+                        </Pressable>
                       </View>
                     ))}
                   </View>
                 )}
-              </Pressable>
-            )}
-
-            {/* Recurring Transactions */}
-            {filteredRecurring.length > 0 && (
-              <View style={styles.recurringSection}>
-                <Text style={styles.sectionTitle}>
-                  Upcoming Recurring ({filteredRecurring.length})
-                </Text>
-                {filteredRecurring.map((item) => (
-                  <View key={item.id} style={styles.recurringItem}>
-                    <View style={styles.recurringInfo}>
-                      <Text style={styles.recurringCategory}>{item.category}</Text>
-                      {item.note ? (
-                        <Text style={styles.recurringNote} numberOfLines={2}>
-                          {truncateWords(item.note, 10)}
-                        </Text>
-                      ) : null}
-                      <Text style={styles.recurringDate}>
-                        {dayjs(item.nextOccurrence).format("MMM D")} • {item.frequency}
-                      </Text>
-                    </View>
-                    <Pressable
-                      onPress={() => logRecurringTransaction(item.id)}
-                      style={styles.logButton}
-                    >
-                      <Text style={styles.logButtonText}>Log</Text>
-                    </Pressable>
-                  </View>
-                ))}
               </View>
             )}
 
             {sections.length > 0 && (
-              <Text style={styles.transactionsTitle}>Recent Transactions</Text>
+              <View style={styles.transactionsHeaderRow}>
+                <Text style={styles.transactionsTitle}>Recent Transactions</Text>
+                <Text style={styles.transactionsSubtitle}>
+                  {sections.length === 1 ? "1 day" : `${sections.length} days`}
+                </Text>
+              </View>
             )}
           </View>
         }
@@ -1060,25 +1120,48 @@ const createStyles = (theme: any, insets: any) =>
     header: {
       paddingHorizontal: 16,
       paddingTop: 16,
+      gap: 24,
     },
-    
+
     // Balance Card
+    heroWrapper: {
+      position: "relative",
+    },
+    heroAccent: {
+      position: "absolute",
+      top: -10,
+      left: -10,
+      right: -10,
+      bottom: 0,
+      borderRadius: 24,
+      backgroundColor: `${theme.colors.primary}22`,
+      transform: [{ scaleY: 0.95 }],
+      zIndex: 0,
+    },
     balanceCard: {
       backgroundColor: theme.colors.surface,
-      borderRadius: 20,
-      padding: 20,
+      borderRadius: 24,
+      padding: 24,
       marginBottom: 16,
       shadowColor: "#000",
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.05,
-      shadowRadius: 8,
-      elevation: 2,
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.1,
+      shadowRadius: 16,
+      elevation: 4,
+      overflow: "hidden",
+      position: "relative",
+      zIndex: 1,
     },
     balanceHeader: {
       flexDirection: "row",
       justifyContent: "space-between",
       alignItems: "flex-start",
-      marginBottom: 20,
+      marginBottom: 24,
+      gap: 12,
+    },
+    balanceTitleGroup: {
+      flex: 1,
+      gap: 4,
     },
     balanceLabel: {
       fontSize: 12,
@@ -1086,64 +1169,121 @@ const createStyles = (theme: any, insets: any) =>
       color: theme.colors.textMuted,
       textTransform: "uppercase",
       letterSpacing: 0.5,
-      marginBottom: 4,
     },
     balanceValue: (fontSize: number) => ({
       fontSize,
       fontWeight: "700",
       color: theme.colors.text,
     }),
+    balanceSubtitle: {
+      fontSize: 13,
+      color: theme.colors.textMuted,
+    },
+    balanceHeaderRight: {
+      alignItems: "flex-end",
+      gap: 10,
+    },
     changeBadge: (positive: number) => ({
       flexDirection: "row",
       alignItems: "center",
-      gap: 4,
-      paddingHorizontal: 10,
-      paddingVertical: 6,
-      borderRadius: 12,
-      backgroundColor: positive >= 0 
-        ? `${theme.colors.success}15` 
+      gap: 8,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      borderRadius: 16,
+      backgroundColor: positive >= 0
+        ? `${theme.colors.success}15`
         : `${theme.colors.danger}15`,
     }),
+    changeIconWrapper: (positive: number) => ({
+      width: 28,
+      height: 28,
+      borderRadius: 14,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: positive >= 0
+        ? `${theme.colors.success}25`
+        : `${theme.colors.danger}25`,
+    }),
+    badgeLabel: {
+      fontSize: 11,
+      textTransform: "uppercase",
+      fontWeight: "600",
+      color: theme.colors.textMuted,
+      letterSpacing: 0.8,
+    },
     changeValue: (positive: number) => ({
-      fontSize: 14,
+      fontSize: 13,
       fontWeight: "600",
       color: positive >= 0 ? theme.colors.success : theme.colors.danger,
     }),
-    changePercent: {
-      fontSize: 12,
-      fontWeight: "500",
-      color: theme.colors.textMuted,
-    },
-    metricsRow: {
+    periodBadge: {
       flexDirection: "row",
       alignItems: "center",
+      gap: 6,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderRadius: 12,
+      backgroundColor: theme.colors.background,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
     },
-    metric: {
-      flex: 1,
-      alignItems: "center",
+    periodBadgeText: {
+      fontSize: 12,
+      fontWeight: "600",
+      color: theme.colors.text,
     },
     metricLabel: {
-      fontSize: 11,
-      fontWeight: "500",
+      fontSize: 12,
+      fontWeight: "600",
       color: theme.colors.textMuted,
       textTransform: "uppercase",
       letterSpacing: 0.5,
-      marginBottom: 4,
+      marginBottom: 6,
     },
     metricValue: (color: string) => ({
-      fontSize: 16,
-      fontWeight: "600",
+      fontSize: 18,
+      fontWeight: "700",
       color,
     }),
-    metricDivider: {
-      width: 1,
-      height: 32,
-      backgroundColor: theme.colors.border,
+    metricGrid: {
+      flexDirection: "row",
+      gap: 12,
+    },
+    metricCard: {
+      flex: 1,
+      backgroundColor: theme.colors.background,
+      borderRadius: 18,
+      padding: 16,
+      borderWidth: 1,
+      borderColor: `${theme.colors.border}99`,
+      gap: 6,
+    },
+    metricHint: {
+      fontSize: 12,
+      color: theme.colors.textMuted,
+    },
+    balanceFootnoteRow: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 12,
+      marginTop: 20,
+    },
+    balanceFootnote: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+      backgroundColor: theme.colors.background,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderRadius: 999,
+    },
+    balanceFootnoteText: {
+      fontSize: 12,
+      color: theme.colors.textMuted,
     },
     
     // Period Selector
     periodScroll: {
-      marginBottom: 16,
       marginHorizontal: -16,
     },
     periodContent: {
@@ -1163,12 +1303,53 @@ const createStyles = (theme: any, insets: any) =>
       fontWeight: "600",
       color: active ? "#fff" : theme.colors.text,
     }),
-    
+
+    sectionCard: {
+      backgroundColor: theme.colors.surface,
+      borderRadius: 20,
+      padding: 20,
+      gap: 16,
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.05,
+      shadowRadius: 6,
+      elevation: 2,
+    },
+    sectionHeadingRow: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+    },
+    sectionTitle: {
+      fontSize: 16,
+      fontWeight: "700",
+      color: theme.colors.text,
+    },
+    sectionCaption: {
+      fontSize: 12,
+      color: theme.colors.textMuted,
+    },
+    sectionAction: {
+      fontSize: 12,
+      fontWeight: "600",
+      color: theme.colors.primary,
+    },
+    toolsCard: {
+      backgroundColor: theme.colors.surface,
+      borderRadius: 20,
+      padding: 20,
+      gap: 16,
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.05,
+      shadowRadius: 6,
+      elevation: 2,
+    },
+
     // Search and Filters
     searchContainer: {
       flexDirection: "row",
       gap: 12,
-      marginBottom: 16,
     },
     searchField: {
       flex: 1,
@@ -1216,7 +1397,8 @@ const createStyles = (theme: any, insets: any) =>
     filterChips: {
       flexDirection: "row",
       gap: 8,
-      paddingVertical: 8,
+      paddingVertical: 4,
+      paddingHorizontal: 4,
     },
     filterChip: {
       flexDirection: "row",
@@ -1236,23 +1418,11 @@ const createStyles = (theme: any, insets: any) =>
     filterChipClose: {
       padding: 2,
     },
-    clearButton: {
-      paddingHorizontal: 12,
-      paddingVertical: 6,
-      borderRadius: 16,
-      backgroundColor: theme.colors.surface,
-    },
-    clearButtonText: {
-      fontSize: 12,
-      fontWeight: "600",
-      color: theme.colors.text,
-    },
     accountChipRow: {
       flexDirection: "row",
-      flexWrap: "wrap",
-      gap: 8,
-      paddingVertical: 8,
-      marginBottom: 16,
+      gap: 12,
+      paddingVertical: 4,
+      paddingHorizontal: 4,
     },
     accountChip: {
       paddingHorizontal: 16,
@@ -1288,29 +1458,44 @@ const createStyles = (theme: any, insets: any) =>
     },
     
     // Breakdown Card
+    insightsGrid: {
+      flexDirection: "column",
+      gap: 16,
+    },
     breakdownCard: {
       backgroundColor: theme.colors.surface,
-      borderRadius: 16,
-      padding: 16,
-      marginBottom: 16,
+      borderRadius: 18,
+      padding: 18,
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.05,
+      shadowRadius: 6,
+      elevation: 2,
+      gap: 12,
     },
     breakdownHeader: {
       flexDirection: "row",
       justifyContent: "space-between",
-      alignItems: "center",
+      alignItems: "flex-start",
+      gap: 12,
     },
     breakdownTitle: {
       fontSize: 12,
-      fontWeight: "600",
-      color: theme.colors.textMuted,
+      fontWeight: "700",
+      color: theme.colors.text,
       textTransform: "uppercase",
       letterSpacing: 0.5,
     },
+    breakdownSubtitle: {
+      fontSize: 12,
+      color: theme.colors.textMuted,
+      marginTop: 2,
+    },
     breakdownContent: {
-      marginTop: 12,
+      marginTop: 4,
     },
     breakdownRow: {
-      marginBottom: 12,
+      marginBottom: 16,
     },
     breakdownInfo: {
       flexDirection: "row",
@@ -1347,24 +1532,24 @@ const createStyles = (theme: any, insets: any) =>
     
     // Recurring Section
     recurringSection: {
-      marginBottom: 24,
-    },
-    sectionTitle: {
-      fontSize: 12,
-      fontWeight: "600",
-      color: theme.colors.textMuted,
-      textTransform: "uppercase",
-      letterSpacing: 0.5,
-      marginBottom: 12,
+      backgroundColor: theme.colors.surface,
+      borderRadius: 18,
+      padding: 18,
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.05,
+      shadowRadius: 6,
+      elevation: 2,
+      gap: 12,
     },
     recurringItem: {
       flexDirection: "row",
       justifyContent: "space-between",
       alignItems: "center",
-      backgroundColor: theme.colors.surface,
-      borderRadius: 12,
-      padding: 14,
-      marginBottom: 8,
+      backgroundColor: theme.colors.background,
+      borderRadius: 16,
+      padding: 12,
+      gap: 12,
     },
     recurringInfo: {
       flex: 1,
@@ -1385,25 +1570,33 @@ const createStyles = (theme: any, insets: any) =>
     },
     logButton: {
       paddingHorizontal: 16,
-      paddingVertical: 6,
-      borderRadius: 16,
+      paddingVertical: 8,
+      borderRadius: 999,
       backgroundColor: theme.colors.primary,
     },
     logButtonText: {
-      fontSize: 12,
+      fontSize: 13,
       fontWeight: "600",
       color: "#fff",
     },
-    
+
     // Transactions List
-    transactionsTitle: {
-      fontSize: 12,
-      fontWeight: "600",
-      color: theme.colors.textMuted,
-      textTransform: "uppercase",
-      letterSpacing: 0.5,
-      marginBottom: 8,
+    transactionsHeaderRow: {
       marginTop: 8,
+      marginBottom: 8,
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      paddingHorizontal: 4,
+    },
+    transactionsTitle: {
+      fontSize: 16,
+      fontWeight: "700",
+      color: theme.colors.text,
+    },
+    transactionsSubtitle: {
+      fontSize: 12,
+      color: theme.colors.textMuted,
     },
     sectionHeaderContainer: {
       flexDirection: "row",
