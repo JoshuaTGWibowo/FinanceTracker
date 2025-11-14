@@ -13,6 +13,7 @@ import {
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import dayjs, { type Dayjs } from "dayjs";
 
@@ -558,12 +559,23 @@ export default function TransactionsScreen() {
         ListHeaderComponent={
           <View style={styles.header}>
             {/* Primary Balance Display */}
-            <View style={styles.balanceCard}>
+            <LinearGradient colors={[theme.colors.primaryMuted, theme.colors.primary]} style={styles.balanceCard}>
               <View style={styles.balanceHeader}>
                 <View>
-                  <Text style={styles.balanceLabel}>Current Balance</Text>
+                  <Text style={styles.balanceLabel}>Current balance</Text>
                   <Text style={styles.balanceValue(balanceFontSize)}>{closingBalanceDisplay}</Text>
                 </View>
+                <Pressable
+                  style={styles.balanceAction}
+                  onPress={() => router.push("/transactions/new")}
+                  accessibilityRole="button"
+                >
+                  <Ionicons name="add" size={16} color={theme.colors.text} />
+                  <Text style={styles.balanceActionText}>Log</Text>
+                </Pressable>
+              </View>
+
+              <View style={styles.balanceMetaRow}>
                 <View style={styles.changeBadge(summary.net)}>
                   <Ionicons
                     name={summary.net >= 0 ? "arrow-up" : "arrow-down"}
@@ -573,12 +585,11 @@ export default function TransactionsScreen() {
                   <Text style={styles.changeValue(summary.net)}>
                     {formatCurrency(Math.abs(summary.net), currency || "USD")}
                   </Text>
-                  <Text style={styles.changePercent}>
-                    {summary.percentageChange}
-                  </Text>
+                  <Text style={styles.changePercent}>{summary.percentageChange}</Text>
                 </View>
+                <Text style={styles.balanceMetaText}>{dayjs().format("MMM D, YYYY")}</Text>
               </View>
-              
+
               <View style={styles.metricsRow}>
                 <View style={styles.metric}>
                   <Text style={styles.metricLabel}>Income</Text>
@@ -595,13 +606,13 @@ export default function TransactionsScreen() {
                 </View>
                 <View style={styles.metricDivider} />
                 <View style={styles.metric}>
-                  <Text style={styles.metricLabel}>Previous</Text>
+                  <Text style={styles.metricLabel}>Opening</Text>
                   <Text style={styles.metricValue(theme.colors.text)}>
                     {formatCurrency(summary.openingBalance, currency || "USD")}
                   </Text>
                 </View>
               </View>
-            </View>
+            </LinearGradient>
 
             {/* Period Selector */}
             <ScrollView
@@ -1064,15 +1075,14 @@ const createStyles = (theme: any, insets: any) =>
     
     // Balance Card
     balanceCard: {
-      backgroundColor: theme.colors.surface,
-      borderRadius: 20,
+      borderRadius: 24,
       padding: 20,
       marginBottom: 16,
-      shadowColor: "#000",
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.05,
-      shadowRadius: 8,
-      elevation: 2,
+      shadowColor: theme.colors.primary,
+      shadowOffset: { width: 0, height: 10 },
+      shadowOpacity: 0.2,
+      shadowRadius: 20,
+      elevation: 4,
     },
     balanceHeader: {
       flexDirection: "row",
@@ -1093,6 +1103,35 @@ const createStyles = (theme: any, insets: any) =>
       fontWeight: "700",
       color: theme.colors.text,
     }),
+    balanceAction: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderRadius: 999,
+      backgroundColor: `${theme.colors.surface}55`,
+    },
+    balanceActionText: {
+      fontSize: 13,
+      fontWeight: "600",
+      color: theme.colors.text,
+      textTransform: "uppercase",
+      letterSpacing: 0.6,
+    },
+    balanceMetaRow: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      marginBottom: 16,
+    },
+    balanceMetaText: {
+      fontSize: 12,
+      fontWeight: "600",
+      color: `${theme.colors.text}CC`,
+      textTransform: "uppercase",
+      letterSpacing: 0.8,
+    },
     changeBadge: (positive: number) => ({
       flexDirection: "row",
       alignItems: "center",
