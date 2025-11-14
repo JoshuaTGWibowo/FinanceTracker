@@ -104,21 +104,33 @@ interface PeriodOption {
   range: () => { start: Dayjs; end: Dayjs };
 }
 
-const MONTHS_TO_DISPLAY = 12;
+const JANUARY_2025 = dayjs("2025-01-01").startOf("month");
 
-const buildMonthlyPeriods = (): PeriodOption[] => {
+const buildMonthlyPeriods = (earliestRecord?: Dayjs | null): PeriodOption[] => {
   const currentMonth = dayjs().startOf("month");
-  return Array.from({ length: MONTHS_TO_DISPLAY }).map((_, index) => {
-    const month = currentMonth.subtract(MONTHS_TO_DISPLAY - 1 - index, "month");
-    return {
+  const baselineStart = JANUARY_2025.isAfter(currentMonth) ? currentMonth : JANUARY_2025;
+  const startMonth =
+    earliestRecord && earliestRecord.isBefore(baselineStart)
+      ? earliestRecord.startOf("month")
+      : baselineStart;
+
+  const months: PeriodOption[] = [];
+  let cursor = startMonth.clone();
+
+  while (!cursor.isAfter(currentMonth)) {
+    const month = cursor;
+    months.push({
       key: month.format("YYYY-MM"),
       label: month.format("MMM YYYY"),
-      range: () => ({ 
-        start: month.startOf("month"), 
-        end: month.endOf("month") 
+      range: () => ({
+        start: month.startOf("month"),
+        end: month.endOf("month"),
       }),
-    };
-  });
+    });
+    cursor = cursor.add(1, "month");
+  }
+
+  return months;
 };
 
 export default function TransactionsScreen() {
@@ -134,7 +146,24 @@ export default function TransactionsScreen() {
 
   const baseCurrency = currency || "USD";
 
-  const periodOptions = useMemo(() => buildMonthlyPeriods(), []);
+  const earliestTransactionMonth = useMemo(() => {
+    if (!transactions.length) {
+      return null;
+    }
+
+    return transactions.reduce<Dayjs | null>((earliest, transaction) => {
+      const date = dayjs(transaction.date).startOf("month");
+      if (!earliest || date.isBefore(earliest)) {
+        return date;
+      }
+      return earliest;
+    }, null);
+  }, [transactions]);
+
+  const periodOptions = useMemo(
+    () => buildMonthlyPeriods(earliestTransactionMonth),
+    [earliestTransactionMonth],
+  );
   const scrollViewRef = useRef<ScrollView>(null);
 
   const visibleAccounts = useMemo(
@@ -152,20 +181,27 @@ export default function TransactionsScreen() {
     [visibleAccounts],
   );
   
-  // Default to current month (last item in array)
-  const [selectedPeriod, setSelectedPeriod] = useState(() => {
+  const [selectedPeriod, setSelectedPeriod] = useState<string>("");
+
+  useEffect(() => {
     const currentMonth = periodOptions[periodOptions.length - 1];
-    return currentMonth?.key ?? "";
-  });
-  
-  // Auto-scroll to current month on mount
+    if (!currentMonth) {
+      return;
+    }
+
+    const exists = periodOptions.some((option) => option.key === selectedPeriod);
+    if (!selectedPeriod || !exists) {
+      setSelectedPeriod(currentMonth.key);
+    }
+  }, [periodOptions, selectedPeriod]);
+
   useEffect(() => {
     const timeout = setTimeout(() => {
       scrollViewRef.current?.scrollToEnd({ animated: false });
     }, 100);
 
     return () => clearTimeout(timeout);
-  }, []);
+  }, [periodOptions.length]);
   
   const [searchTerm, setSearchTerm] = useState("");
   const [searchVisible, setSearchVisible] = useState(false);
@@ -539,6 +575,42 @@ export default function TransactionsScreen() {
     });
   }, [currency, summary.closingBalance]);
 
+  const selectedPeriodLabel = useMemo(() => {
+    const option = periodOptions.find((item) => item.key === selectedPeriod);
+    return option?.label;
+  }, [periodOptions, selectedPeriod]);
+
+  const totalTransactions = useMemo(
+    () =>
+      sections.reduce((acc, section) => {
+        return (
+          acc +
+          section.data.reduce((dayAcc, day) => {
+            return dayAcc + day.transactions.length;
+          }, 0)
+        );
+      }, 0),
+    [sections],
+  );
+
+  const trackedDays = useMemo(
+    () => sections.reduce((acc, section) => acc + section.data.length, 0),
+    [sections],
+  );
+
+  const avgDailyExpense = trackedDays > 0 ? summary.expense / trackedDays : 0;
+  const avgTransactionValue = totalTransactions > 0 ? summary.expense / totalTransactions : 0;
+  const topCategory = expenseBreakdown[0];
+  const netIsPositive = summary.net >= 0;
+  const netTone = summary.net > 0 ? "positive" : summary.net < 0 ? "negative" : "neutral";
+  const timelinePercentage = useMemo(() => {
+    const total = Math.abs(summary.openingBalance) + Math.abs(summary.closingBalance);
+    if (total === 0) {
+      return 50;
+    }
+    return Math.round((Math.abs(summary.closingBalance) / total) * 100);
+  }, [summary.closingBalance, summary.openingBalance]);
+
   const balanceFontSize = useMemo(() => {
     const digitCount = closingBalanceDisplay.replace(/[^0-9]/g, "").length;
     if (digitCount <= 6) return 32;
@@ -690,58 +762,166 @@ export default function TransactionsScreen() {
               </ScrollView>
             )}
 
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.accountChipRow}
-            >
-            <Pressable
-              onPress={() => setSelectedAccountId(null)}
-              style={[styles.accountChip, !selectedAccountId && styles.accountChipActive]}
-            >
-              <Text
-                style={[
-                  styles.accountChipTitle,
-                  !selectedAccountId && styles.accountChipTitleActive,
-                ]}
-              >
-                All accounts
+            <View style={styles.analyticsSection}>
+              <View style={styles.sectionHeading}>
+                <View>
+                  <Text style={styles.sectionHeadingLabel}>Period insights</Text>
+                  <Text style={styles.sectionHeadingCaption}>
+                    {selectedPeriodLabel
+                      ? `For ${selectedPeriodLabel}`
+                      : "Track how money moved this period"}
+                  </Text>
+                </View>
+                <View style={styles.analyticsBadge}>
+                  <Ionicons
+                    name={netIsPositive ? "trending-up" : "trending-down"}
+                    size={14}
+                    color={netIsPositive ? theme.colors.success : theme.colors.danger}
+                  />
+                  <Text style={styles.analyticsBadgeText}>{summary.percentageChange}</Text>
+                </View>
+              </View>
+              <View style={styles.analyticsGrid}>
+                <View style={styles.analyticsCard}>
+                  <Text style={styles.analyticsCardLabel}>Net change</Text>
+                  <Text style={styles.analyticsCardValue(netTone)}>
+                    {formatCurrency(summary.net, currency || "USD")}
+                  </Text>
+                  <Text style={styles.analyticsCardHint}>vs opening balance</Text>
+                </View>
+                <View style={styles.analyticsCard}>
+                  <Text style={styles.analyticsCardLabel}>Avg daily spend</Text>
+                  <Text style={styles.analyticsCardValue("neutral")}>
+                    {formatCurrency(avgDailyExpense || 0, currency || "USD")}
+                  </Text>
+                  <Text style={styles.analyticsCardHint}>
+                    {trackedDays} active {trackedDays === 1 ? "day" : "days"}
+                  </Text>
+                </View>
+                <View style={styles.analyticsCard}>
+                  <Text style={styles.analyticsCardLabel}>Avg expense</Text>
+                  <Text style={styles.analyticsCardValue("neutral")}>
+                    {formatCurrency(avgTransactionValue || 0, currency || "USD")}
+                  </Text>
+                  <Text style={styles.analyticsCardHint}>{totalTransactions} transactions</Text>
+                </View>
+                <View style={styles.analyticsCard}>
+                  <Text style={styles.analyticsCardLabel}>Top category</Text>
+                  <Text style={styles.analyticsCardValue("neutral")} numberOfLines={1}>
+                    {topCategory ? topCategory.category : "No data"}
+                  </Text>
+                  <Text style={styles.analyticsCardHint}>
+                    {topCategory ? `${topCategory.percentage}% of spend` : "Add expenses to compare"}
+                  </Text>
+                </View>
+              </View>
+            </View>
+
+            <View style={styles.timelineCard}>
+              <View style={styles.timelineHeader}>
+                <View>
+                  <Text style={styles.timelineTitle}>Balance journey</Text>
+                  <Text style={styles.timelineSubtitle}>
+                    Opening vs closing for this period
+                  </Text>
+                </View>
+                <View style={styles.timelineChip}>
+                  <Ionicons
+                    name="pulse"
+                    size={14}
+                    color={netIsPositive ? theme.colors.success : theme.colors.danger}
+                  />
+                  <Text style={styles.timelineChipText}>{summary.percentageChange}</Text>
+                </View>
+              </View>
+              <View style={styles.timelineRow}>
+                <View>
+                  <Text style={styles.timelinePointLabel}>Opening</Text>
+                  <Text style={styles.timelinePointValue}>
+                    {formatCurrency(summary.openingBalance, currency || "USD")}
+                  </Text>
+                </View>
+                <View>
+                  <Text style={styles.timelinePointLabel}>Closing</Text>
+                  <Text style={styles.timelinePointValue}>{closingBalanceDisplay}</Text>
+                </View>
+              </View>
+              <View style={styles.timelineProgress}>
+                <View style={styles.timelineProgressFill(timelinePercentage, netIsPositive)} />
+              </View>
+              <Text style={styles.timelineMeta}>
+                Net {formatCurrency(summary.net, currency || "USD")} this period
               </Text>
-              <Text
-                style={[
-                  styles.accountChipBalance,
-                  !selectedAccountId && styles.accountChipBalanceActive,
-                ]}
+            </View>
+
+            <View style={styles.accountSection}>
+              <View style={styles.sectionHeading}>
+                <View>
+                  <Text style={styles.sectionHeadingLabel}>Wallet focus</Text>
+                  <Text style={styles.sectionHeadingCaption}>Tap to view by account</Text>
+                </View>
+              </View>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.accountCarousel}
               >
-                {formatCurrency(allAccountsBalance, baseCurrency)}
-              </Text>
-            </Pressable>
-            {accounts.map((account) => {
-              const active = selectedAccountId === account.id;
-              return (
                 <Pressable
-                    key={account.id}
-                    onPress={() => setSelectedAccountId(account.id)}
-                    style={[
-                      styles.accountChip,
-                      active && styles.accountChipActive,
-                      account.isArchived && styles.accountChipArchived,
-                    ]}
-                  >
-                    <Text
-                      style={[styles.accountChipTitle, active && styles.accountChipTitleActive]}
-                    >
-                      {account.name}
+                  onPress={() => setSelectedAccountId(null)}
+                  style={[styles.accountCard, !selectedAccountId && styles.accountCardActive]}
+                >
+                  <View style={styles.accountCardHeader}>
+                    <View
+                      style={[
+                        styles.accountIndicator,
+                        !selectedAccountId && styles.accountIndicatorActive,
+                      ]}
+                    />
+                    <Text style={[styles.accountName, !selectedAccountId && styles.accountNameActive]}>
+                      All accounts
                     </Text>
-                    <Text
-                      style={[styles.accountChipBalance, active && styles.accountChipBalanceActive]}
+                  </View>
+                  <Text style={[styles.accountBalance, !selectedAccountId && styles.accountBalanceActive]}>
+                    {formatCurrency(allAccountsBalance, baseCurrency)}
+                  </Text>
+                  <Text style={styles.accountMeta}>Combined total</Text>
+                </Pressable>
+                {accounts.map((account) => {
+                  const active = selectedAccountId === account.id;
+                  return (
+                    <Pressable
+                      key={account.id}
+                      onPress={() => setSelectedAccountId(account.id)}
+                      style={[
+                        styles.accountCard,
+                        active && styles.accountCardActive,
+                        account.isArchived && styles.accountCardArchived,
+                      ]}
                     >
-                      {formatCurrency(account.balance, account.currency || baseCurrency)}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </ScrollView>
+                      <View style={styles.accountCardHeader}>
+                        <View
+                          style={[
+                            styles.accountIndicator,
+                            active && styles.accountIndicatorActive,
+                          ]}
+                        />
+                        <Text style={[styles.accountName, active && styles.accountNameActive]}>
+                          {account.name}
+                        </Text>
+                      </View>
+                      <Text
+                        style={[styles.accountBalance, active && styles.accountBalanceActive]}
+                      >
+                        {formatCurrency(account.balance, account.currency || baseCurrency)}
+                      </Text>
+                      <Text style={styles.accountMeta}>
+                        {account.isArchived ? "Archived" : "Included"}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
+            </View>
 
             {/* Expense Breakdown */}
             {expenseBreakdown.length > 0 && (
@@ -1247,52 +1427,222 @@ const createStyles = (theme: any, insets: any) =>
       fontWeight: "600",
       color: theme.colors.text,
     },
-    accountChipRow: {
+    analyticsSection: {
+      backgroundColor: theme.colors.surface,
+      borderRadius: 20,
+      padding: 20,
+      marginBottom: 16,
+      borderWidth: 1,
+      borderColor: `${theme.colors.primary}15`,
+    },
+    sectionHeading: {
       flexDirection: "row",
-      flexWrap: "wrap",
-      gap: 8,
-      paddingVertical: 8,
+      alignItems: "center",
+      justifyContent: "space-between",
       marginBottom: 16,
     },
-    accountChip: {
-      paddingHorizontal: 16,
-      paddingVertical: 12,
+    sectionHeadingLabel: {
+      fontSize: 14,
+      fontWeight: "700",
+      color: theme.colors.text,
+    },
+    sectionHeadingCaption: {
+      fontSize: 12,
+      color: theme.colors.textMuted,
+      marginTop: 2,
+    },
+    analyticsBadge: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      borderRadius: 14,
+      backgroundColor: theme.colors.surfaceElevated,
+    },
+    analyticsBadgeText: {
+      fontSize: 12,
+      fontWeight: "600",
+      color: theme.colors.text,
+    },
+    analyticsGrid: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 12,
+    },
+    analyticsCard: {
+      flexBasis: "48%",
+      flexGrow: 1,
+      backgroundColor: theme.colors.surfaceElevated,
+      borderRadius: 16,
+      padding: 16,
+      borderWidth: 1,
+      borderColor: `${theme.colors.border}88`,
+      minWidth: 150,
+    },
+    analyticsCardLabel: {
+      fontSize: 12,
+      fontWeight: "600",
+      color: theme.colors.textMuted,
+      textTransform: "uppercase",
+      letterSpacing: 0.6,
+      marginBottom: 6,
+    },
+    analyticsCardValue: (tone: "positive" | "negative" | "neutral") => ({
+      fontSize: 20,
+      fontWeight: "700",
+      color:
+        tone === "positive"
+          ? theme.colors.success
+          : tone === "negative"
+            ? theme.colors.danger
+            : theme.colors.text,
+    }),
+    analyticsCardHint: {
+      marginTop: 4,
+      fontSize: 12,
+      color: theme.colors.textMuted,
+    },
+    timelineCard: {
+      backgroundColor: theme.colors.surface,
+      borderRadius: 20,
+      padding: 20,
+      borderWidth: 1,
+      borderColor: `${theme.colors.primary}10`,
+      marginBottom: 16,
+    },
+    timelineHeader: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      marginBottom: 12,
+    },
+    timelineTitle: {
+      fontSize: 14,
+      fontWeight: "700",
+      color: theme.colors.text,
+    },
+    timelineSubtitle: {
+      fontSize: 12,
+      color: theme.colors.textMuted,
+      marginTop: 2,
+    },
+    timelineChip: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      borderRadius: 14,
+      backgroundColor: theme.colors.surfaceElevated,
+    },
+    timelineChipText: {
+      fontSize: 12,
+      fontWeight: "600",
+      color: theme.colors.text,
+    },
+    timelineRow: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      marginBottom: 12,
+    },
+    timelinePointLabel: {
+      fontSize: 12,
+      color: theme.colors.textMuted,
+      textTransform: "uppercase",
+      letterSpacing: 0.6,
+    },
+    timelinePointValue: {
+      fontSize: 18,
+      fontWeight: "700",
+      color: theme.colors.text,
+      marginTop: 4,
+    },
+    timelineProgress: {
+      height: 10,
+      backgroundColor: theme.colors.surfaceElevated,
       borderRadius: 999,
+      overflow: "hidden",
+    },
+    timelineProgressFill: (percentage: number, positive: boolean) => ({
+      width: `${Math.max(0, Math.min(100, percentage))}%`,
+      height: "100%",
+      backgroundColor: positive ? theme.colors.success : theme.colors.danger,
+      borderRadius: 999,
+    }),
+    timelineMeta: {
+      marginTop: 12,
+      fontSize: 12,
+      color: theme.colors.textMuted,
+    },
+    accountSection: {
+      marginBottom: 16,
+    },
+    accountCarousel: {
+      flexDirection: "row",
+      gap: 12,
+      paddingVertical: 8,
+    },
+    accountCard: {
+      width: 180,
+      padding: 16,
+      borderRadius: 20,
+      backgroundColor: theme.colors.surfaceElevated,
       borderWidth: 1,
       borderColor: theme.colors.border,
-      backgroundColor: theme.colors.surface,
-      minWidth: 140,
-      flexShrink: 1,
     },
-    accountChipActive: {
+    accountCardActive: {
       borderColor: theme.colors.primary,
-      backgroundColor: theme.colors.primary,
+      backgroundColor: `${theme.colors.primary}15`,
     },
-    accountChipArchived: {
+    accountCardArchived: {
       opacity: 0.6,
     },
-    accountChipTitle: {
+    accountCardHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+      marginBottom: 12,
+    },
+    accountIndicator: {
+      width: 10,
+      height: 10,
+      borderRadius: 5,
+      backgroundColor: theme.colors.border,
+    },
+    accountIndicatorActive: {
+      backgroundColor: theme.colors.primary,
+    },
+    accountName: {
       fontSize: 13,
       fontWeight: "600",
       color: theme.colors.text,
     },
-    accountChipTitleActive: {
-      color: theme.colors.background,
+    accountNameActive: {
+      color: theme.colors.primary,
     },
-    accountChipBalance: {
+    accountBalance: {
+      fontSize: 18,
+      fontWeight: "700",
+      color: theme.colors.text,
+    },
+    accountBalanceActive: {
+      color: theme.colors.primary,
+    },
+    accountMeta: {
+      marginTop: 4,
       fontSize: 12,
       color: theme.colors.textMuted,
-    },
-    accountChipBalanceActive: {
-      color: `${theme.colors.background}CC`,
     },
     
     // Breakdown Card
     breakdownCard: {
       backgroundColor: theme.colors.surface,
-      borderRadius: 16,
-      padding: 16,
+      borderRadius: 20,
+      padding: 20,
       marginBottom: 16,
+      borderWidth: 1,
+      borderColor: `${theme.colors.primary}10`,
     },
     breakdownHeader: {
       flexDirection: "row",
@@ -1348,6 +1698,11 @@ const createStyles = (theme: any, insets: any) =>
     // Recurring Section
     recurringSection: {
       marginBottom: 24,
+      backgroundColor: theme.colors.surface,
+      borderRadius: 20,
+      padding: 20,
+      borderWidth: 1,
+      borderColor: `${theme.colors.primary}10`,
     },
     sectionTitle: {
       fontSize: 12,
@@ -1361,10 +1716,12 @@ const createStyles = (theme: any, insets: any) =>
       flexDirection: "row",
       justifyContent: "space-between",
       alignItems: "center",
-      backgroundColor: theme.colors.surface,
-      borderRadius: 12,
-      padding: 14,
-      marginBottom: 8,
+      backgroundColor: theme.colors.surfaceElevated,
+      borderRadius: 16,
+      padding: 16,
+      marginBottom: 12,
+      borderWidth: 1,
+      borderColor: `${theme.colors.border}88`,
     },
     recurringInfo: {
       flex: 1,
@@ -1385,13 +1742,16 @@ const createStyles = (theme: any, insets: any) =>
     },
     logButton: {
       paddingHorizontal: 16,
-      paddingVertical: 6,
-      borderRadius: 16,
+      paddingVertical: 8,
+      borderRadius: 18,
       backgroundColor: theme.colors.primary,
+      shadowColor: theme.colors.primary,
+      shadowOpacity: 0.2,
+      shadowRadius: 6,
     },
     logButtonText: {
-      fontSize: 12,
-      fontWeight: "600",
+      fontSize: 13,
+      fontWeight: "700",
       color: "#fff",
     },
     
