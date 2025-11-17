@@ -3,23 +3,13 @@ import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-nati
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import Svg, { Circle, Path } from "react-native-svg";
 import dayjs from "dayjs";
 
 import { useAppTheme, type Theme } from "../../theme";
 import { useFinanceStore } from "../../lib/store";
 import { buildMonthlyPeriods } from "../../lib/periods";
 import { filterTransactionsByAccount, getTransactionDelta } from "../../lib/transactions";
-
-const chartPalette = [
-  "#60A5FA",
-  "#34D399",
-  "#F97316",
-  "#F472B6",
-  "#A78BFA",
-  "#FB7185",
-  "#FBBF24",
-];
+import PieChart, { CategorySlice, chartPalette } from "../../components/CategoryPieChart";
 
 const formatCurrency = (
   value: number,
@@ -46,62 +36,6 @@ const formatCurrency = (
     maximumFractionDigits: maxDigits,
     minimumFractionDigits: minDigits,
   }).format(value);
-};
-
-interface CategorySlice {
-  label: string;
-  value: number;
-  percentage: number;
-  color: string;
-}
-
-const polarToCartesian = (center: number, radius: number, angle: number) => ({
-  x: center + radius * Math.cos(angle),
-  y: center + radius * Math.sin(angle),
-});
-
-const describeArc = (
-  center: number,
-  radius: number,
-  startAngle: number,
-  endAngle: number,
-) => {
-  const start = polarToCartesian(center, radius, startAngle);
-  const end = polarToCartesian(center, radius, endAngle);
-  const largeArcFlag = endAngle - startAngle <= Math.PI ? 0 : 1;
-
-  return [
-    `M ${center} ${center}`,
-    `L ${start.x} ${start.y}`,
-    `A ${radius} ${radius} 0 ${largeArcFlag} 1 ${end.x} ${end.y}`,
-    "Z",
-  ].join(" ");
-};
-
-const PieChart = ({ data, size = 140, theme }: { data: CategorySlice[]; size?: number; theme: Theme }) => {
-  const radius = size / 2;
-  const total = data.reduce((acc, item) => acc + item.value, 0);
-  let startAngle = -Math.PI / 2;
-
-  const segments = total
-    ? data.map((item) => {
-        const angle = total ? (item.value / total) * Math.PI * 2 : 0;
-        const path = describeArc(radius, radius, startAngle, startAngle + angle);
-        startAngle += angle;
-        return { path, color: item.color };
-      })
-    : [];
-
-  return (
-    <Svg width={size} height={size}>
-      {segments.length === 0 ? (
-        <Circle cx={radius} cy={radius} r={radius} fill={`${theme.colors.border}55`} />
-      ) : (
-        segments.map((segment, index) => <Path key={index} d={segment.path} fill={segment.color} />)
-      )}
-      <Circle cx={radius} cy={radius} r={radius * 0.55} fill={theme.colors.surface} />
-    </Svg>
-  );
 };
 
 export default function TransactionsReportModal() {
@@ -160,6 +94,21 @@ export default function TransactionsReportModal() {
 
     router.push({ pathname: "/transactions/net-income-details", params });
   }, [router, selectedAccountId, selectedPeriod.key]);
+
+  const handleOpenFlowDetails = useCallback(
+    (type: "income" | "expense") => {
+      const params: Record<string, string> = { period: selectedPeriod.key };
+      if (selectedAccountId) {
+        params.accountId = selectedAccountId;
+      }
+
+      router.push({
+        pathname: type === "income" ? "/transactions/income-details" : "/transactions/expense-details",
+        params,
+      });
+    },
+    [router, selectedAccountId, selectedPeriod.key],
+  );
 
   const report = useMemo(() => {
     const allowedAccountIds = selectedAccountId ? null : new Set(visibleAccountIds);
@@ -338,18 +287,34 @@ export default function TransactionsReportModal() {
             {formatCurrency(report.netChange, currency, { signDisplay: "always" })}
           </Text>
           <View style={styles.netBreakdownRow}>
-            <View style={styles.netBreakdownItem}>
+            <Pressable
+              style={({ pressed }) => [
+                styles.netBreakdownItem,
+                pressed && styles.netBreakdownItemPressed(theme),
+              ]}
+              onPress={() => handleOpenFlowDetails("income")}
+              accessibilityRole="button"
+              accessibilityLabel="Open income details"
+            >
               <Text style={styles.netLabel}>Income</Text>
               <Text style={styles.netValue(theme.colors.success)}>
                 {formatCurrency(report.totals.income, currency)}
               </Text>
-            </View>
-            <View style={styles.netBreakdownItem}>
+            </Pressable>
+            <Pressable
+              style={({ pressed }) => [
+                styles.netBreakdownItem,
+                pressed && styles.netBreakdownItemPressed(theme),
+              ]}
+              onPress={() => handleOpenFlowDetails("expense")}
+              accessibilityRole="button"
+              accessibilityLabel="Open expense details"
+            >
               <Text style={styles.netLabel}>Expense</Text>
               <Text style={styles.netValue(theme.colors.danger)}>
                 {formatCurrency(report.totals.expense, currency)}
               </Text>
-            </View>
+            </Pressable>
           </View>
         </View>
 
@@ -720,6 +685,9 @@ const createStyles = (theme: Theme) =>
       borderRadius: theme.radii.md,
       backgroundColor: theme.colors.surfaceElevated,
     },
+    netBreakdownItemPressed: (theme: Theme) => ({
+      backgroundColor: `${theme.colors.surface}cc`,
+    }),
     netLabel: {
       fontSize: 12,
       color: theme.colors.textMuted,
