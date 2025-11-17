@@ -161,6 +161,18 @@ export default function TransactionsReportModal() {
     router.push({ pathname: "/transactions/net-income-details", params });
   }, [router, selectedAccountId, selectedPeriod.key]);
 
+  const handleOpenFlowDetails = useCallback(
+    (type: "income" | "expense") => {
+      const params: Record<string, string> = { period: selectedPeriod.key };
+      if (selectedAccountId) {
+        params.accountId = selectedAccountId;
+      }
+
+      router.push({ pathname: `/transactions/${type}-details`, params });
+    },
+    [router, selectedAccountId, selectedPeriod.key],
+  );
+
   const report = useMemo(() => {
     const allowedAccountIds = selectedAccountId ? null : new Set(visibleAccountIds);
     const scopedTransactions = filterTransactionsByAccount(transactions, selectedAccountId).filter((transaction) => {
@@ -334,24 +346,34 @@ export default function TransactionsReportModal() {
               <Ionicons name="chevron-forward" size={14} color={theme.colors.textMuted} />
             </Pressable>
           </View>
-          <Text style={styles.netAmount(netPositive)}>
-            {formatCurrency(report.netChange, currency, { signDisplay: "always" })}
-          </Text>
-          <View style={styles.netBreakdownRow}>
-            <View style={styles.netBreakdownItem}>
-              <Text style={styles.netLabel}>Income</Text>
-              <Text style={styles.netValue(theme.colors.success)}>
-                {formatCurrency(report.totals.income, currency)}
-              </Text>
-            </View>
-            <View style={styles.netBreakdownItem}>
-              <Text style={styles.netLabel}>Expense</Text>
-              <Text style={styles.netValue(theme.colors.danger)}>
-                {formatCurrency(report.totals.expense, currency)}
-              </Text>
-            </View>
-          </View>
+        <Text style={styles.netAmount(netPositive)}>
+          {formatCurrency(report.netChange, currency, { signDisplay: "always" })}
+        </Text>
+        <View style={styles.netBreakdownRow}>
+          <Pressable
+            style={styles.netBreakdownItem}
+            onPress={() => handleOpenFlowDetails("income")}
+            accessibilityRole="button"
+            accessibilityLabel="Open income details"
+          >
+            <Text style={styles.netLabel}>Income</Text>
+            <Text style={styles.netValue(theme.colors.success)}>
+              {formatCurrency(report.totals.income, currency)}
+            </Text>
+          </Pressable>
+          <Pressable
+            style={styles.netBreakdownItem}
+            onPress={() => handleOpenFlowDetails("expense")}
+            accessibilityRole="button"
+            accessibilityLabel="Open expense details"
+          >
+            <Text style={styles.netLabel}>Expense</Text>
+            <Text style={styles.netValue(theme.colors.danger)}>
+              {formatCurrency(report.totals.expense, currency)}
+            </Text>
+          </Pressable>
         </View>
+      </View>
 
         <View style={styles.categoryCard}>
           <View style={styles.categoryHeader}>
