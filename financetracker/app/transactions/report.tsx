@@ -315,7 +315,21 @@ export default function TransactionsReportModal() {
         <View style={styles.netCard}>
           <View style={styles.netHeader}>
             <Text style={styles.netTitle}>Net income</Text>
-            <Text style={styles.netLink}>See details</Text>
+            <Pressable
+              style={styles.netLinkButton}
+              onPress={() => {
+                const params: Record<string, string> = { period: selectedPeriod.key };
+                if (selectedAccountId) {
+                  params.accountId = selectedAccountId;
+                }
+                router.push({ pathname: "/transactions/net-income", params });
+              }}
+              accessibilityRole="button"
+              accessibilityLabel="View net income details"
+            >
+              <Text style={styles.netLink}>See details</Text>
+              <Ionicons name="chevron-forward" size={16} color={theme.colors.primary} />
+            </Pressable>
           </View>
           <Text style={styles.netAmount(netPositive)}>
             {formatCurrency(report.netChange, currency, { signDisplay: "always" })}
@@ -671,6 +685,13 @@ const createStyles = (theme: Theme) =>
       fontSize: 16,
       fontWeight: "600",
       color: theme.colors.text,
+    },
+    netLinkButton: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+      padding: theme.spacing.xs,
+      borderRadius: theme.radii.md,
     },
     netLink: {
       fontSize: 13,
