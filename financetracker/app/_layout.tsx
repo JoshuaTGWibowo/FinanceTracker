@@ -37,6 +37,22 @@ export default function RootLayout() {
             animation: "slide_from_bottom",
           }}
         />
+        <Stack.Screen
+          name="transactions/net-income"
+          options={{
+            presentation: "modal",
+            headerShown: false,
+            animation: "slide_from_bottom",
+          }}
+        />
+        <Stack.Screen
+          name="transactions/net-income-week"
+          options={{
+            presentation: "modal",
+            headerShown: false,
+            animation: "slide_from_right",
+          }}
+        />
       </Stack>
     </>
   );
