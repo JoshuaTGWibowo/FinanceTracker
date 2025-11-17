@@ -1,5 +1,5 @@
-import { useMemo } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useMemo, useState } from "react";
+import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
@@ -124,17 +124,27 @@ export default function TransactionsReportModal() {
   const visibleAccountIds = useMemo(() => visibleAccounts.map((account) => account.id), [visibleAccounts]);
 
   const periodOptions = useMemo(() => buildMonthlyPeriods(), []);
-  const resolvedPeriod = useMemo(() => {
+  const [selectedPeriodKey, setSelectedPeriodKey] = useState(() => {
     const key = typeof periodParam === "string" ? periodParam : undefined;
-    return periodOptions.find((option) => option.key === key) ?? periodOptions[periodOptions.length - 1];
-  }, [periodOptions, periodParam]);
+    return periodOptions.find((option) => option.key === key)?.key ?? periodOptions[periodOptions.length - 1]?.key;
+  });
+
+  const resolvedPeriod = useMemo(
+    () => periodOptions.find((option) => option.key === selectedPeriodKey) ?? periodOptions[periodOptions.length - 1],
+    [periodOptions, selectedPeriodKey],
+  );
 
   const { start, end } = useMemo(() => resolvedPeriod.range(), [resolvedPeriod]);
-  const selectedAccountId = typeof accountId === "string" && accountId.length ? accountId : null;
+  const [selectedAccountId, setSelectedAccountId] = useState<string | null>(() =>
+    typeof accountId === "string" && accountId.length ? accountId : null,
+  );
   const accountName = selectedAccountId
     ? accounts.find((account) => account.id === selectedAccountId)?.name ?? "Selected account"
     : "All accounts";
   const rangeLabel = `${start.format("MMM D")} – ${end.format("MMM D, YYYY")}`;
+
+  const [periodPickerVisible, setPeriodPickerVisible] = useState(false);
+  const [accountPickerVisible, setAccountPickerVisible] = useState(false);
 
   const report = useMemo(() => {
     const allowedAccountIds = selectedAccountId ? null : new Set(visibleAccountIds);
@@ -247,15 +257,34 @@ export default function TransactionsReportModal() {
         contentInsetAdjustmentBehavior="automatic"
       >
         <View style={styles.metaRow}>
-          <View style={styles.metaItem}>
+          <Pressable
+            style={[styles.metaItem, styles.metaSelectable]}
+            onPress={() => setPeriodPickerVisible(true)}
+            accessibilityRole="button"
+            accessibilityLabel="Change report period"
+          >
             <Text style={styles.metaLabel}>Period</Text>
-            <Text style={styles.metaValue}>{resolvedPeriod.label}</Text>
+            <View style={styles.metaValueRow}>
+              <Text style={styles.metaValue}>{resolvedPeriod.label}</Text>
+              <Ionicons name="chevron-down" size={18} color={theme.colors.textMuted} />
+            </View>
             <Text style={styles.metaSubValue}>{rangeLabel}</Text>
-          </View>
-          <View style={styles.metaItem}>
+          </Pressable>
+          <Pressable
+            style={[styles.metaItem, styles.metaSelectable]}
+            onPress={() => setAccountPickerVisible(true)}
+            accessibilityRole="button"
+            accessibilityLabel="Change report account"
+          >
             <Text style={styles.metaLabel}>Account</Text>
-            <Text style={styles.metaValue}>{accountLabel}</Text>
-          </View>
+            <View style={styles.metaValueRow}>
+              <Text style={styles.metaValue}>{accountLabel}</Text>
+              <Ionicons name="chevron-down" size={18} color={theme.colors.textMuted} />
+            </View>
+            <Text style={styles.metaSubValue}>
+              {selectedAccountId ? "This report is filtered to the chosen account" : "Including all matching accounts"}
+            </Text>
+          </Pressable>
         </View>
 
         <View style={styles.balanceCard}>
@@ -268,7 +297,6 @@ export default function TransactionsReportModal() {
             <Ionicons name="arrow-forward" size={18} color={theme.colors.textMuted} />
             <Text style={styles.balanceValue}>{formatCurrency(report.closingBalance, currency)}</Text>
           </View>
-          <Text style={styles.balanceRange}>Net change reflects all reportable transactions for this period.</Text>
         </View>
 
         <View style={styles.netCard}>
@@ -314,6 +342,128 @@ export default function TransactionsReportModal() {
           </View>
         </View>
       </ScrollView>
+
+      <Modal
+        visible={periodPickerVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setPeriodPickerVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalCard, { backgroundColor: theme.colors.surface }]}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select period</Text>
+              <Pressable
+                onPress={() => setPeriodPickerVisible(false)}
+                accessibilityRole="button"
+                accessibilityLabel="Close period picker"
+              >
+                <Ionicons name="close" size={20} color={theme.colors.text} />
+              </Pressable>
+            </View>
+            <ScrollView contentContainerStyle={styles.modalContent} showsVerticalScrollIndicator={false}>
+              {periodOptions.map((option) => {
+                const active = option.key === resolvedPeriod.key;
+                return (
+                  <Pressable
+                    key={option.key}
+                    style={[
+                      styles.optionRow,
+                      active && {
+                        borderColor: theme.colors.primary,
+                        backgroundColor: `${theme.colors.primary}0D`,
+                      },
+                    ]}
+                    onPress={() => {
+                      setSelectedPeriodKey(option.key);
+                      setPeriodPickerVisible(false);
+                    }}
+                  >
+                    <View style={styles.optionMeta}>
+                      <Text style={[styles.optionLabel, { color: theme.colors.text }]}>{option.label}</Text>
+                      <Text style={[styles.optionSubLabel, { color: theme.colors.textMuted }]}>
+                        {`${option.range().start.format("MMM D, YYYY")} – ${option.range().end.format("MMM D, YYYY")}`}
+                      </Text>
+                    </View>
+                    {active && <Ionicons name="checkmark" size={18} color={theme.colors.primary} />}
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={accountPickerVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setAccountPickerVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalCard, { backgroundColor: theme.colors.surface }]}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select account</Text>
+              <Pressable
+                onPress={() => setAccountPickerVisible(false)}
+                accessibilityRole="button"
+                accessibilityLabel="Close account picker"
+              >
+                <Ionicons name="close" size={20} color={theme.colors.text} />
+              </Pressable>
+            </View>
+            <ScrollView contentContainerStyle={styles.modalContent} showsVerticalScrollIndicator={false}>
+              <Pressable
+                style={[
+                  styles.optionRow,
+                  !selectedAccountId && {
+                    borderColor: theme.colors.primary,
+                    backgroundColor: `${theme.colors.primary}0D`,
+                  },
+                ]}
+                onPress={() => {
+                  setSelectedAccountId(null);
+                  setAccountPickerVisible(false);
+                }}
+              >
+                <View style={styles.optionMeta}>
+                  <Text style={[styles.optionLabel, { color: theme.colors.text }]}>All accounts</Text>
+                  <Text style={[styles.optionSubLabel, { color: theme.colors.textMuted }]}>Include every matching account</Text>
+                </View>
+                {!selectedAccountId && <Ionicons name="checkmark" size={18} color={theme.colors.primary} />}
+              </Pressable>
+
+              {visibleAccounts.map((account) => {
+                const active = account.id === selectedAccountId;
+                return (
+                  <Pressable
+                    key={account.id}
+                    style={[
+                      styles.optionRow,
+                      active && {
+                        borderColor: theme.colors.primary,
+                        backgroundColor: `${theme.colors.primary}0D`,
+                      },
+                    ]}
+                    onPress={() => {
+                      setSelectedAccountId(account.id);
+                      setAccountPickerVisible(false);
+                    }}
+                  >
+                    <View style={styles.optionMeta}>
+                      <Text style={[styles.optionLabel, { color: theme.colors.text }]}>{account.name}</Text>
+                      <Text style={[styles.optionSubLabel, { color: theme.colors.textMuted }]}>
+                        {formatCurrency(account.balance, account.currency || baseCurrency)}
+                      </Text>
+                    </View>
+                    {active && <Ionicons name="checkmark" size={18} color={theme.colors.primary} />}
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -434,16 +584,21 @@ const createStyles = (theme: Theme) =>
       gap: theme.spacing.lg,
     },
     metaRow: {
-      ...theme.components.card,
       flexDirection: "row",
       justifyContent: "space-between",
       gap: theme.spacing.xl,
-      borderWidth: 1,
-      borderColor: `${theme.colors.primary}12`,
     },
     metaItem: {
       flex: 1,
-      gap: 4,
+    },
+    metaSelectable: {
+      ...theme.components.card,
+      borderRadius: theme.radii.lg,
+      padding: theme.spacing.md,
+      gap: 6,
+      borderWidth: 1,
+      borderColor: `${theme.colors.primary}12`,
+      backgroundColor: theme.colors.surfaceElevated,
     },
     metaLabel: {
       fontSize: 12,
@@ -455,6 +610,12 @@ const createStyles = (theme: Theme) =>
       fontSize: 18,
       fontWeight: "600",
       color: theme.colors.text,
+    },
+    metaValueRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: 8,
     },
     metaSubValue: {
       fontSize: 13,
@@ -488,11 +649,6 @@ const createStyles = (theme: Theme) =>
       fontSize: 20,
       fontWeight: "700",
       color: theme.colors.text,
-    },
-    balanceRange: {
-      fontSize: 12,
-      color: theme.colors.textMuted,
-      lineHeight: 18,
     },
     netCard: {
       ...theme.components.card,
@@ -585,5 +741,54 @@ const createStyles = (theme: Theme) =>
     },
     legend: {
       alignSelf: "stretch",
+    },
+    modalOverlay: {
+      flex: 1,
+      backgroundColor: "#00000066",
+      padding: theme.spacing.xl,
+      justifyContent: "center",
+    },
+    modalCard: {
+      borderRadius: theme.radii.xl,
+      paddingVertical: theme.spacing.lg,
+      paddingHorizontal: theme.spacing.lg,
+      gap: theme.spacing.md,
+      ...theme.components.surface,
+    },
+    modalHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+    },
+    modalTitle: {
+      fontSize: 18,
+      fontWeight: "700",
+      color: theme.colors.text,
+    },
+    modalContent: {
+      gap: theme.spacing.sm,
+      paddingBottom: theme.spacing.sm,
+    },
+    optionRow: {
+      padding: theme.spacing.md,
+      borderRadius: theme.radii.lg,
+      borderWidth: 1,
+      borderColor: `${theme.colors.border}80`,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: theme.spacing.md,
+    },
+    optionMeta: {
+      flex: 1,
+      gap: 4,
+    },
+    optionLabel: {
+      fontSize: 16,
+      fontWeight: "600",
+    },
+    optionSubLabel: {
+      fontSize: 13,
+      color: theme.colors.textMuted,
     },
   });
