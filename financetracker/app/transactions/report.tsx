@@ -315,7 +315,17 @@ export default function TransactionsReportModal() {
         <View style={styles.netCard}>
           <View style={styles.netHeader}>
             <Text style={styles.netTitle}>Net income</Text>
-            <Text style={styles.netLink}>See details</Text>
+            <Pressable
+              onPress={() =>
+                router.push({
+                  pathname: "/transactions/net-income",
+                  params: { period: selectedPeriodKey, accountId: selectedAccountId ?? undefined },
+                })
+              }
+              accessibilityRole="button"
+            >
+              <Text style={styles.netLink}>See details</Text>
+            </Pressable>
           </View>
           <Text style={styles.netAmount(netPositive)}>
             {formatCurrency(report.netChange, currency, { signDisplay: "always" })}
