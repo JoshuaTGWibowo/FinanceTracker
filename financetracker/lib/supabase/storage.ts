@@ -290,6 +290,7 @@ export const subscribeToFinanceChanges = (
   };
 };
 
+
 const toTransactionRow = (transaction: Transaction): TransactionRow => ({
   id: transaction.id,
   amount: transaction.amount,

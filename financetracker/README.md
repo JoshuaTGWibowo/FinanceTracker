@@ -76,6 +76,7 @@ When configured, the app will:
 - Sync profile preferences such as currency and theme mode.
 - Listen for realtime table changes to keep the app in sync across devices.
 
+
 Tables are expected to follow the names used in `lib/supabase/storage.ts` (e.g., `transactions`, `accounts`, `recurring_transactions`).
 
 ## Scripts
