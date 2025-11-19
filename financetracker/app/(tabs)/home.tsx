@@ -742,7 +742,7 @@ export default function HomeScreen() {
                     </Text>
                   </View>
                   <Pressable
-                    onPress={() => logRecurringTransaction(item.id)}
+                    onPress={() => void logRecurringTransaction(item.id)}
                     style={styles.recurringAction}
                     accessibilityRole="button"
                   >
