@@ -14,6 +14,7 @@ import {
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
 
 import { useAppTheme } from "../../theme";
 import {
@@ -220,7 +221,14 @@ export default function AccountScreen() {
           </View>
 
           <View style={[theme.components.surface, styles.sectionCard]}>
-            <Text style={styles.sectionTitle}>Profile</Text>
+            <LinearGradient
+              colors={[theme.colors.primary, theme.colors.accentSecondary]}
+              style={styles.sectionTitleGradient}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+            >
+              <Text style={styles.sectionTitle}>Profile</Text>
+            </LinearGradient>
             <View style={styles.fieldGroup}>
               <Text style={styles.label}>Profile name</Text>
               <TextInput
@@ -250,7 +258,11 @@ export default function AccountScreen() {
                       <Pressable
                         key={code}
                         onPress={() => setCurrency(code)}
-                        style={[styles.currencyChip, isActive && styles.currencyChipActive]}
+                        style={({ pressed }) => [
+                          styles.currencyChip,
+                          isActive && styles.currencyChipActive,
+                          pressed && styles.pressableScale,
+                        ]}
                       >
                         <Text style={[styles.currencyChipText, isActive && styles.currencyChipTextActive]}>
                           {code}
@@ -262,20 +274,34 @@ export default function AccountScreen() {
               </View>
             </View>
 
-            <Pressable style={styles.primaryButton} onPress={handleSaveProfile}>
+            <Pressable
+              style={({ pressed }) => [styles.primaryButton, pressed && styles.pressableScale]}
+              onPress={handleSaveProfile}
+            >
               <Text style={styles.primaryButtonText}>Save profile</Text>
             </Pressable>
           </View>
 
           <View style={[theme.components.surface, styles.sectionCard]}>
-            <Text style={styles.sectionTitle}>Theme</Text>
+            <LinearGradient
+              colors={[theme.colors.primary, theme.colors.accentSecondary]}
+              style={styles.sectionTitleGradient}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+            >
+              <Text style={styles.sectionTitle}>Theme</Text>
+            </LinearGradient>
             <View style={styles.themeRow}>
               {(["dark", "light"] as ThemeMode[]).map((mode) => {
                 const active = themeMode === mode;
                 return (
                   <Pressable
                     key={mode}
-                    style={[styles.themeChip, active && styles.themeChipActive]}
+                    style={({ pressed }) => [
+                      styles.themeChip,
+                      active && styles.themeChipActive,
+                      pressed && styles.pressableScale,
+                    ]}
                     onPress={() => void setThemeMode(mode)}
                     accessibilityRole="button"
                     accessibilityState={{ selected: active }}
@@ -297,10 +323,20 @@ export default function AccountScreen() {
           <View style={[theme.components.surface, styles.sectionCard]}>
             <View style={styles.sectionHeaderRow}>
               <View>
-                <Text style={styles.sectionTitle}>Accounts</Text>
+                <LinearGradient
+                  colors={[theme.colors.primary, theme.colors.accentSecondary]}
+                  style={styles.sectionTitleGradient}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                >
+                  <Text style={styles.sectionTitle}>Accounts</Text>
+                </LinearGradient>
                 <Text style={styles.sectionSubtitle}>Organize wallets and track balances.</Text>
               </View>
-              <Pressable style={styles.secondaryButton} onPress={() => openAccountModal()}>
+              <Pressable
+                style={({ pressed }) => [styles.secondaryButton, pressed && styles.pressableScale]}
+                onPress={() => openAccountModal()}
+              >
                 <Ionicons name="add" size={16} color={theme.colors.text} />
                 <Text style={styles.secondaryButtonText}>Add</Text>
               </Pressable>
@@ -330,14 +366,14 @@ export default function AccountScreen() {
                     <View style={styles.accountActions}>
                       <Pressable
                         onPress={() => openAccountModal(account)}
-                        style={styles.iconButton}
+                        style={({ pressed }) => [styles.iconButton, pressed && styles.iconButtonPressed]}
                         accessibilityRole="button"
                       >
                         <Ionicons name="create-outline" size={18} color={theme.colors.text} />
                       </Pressable>
                       <Pressable
                         onPress={() => handleToggleArchive(account)}
-                        style={styles.iconButton}
+                        style={({ pressed }) => [styles.iconButton, pressed && styles.iconButtonPressed]}
                         accessibilityRole="button"
                       >
                         <Ionicons
@@ -354,7 +390,14 @@ export default function AccountScreen() {
           </View>
 
           <View style={[theme.components.surface, styles.sectionCard]}>
-            <Text style={styles.sectionTitle}>Custom categories</Text>
+            <LinearGradient
+              colors={[theme.colors.primary, theme.colors.accentSecondary]}
+              style={styles.sectionTitleGradient}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+            >
+              <Text style={styles.sectionTitle}>Custom categories</Text>
+            </LinearGradient>
             <View style={styles.fieldGroup}>
               <Text style={styles.label}>Add new category</Text>
               <View style={styles.row}>
@@ -365,7 +408,10 @@ export default function AccountScreen() {
                   placeholderTextColor={theme.colors.textMuted}
                   style={[styles.input, styles.flex]}
                 />
-                <Pressable style={styles.secondaryButton} onPress={handleAddCategory}>
+                <Pressable
+                  style={({ pressed }) => [styles.secondaryButton, pressed && styles.pressableScale]}
+                  onPress={handleAddCategory}
+                >
                   <Text style={styles.secondaryButtonText}>Add</Text>
                 </Pressable>
               </View>
@@ -375,7 +421,11 @@ export default function AccountScreen() {
                   return (
                     <Pressable
                       key={type}
-                      style={[styles.themeChip, active && styles.themeChipActive]}
+                      style={({ pressed }) => [
+                        styles.themeChip,
+                        active && styles.themeChipActive,
+                        pressed && styles.pressableScale,
+                      ]}
                       onPress={() => setNewCategoryType(type)}
                     >
                       <Text style={[styles.themeChipText, active && styles.themeChipTextActive]}>
@@ -399,7 +449,14 @@ export default function AccountScreen() {
           </View>
 
           <View style={[theme.components.surface, styles.sectionCard]}>
-            <Text style={styles.sectionTitle}>Budget goals</Text>
+            <LinearGradient
+              colors={[theme.colors.primary, theme.colors.accentSecondary]}
+              style={styles.sectionTitleGradient}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+            >
+              <Text style={styles.sectionTitle}>Budget goals</Text>
+            </LinearGradient>
             <View style={styles.fieldGroup}>
               <Text style={styles.label}>Goal name</Text>
               <TextInput
@@ -452,7 +509,11 @@ export default function AccountScreen() {
                 <Pressable
                   key="all"
                   onPress={() => setGoalCategory(null)}
-                  style={[styles.currencyChip, goalCategory === null && styles.currencyChipActive]}
+                  style={({ pressed }) => [
+                    styles.currencyChip,
+                    goalCategory === null && styles.currencyChipActive,
+                    pressed && styles.pressableScale,
+                  ]}
                 >
                   <Text style={[styles.currencyChipText, goalCategory === null && styles.currencyChipTextActive]}>
                     Savings goal
@@ -464,7 +525,11 @@ export default function AccountScreen() {
                     <Pressable
                       key={category.id}
                       onPress={() => setGoalCategory(category.name)}
-                      style={[styles.currencyChip, active && styles.currencyChipActive]}
+                      style={({ pressed }) => [
+                        styles.currencyChip,
+                        active && styles.currencyChipActive,
+                        pressed && styles.pressableScale,
+                      ]}
                     >
                       <Text
                         style={[styles.currencyChipText, active && styles.currencyChipTextActive]}
@@ -476,7 +541,10 @@ export default function AccountScreen() {
                 })}
               </ScrollView>
             </View>
-            <Pressable style={styles.primaryButton} onPress={handleCreateGoal}>
+            <Pressable
+              style={({ pressed }) => [styles.primaryButton, pressed && styles.pressableScale]}
+              onPress={handleCreateGoal}
+            >
               <Text style={styles.primaryButtonText}>Create goal</Text>
             </Pressable>
 
@@ -493,7 +561,7 @@ export default function AccountScreen() {
                     </View>
                     <Pressable
                       onPress={() => void removeBudgetGoal(goal.id)}
-                      style={styles.deleteButton}
+                      style={({ pressed }) => [styles.deleteButton, pressed && styles.pressableScale]}
                       accessibilityRole="button"
                     >
                       <Ionicons name="trash" size={16} color={theme.colors.danger} />
@@ -519,7 +587,10 @@ export default function AccountScreen() {
             <Text style={styles.modalTitle}>
               {editingAccountId ? "Edit account" : "Add account"}
             </Text>
-            <Pressable style={styles.modalClose} onPress={handleCloseAccountModal}>
+            <Pressable
+              style={({ pressed }) => [styles.modalClose, pressed && styles.iconButtonPressed]}
+              onPress={handleCloseAccountModal}
+            >
               <Ionicons name="close" size={20} color={theme.colors.text} />
             </Pressable>
           </View>
@@ -544,7 +615,11 @@ export default function AccountScreen() {
                   return (
                     <Pressable
                       key={type}
-                      style={[styles.accountTypeChip, active && styles.accountTypeChipActive]}
+                      style={({ pressed }) => [
+                        styles.accountTypeChip,
+                        active && styles.accountTypeChipActive,
+                        pressed && styles.pressableScale,
+                      ]}
                       onPress={() => setAccountFormType(type)}
                     >
                       <Text
@@ -581,7 +656,11 @@ export default function AccountScreen() {
                       <Pressable
                         key={code}
                         onPress={() => setAccountFormCurrency(code)}
-                        style={[styles.currencyChip, active && styles.currencyChipActive]}
+                        style={({ pressed }) => [
+                          styles.currencyChip,
+                          active && styles.currencyChipActive,
+                          pressed && styles.pressableScale,
+                        ]}
                       >
                         <Text
                           style={[
@@ -621,16 +700,25 @@ export default function AccountScreen() {
               <Switch
                 value={accountFormExcludeFromTotal}
                 onValueChange={setAccountFormExcludeFromTotal}
-                thumbColor={accountFormExcludeFromTotal ? theme.colors.primary : theme.colors.surface}
-                trackColor={{ true: `${theme.colors.primary}55`, false: theme.colors.border }}
+                thumbColor={
+                  accountFormExcludeFromTotal ? theme.colors.primary : theme.colors.surfaceElevated
+                }
+                trackColor={{ true: `${theme.colors.primary}55`, false: theme.colors.glassStroke }}
+                ios_backgroundColor={theme.colors.glassStroke}
               />
             </View>
 
             <View style={styles.modalActions}>
-              <Pressable style={styles.secondaryButton} onPress={handleCloseAccountModal}>
+              <Pressable
+                style={({ pressed }) => [styles.secondaryButton, pressed && styles.pressableScale]}
+                onPress={handleCloseAccountModal}
+              >
                 <Text style={styles.secondaryButtonText}>Cancel</Text>
               </Pressable>
-              <Pressable style={styles.primaryButton} onPress={handleSaveAccount}>
+              <Pressable
+                style={({ pressed }) => [styles.primaryButton, pressed && styles.pressableScale]}
+                onPress={handleSaveAccount}
+              >
                 <Text style={styles.primaryButtonText}>Save</Text>
               </Pressable>
             </View>
@@ -673,6 +761,14 @@ const createStyles = (
     },
     sectionCard: {
       gap: theme.spacing.lg,
+      borderRadius: theme.radii.lg,
+      backgroundColor: theme.colors.surfaceTransparent,
+      borderWidth: 1,
+      borderColor: theme.colors.glassStroke,
+      shadowColor: theme.colors.background,
+      shadowOpacity: 0.12,
+      shadowRadius: 18,
+      shadowOffset: { width: 0, height: 10 },
     },
     sectionHeaderRow: {
       flexDirection: "row",
@@ -680,11 +776,19 @@ const createStyles = (
       alignItems: "center",
       gap: theme.spacing.md,
     },
+    sectionTitleGradient: {
+      alignSelf: "flex-start",
+      borderRadius: theme.radii.pill,
+      paddingHorizontal: theme.spacing.md,
+      paddingVertical: theme.spacing.xs,
+      marginBottom: theme.spacing.sm,
+    },
     sectionTitle: {
       ...theme.typography.subtitle,
       fontSize: 13,
       textTransform: "uppercase",
       letterSpacing: 1.2,
+      color: theme.colors.text,
     },
     sectionSubtitle: {
       fontSize: 13,
@@ -708,6 +812,8 @@ const createStyles = (
     input: {
       ...theme.components.input,
       fontSize: 16,
+      backgroundColor: theme.colors.surfaceTransparent,
+      borderColor: theme.colors.glassStroke,
     },
     currencyRow: {
       gap: theme.spacing.md,
@@ -723,10 +829,11 @@ const createStyles = (
     currencyChip: {
       ...theme.components.chip,
       borderWidth: 1,
-      borderColor: theme.colors.border,
+      borderColor: theme.colors.glassStroke,
+      backgroundColor: theme.colors.surfaceTransparent,
     },
     currencyChipActive: {
-      backgroundColor: theme.colors.primary,
+      backgroundColor: `${theme.colors.primary}1F`,
       borderColor: theme.colors.primary,
     },
     currencyChipText: {
@@ -746,7 +853,7 @@ const createStyles = (
       justifyContent: "space-between",
       paddingVertical: theme.spacing.md,
       borderBottomWidth: StyleSheet.hairlineWidth,
-      borderBottomColor: theme.colors.border,
+      borderBottomColor: `${theme.colors.glassStroke}88`,
     },
     archivedAccount: {
       opacity: 0.6,
@@ -769,7 +876,12 @@ const createStyles = (
     iconButton: {
       padding: theme.spacing.sm,
       borderRadius: theme.radii.md,
-      backgroundColor: theme.colors.surface,
+      backgroundColor: theme.colors.surfaceTransparent,
+      borderWidth: 1,
+      borderColor: theme.colors.glassStroke,
+    },
+    iconButtonPressed: {
+      opacity: 0.75,
     },
     emptyStateText: {
       ...theme.typography.subtitle,
@@ -780,16 +892,23 @@ const createStyles = (
       ...theme.components.buttonPrimary,
       alignSelf: "flex-start",
       paddingHorizontal: theme.spacing.xl,
+      borderRadius: theme.radii.lg,
+      shadowColor: theme.colors.primary,
+      shadowOpacity: 0.3,
+      shadowRadius: 16,
+      shadowOffset: { width: 0, height: 8 },
     },
     primaryButtonText: {
       ...theme.components.buttonPrimaryText,
     },
     secondaryButton: {
       borderRadius: theme.radii.md,
-      backgroundColor: theme.colors.primary,
+      backgroundColor: theme.colors.surfaceTransparent,
       paddingHorizontal: theme.spacing.lg,
       justifyContent: "center",
       alignItems: "center",
+      borderWidth: 1,
+      borderColor: theme.colors.glassStroke,
     },
     secondaryButtonText: {
       color: theme.colors.text,
@@ -808,10 +927,11 @@ const createStyles = (
       paddingVertical: theme.spacing.sm,
       borderRadius: theme.radii.pill,
       borderWidth: 1,
-      borderColor: theme.colors.border,
+      borderColor: theme.colors.glassStroke,
+      backgroundColor: theme.colors.surfaceTransparent,
     },
     themeChipActive: {
-      backgroundColor: theme.colors.primary,
+      backgroundColor: `${theme.colors.primary}1F`,
       borderColor: theme.colors.primary,
     },
     themeChipText: {
@@ -842,9 +962,9 @@ const createStyles = (
       paddingHorizontal: theme.spacing.md,
       paddingVertical: theme.spacing.xs,
       borderRadius: theme.radii.lg,
-      backgroundColor: theme.colors.surface,
+      backgroundColor: theme.colors.surfaceTransparent,
       borderWidth: 1,
-      borderColor: theme.colors.border,
+      borderColor: theme.colors.glassStroke,
       minWidth: 100,
       gap: 2,
     },
@@ -874,7 +994,7 @@ const createStyles = (
       gap: theme.spacing.md,
       paddingVertical: theme.spacing.sm,
       borderBottomWidth: 1,
-      borderBottomColor: theme.colors.border,
+      borderBottomColor: `${theme.colors.glassStroke}88`,
     },
     goalCopy: {
       flex: 1,
@@ -893,9 +1013,30 @@ const createStyles = (
       borderRadius: theme.radii.md,
       borderWidth: 1,
       borderColor: theme.colors.danger,
+      backgroundColor: `${theme.colors.danger}12`,
     },
     accountModal: {
       flex: 1,
+    },
+    modalHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      paddingHorizontal: theme.spacing.xl,
+      paddingVertical: theme.spacing.md,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: theme.colors.glassStroke,
+    },
+    modalTitle: {
+      ...theme.typography.title,
+      fontSize: 20,
+    },
+    modalClose: {
+      borderRadius: theme.radii.md,
+      padding: theme.spacing.sm,
+      borderWidth: 1,
+      borderColor: theme.colors.glassStroke,
+      backgroundColor: theme.colors.surfaceTransparent,
     },
     accountModalBody: {
       paddingHorizontal: theme.spacing.xl,
@@ -912,12 +1053,12 @@ const createStyles = (
       paddingVertical: theme.spacing.sm,
       borderRadius: theme.radii.pill,
       borderWidth: 1,
-      borderColor: theme.colors.border,
-      backgroundColor: theme.colors.surface,
+      borderColor: theme.colors.glassStroke,
+      backgroundColor: theme.colors.surfaceTransparent,
     },
     accountTypeChipActive: {
       borderColor: theme.colors.primary,
-      backgroundColor: `${theme.colors.primary}22`,
+      backgroundColor: `${theme.colors.primary}1F`,
     },
     accountTypeChipText: {
       fontSize: 14,
@@ -932,5 +1073,9 @@ const createStyles = (
       flexDirection: "row",
       justifyContent: "flex-end",
       gap: theme.spacing.md,
+    },
+    pressableScale: {
+      transform: [{ scale: 0.97 }],
+      opacity: 0.9,
     },
   });

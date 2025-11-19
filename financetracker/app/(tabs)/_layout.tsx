@@ -3,6 +3,7 @@ import { Animated, Platform, Pressable, StyleSheet, Text, View } from "react-nat
 import { Tabs, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import type { BottomTabBarButtonProps } from "@react-navigation/bottom-tabs";
+import { LinearGradient } from "expo-linear-gradient";
 
 import { useAppTheme } from "../../theme";
 
@@ -10,6 +11,21 @@ function AddTransactionTabButton({ style, ...props }: BottomTabBarButtonProps) {
   const router = useRouter();
   const theme = useAppTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
+  const pulse = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const animation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, { toValue: 1, duration: 2000, useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 0, duration: 2000, useNativeDriver: true }),
+      ]),
+    );
+    animation.start();
+    return () => animation.stop();
+  }, [pulse]);
+
+  const haloScale = pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.4] });
+  const haloOpacity = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.4, 0] });
 
   return (
     <Pressable
@@ -22,9 +38,18 @@ function AddTransactionTabButton({ style, ...props }: BottomTabBarButtonProps) {
       accessibilityRole="button"
       accessibilityState={{ selected: false }}
     >
-      <View style={styles.addButtonIconWrapper}>
+      <Animated.View
+        pointerEvents="none"
+        style={[styles.addButtonHalo, { opacity: haloOpacity, transform: [{ scale: haloScale }] }]}
+      />
+      <LinearGradient
+        colors={[theme.colors.success, theme.colors.accentSecondary]}
+        style={styles.addButtonIconWrapper}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+      >
         <Ionicons name="add" size={22} color={theme.colors.background} />
-      </View>
+      </LinearGradient>
       <Text style={styles.addButtonLabel}>Add</Text>
     </Pressable>
   );
@@ -58,7 +83,24 @@ function AnimatedTabIcon({ focused, color, size, activeName, inactiveName }: Ani
 
   return (
     <Animated.View style={{ transform: [{ scale }], opacity }}>
-      <Ionicons name={focused ? activeName : inactiveName} size={size} color={color} />
+      <View
+        style={{
+          padding: 6,
+          borderRadius: 18,
+          overflow: "hidden",
+          backgroundColor: focused ? `${color}1A` : "transparent",
+        }}
+      >
+        {focused ? (
+          <LinearGradient
+            colors={[`${color}66`, `${color}00`]}
+            style={StyleSheet.absoluteFillObject}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+          />
+        ) : null}
+        <Ionicons name={focused ? activeName : inactiveName} size={size} color={color} />
+      </View>
     </Animated.View>
   );
 }
@@ -77,6 +119,14 @@ export default function TabsLayout() {
         tabBarStyle: styles.tabBar,
         tabBarLabelStyle: styles.tabLabel,
         tabBarItemStyle: styles.tabItem,
+        tabBarBackground: () => (
+          <LinearGradient
+            colors={theme.gradients.tab}
+            style={StyleSheet.absoluteFillObject}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+          />
+        ),
       }}
     >
       <Tabs.Screen
@@ -159,9 +209,11 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>) =>
       right: 12,
       bottom: Platform.select({ ios: 26, default: 18 }),
       alignSelf: "center",
-      backgroundColor: theme.colors.surface,
+      backgroundColor: theme.colors.surfaceTransparent,
       borderTopWidth: 0,
       borderRadius: theme.radii.lg + 6,
+      borderWidth: 1,
+      borderColor: theme.colors.glassStroke,
       elevation: 12,
       shadowColor: theme.colors.background,
       shadowOpacity: Platform.OS === "ios" ? 0.18 : 0.2,
@@ -171,6 +223,7 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>) =>
       paddingHorizontal: 4,
       paddingTop: 6,
       paddingBottom: Platform.select({ ios: 16, default: 10 }),
+      overflow: "hidden",
     },
     tabLabel: {
       fontSize: 10,
@@ -178,6 +231,7 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>) =>
       letterSpacing: 0.2,
       marginBottom: 0,
       marginTop: 2,
+      color: theme.colors.textMuted,
     },
     tabItem: {
       flex: 1,
@@ -195,6 +249,7 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>) =>
       gap: 4,
       flex: 1,
       minWidth: 0,
+      position: "relative",
     },
     addButtonWrapperPressed: {
       opacity: 0.8,
@@ -203,7 +258,6 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>) =>
       width: 40,
       height: 40,
       borderRadius: 20,
-      backgroundColor: theme.colors.success,
       alignItems: "center",
       justifyContent: "center",
       shadowColor: theme.colors.success,
@@ -211,11 +265,22 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>) =>
       shadowRadius: 10,
       shadowOffset: { width: 0, height: 6 },
       elevation: 4,
+      overflow: "hidden",
+      borderWidth: 1,
+      borderColor: `${theme.colors.success}66`,
+    },
+    addButtonHalo: {
+      position: "absolute",
+      width: 60,
+      height: 60,
+      borderRadius: 30,
+      backgroundColor: theme.colors.success,
+      opacity: 0.4,
     },
     addButtonLabel: {
       fontSize: 10,
       fontWeight: "600",
-      color: theme.colors.textMuted,
+      color: theme.colors.text,
       letterSpacing: 0.2,
     },
   });

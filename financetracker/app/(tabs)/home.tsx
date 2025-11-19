@@ -1,9 +1,18 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  Animated,
+  Easing,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import dayjs from "dayjs";
 import { Link, useRouter } from "expo-router";
+import { LinearGradient } from "expo-linear-gradient";
 
 import { DonutChart } from "../../components/DonutChart";
 import { SpendingBarChart, SpendingLineChart } from "../../components/SpendingCharts";
@@ -145,6 +154,72 @@ export default function HomeScreen() {
 
   const insets = useSafeAreaInsets();
   const styles = useMemo(() => createStyles(theme, insets), [theme, insets]);
+  const heroAnimation = useRef(new Animated.Value(0)).current;
+  const contentAnimation = useRef(new Animated.Value(0)).current;
+  const shimmerAnimation = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.stagger(150, [
+      Animated.timing(heroAnimation, {
+        toValue: 1,
+        duration: 550,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+      Animated.spring(contentAnimation, {
+        toValue: 1,
+        useNativeDriver: true,
+        damping: 14,
+        stiffness: 180,
+      }),
+    ]).start();
+  }, [contentAnimation, heroAnimation]);
+
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(shimmerAnimation, {
+          toValue: 1,
+          duration: 2200,
+          easing: Easing.linear,
+          useNativeDriver: true,
+        }),
+        Animated.timing(shimmerAnimation, {
+          toValue: 0,
+          duration: 2200,
+          easing: Easing.linear,
+          useNativeDriver: true,
+        }),
+      ]),
+    ).start();
+  }, [shimmerAnimation]);
+
+  const heroEntranceStyle = useMemo(
+    () => ({
+      opacity: heroAnimation,
+      transform: [
+        {
+          translateY: heroAnimation.interpolate({ inputRange: [0, 1], outputRange: [28, 0] }),
+        },
+      ],
+    }),
+    [heroAnimation],
+  );
+
+  const contentEntranceStyle = useMemo(
+    () => ({
+      opacity: contentAnimation,
+      transform: [
+        {
+          translateY: contentAnimation.interpolate({ inputRange: [0, 1], outputRange: [40, 0] }),
+        },
+      ],
+    }),
+    [contentAnimation],
+  );
+
+  const shimmerTranslate = shimmerAnimation.interpolate({ inputRange: [0, 1], outputRange: [-60, 220] });
+  const shimmerOpacity = shimmerAnimation.interpolate({ inputRange: [0, 1], outputRange: [0.45, 0.9] });
 
   useEffect(() => {
     if (overviewPeriod === "week" && overviewChart === "line") {
@@ -397,7 +472,6 @@ export default function HomeScreen() {
   const netChangeThisMonth = summary.income - summary.expense;
   const netIsPositive = netChangeThisMonth >= 0;
   const netBadgeColor = netIsPositive ? theme.colors.success : theme.colors.danger;
-  const netBadgeBackground = netIsPositive ? "rgba(52,211,153,0.16)" : "rgba(251,113,133,0.16)";
   const netIcon = netIsPositive ? "trending-up" : "trending-down";
   const netLabel = `${formatCurrency(netChangeThisMonth, currency, { signDisplay: "always" })} this month`;
 
@@ -428,17 +502,34 @@ export default function HomeScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
+      <LinearGradient
+        colors={theme.gradients.hero}
+        style={styles.backgroundGradient}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        pointerEvents="none"
+      />
       <ScrollView
         contentContainerStyle={styles.content}
         contentInsetAdjustmentBehavior="automatic"
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.header}>
+        <Animated.View style={[styles.header, heroEntranceStyle]}>
           <Text style={styles.hello}>Welcome back, {profile.name.split(" ")[0]}</Text>
           <Text style={styles.subtitle}>Here’s a tidy look at your money this month.</Text>
-        </View>
+        </Animated.View>
 
-        <View style={[theme.components.card, styles.balanceCard]}>
+        <Animated.View style={[theme.components.glassCard, styles.balanceCard, heroEntranceStyle]}>
+          <LinearGradient
+            colors={theme.gradients.balance}
+            style={styles.balanceGradient}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+          />
+          <Animated.View
+            pointerEvents="none"
+            style={[styles.balanceGlow, { opacity: shimmerOpacity }]}
+          />
           <View style={styles.balanceHeader}>
             <Text style={styles.balanceLabel}>Total balance</Text>
             <Pressable
@@ -450,14 +541,37 @@ export default function HomeScreen() {
               <Ionicons name={showBalance ? "eye" : "eye-off"} size={18} color={theme.colors.textMuted} />
             </Pressable>
           </View>
-          <Text style={styles.balanceValue}>{showBalance ? formattedBalance : "••••••"}</Text>
+          <View style={styles.balanceValueWrap}>
+            <Animated.Text style={[styles.balanceValue, { opacity: shimmerOpacity }]}>
+              {showBalance ? formattedBalance : "••••••"}
+            </Animated.Text>
+            {showBalance ? (
+              <Animated.View
+                pointerEvents="none"
+                style={[
+                  styles.balanceShimmer,
+                  {
+                    opacity: shimmerOpacity,
+                    transform: [{ translateX: shimmerTranslate }],
+                  },
+                ]}
+              />
+            ) : null}
+          </View>
           <View style={styles.balanceMetaRow}>
-            <View style={[styles.metaBadge, { backgroundColor: netBadgeBackground }]}>
-              <Ionicons name={netIcon} size={16} color={netBadgeColor} />
-              <Text style={[styles.metaText, { color: netBadgeColor }]}>
-                {showBalance ? netLabel : "Balance hidden"}
-              </Text>
-            </View>
+            <LinearGradient
+              colors={[`${netBadgeColor}22`, `${netBadgeColor}05`]}
+              style={[styles.metaBadge, { borderColor: `${netBadgeColor}55` }]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+            >
+              <View style={styles.metaBadgeContent}>
+                <Ionicons name={netIcon} size={16} color={netBadgeColor} />
+                <Text style={[styles.metaText, { color: netBadgeColor }]}>
+                  {showBalance ? netLabel : "Balance hidden"}
+                </Text>
+              </View>
+            </LinearGradient>
             <Text style={styles.metaCaption}>{dayjs().format("MMMM YYYY")}</Text>
           </View>
           <View style={styles.balanceBreakdown}>
@@ -484,7 +598,7 @@ export default function HomeScreen() {
             <Text style={styles.reportsText}>View transactions</Text>
             <Ionicons name="chevron-forward" size={16} color={theme.colors.primary} />
           </Pressable>
-        </View>
+        </Animated.View>
 
         <ScrollView
           horizontal
@@ -493,12 +607,25 @@ export default function HomeScreen() {
         >
           <Pressable
             onPress={() => setSelectedAccountId(null)}
-            style={[styles.accountChip, !selectedAccountId && styles.accountChipActive]}
+            style={({ pressed }) => [
+              styles.accountChip,
+              !selectedAccountId && styles.accountChipActive,
+              pressed && styles.accountChipPressed,
+            ]}
           >
-            <Text style={styles.accountChipTitle}>All accounts</Text>
-            <Text style={styles.accountChipBalance}>
-              {formatCurrency(allAccountsBalance, baseCurrency)}
-            </Text>
+            <LinearGradient
+              colors={!selectedAccountId ? theme.gradients.chip : ["transparent", "transparent"]}
+              style={styles.accountChipOverlay}
+              pointerEvents="none"
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+            />
+            <View style={styles.accountChipContent}>
+              <Text style={styles.accountChipTitle}>All accounts</Text>
+              <Text style={styles.accountChipBalance}>
+                {formatCurrency(allAccountsBalance, baseCurrency)}
+              </Text>
+            </View>
           </Pressable>
           {accounts.map((account) => {
             const active = selectedAccountId === account.id;
@@ -506,22 +633,32 @@ export default function HomeScreen() {
               <Pressable
                 key={account.id}
                 onPress={() => setSelectedAccountId(account.id)}
-                style={[
+                style={({ pressed }) => [
                   styles.accountChip,
                   active && styles.accountChipActive,
                   account.isArchived && styles.accountChipArchived,
+                  pressed && styles.accountChipPressed,
                 ]}
               >
-                <Text style={styles.accountChipTitle}>{account.name}</Text>
-                <Text style={styles.accountChipBalance}>
-                  {formatCurrency(account.balance, account.currency || baseCurrency)}
-                </Text>
+                <LinearGradient
+                  colors={active ? theme.gradients.chip : ["transparent", "transparent"]}
+                  style={styles.accountChipOverlay}
+                  pointerEvents="none"
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                />
+                <View style={styles.accountChipContent}>
+                  <Text style={styles.accountChipTitle}>{account.name}</Text>
+                  <Text style={styles.accountChipBalance}>
+                    {formatCurrency(account.balance, account.currency || baseCurrency)}
+                  </Text>
+                </View>
               </Pressable>
             );
           })}
         </ScrollView>
 
-        <View style={[theme.components.surface, styles.monthlyReport]}>
+        <Animated.View style={[theme.components.surface, styles.monthlyReport, contentEntranceStyle]}>
           <View style={styles.monthlyHeader}>
             <View>
               <Text style={styles.monthlyTitle}>
@@ -623,9 +760,9 @@ export default function HomeScreen() {
               />
             )}
           </View>
-        </View>
+        </Animated.View>
 
-        <View style={[theme.components.surface, styles.topSpendingCard]}>
+        <Animated.View style={[theme.components.surface, styles.topSpendingCard, contentEntranceStyle]}>
           <View style={styles.sectionHeaderRow}>
             <View>
               <Text style={styles.sectionTitle}>Top spending</Text>
@@ -718,10 +855,10 @@ export default function HomeScreen() {
               <Text style={styles.emptyStateText}>Track a few expenses to see insights.</Text>
             </View>
           )}
-        </View>
+        </Animated.View>
 
         {upcomingRecurring.length > 0 && (
-          <View style={[theme.components.surface, styles.recurringCard]}>
+          <Animated.View style={[theme.components.surface, styles.recurringCard, contentEntranceStyle]}>
             <View style={styles.sectionHeaderRow}>
               <Text style={styles.sectionTitle}>Upcoming recurring</Text>
               <Text style={styles.sectionCaption}>Next {upcomingRecurring.length}</Text>
@@ -752,11 +889,11 @@ export default function HomeScreen() {
                 </View>
               ))}
             </View>
-          </View>
+          </Animated.View>
         )}
 
         {budgetGoals.length > 0 && (
-          <View style={[theme.components.surface, styles.goalsCard]}>
+          <Animated.View style={[theme.components.surface, styles.goalsCard, contentEntranceStyle]}>
             <View style={styles.sectionHeaderRow}>
               <Text style={styles.sectionTitle}>Budget goals</Text>
               <Text style={styles.sectionCaption}>Stay on track</Text>
@@ -806,10 +943,10 @@ export default function HomeScreen() {
                 );
               })}
             </View>
-          </View>
+          </Animated.View>
         )}
 
-        <View style={[theme.components.surface, styles.recentCard]}>
+        <Animated.View style={[theme.components.surface, styles.recentCard, contentEntranceStyle]}>
           <View style={styles.sectionHeaderRow}>
             <Text style={styles.sectionTitle}>Recent transactions</Text>
             <Text style={styles.sectionCaption}>Last {recentTransactions.length || 0}</Text>
@@ -877,7 +1014,7 @@ export default function HomeScreen() {
               <Text style={styles.emptyStateText}>No transactions logged yet.</Text>
             </View>
           )}
-        </View>
+        </Animated.View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -892,14 +1029,21 @@ const createStyles = (
       flex: 1,
       backgroundColor: theme.colors.background,
     },
+    backgroundGradient: {
+      ...StyleSheet.absoluteFillObject,
+    },
     content: {
       paddingHorizontal: theme.spacing.md,
       paddingTop: theme.spacing.lg,
       paddingBottom: theme.spacing.xxl + 96 + insets.bottom,
       gap: theme.spacing.lg,
+      position: "relative",
     },
     header: {
       gap: theme.spacing.xs,
+      padding: theme.spacing.sm,
+      borderRadius: theme.radii.lg,
+      backgroundColor: `${theme.colors.surfaceTransparent}40`,
     },
     hello: {
       ...theme.typography.title,
@@ -917,17 +1061,33 @@ const createStyles = (
     accountChip: {
       paddingHorizontal: theme.spacing.md,
       paddingVertical: theme.spacing.sm,
-      borderRadius: theme.radii.md,
-      backgroundColor: theme.colors.surface,
+      borderRadius: theme.radii.pill,
+      backgroundColor: theme.colors.surfaceTransparent,
       borderWidth: 1,
-      borderColor: theme.colors.border,
+      borderColor: theme.colors.glassStroke,
+      overflow: "hidden",
     },
     accountChipActive: {
       borderColor: theme.colors.primary,
-      backgroundColor: `${theme.colors.primary}22`,
+      shadowColor: theme.colors.primary,
+      shadowOpacity: 0.25,
+      shadowRadius: 12,
+      shadowOffset: { width: 0, height: 6 },
     },
     accountChipArchived: {
       opacity: 0.6,
+    },
+    accountChipOverlay: {
+      ...StyleSheet.absoluteFillObject,
+      borderRadius: theme.radii.pill,
+      opacity: 0.9,
+    },
+    accountChipContent: {
+      gap: 2,
+    },
+    accountChipPressed: {
+      opacity: 0.85,
+      transform: [{ scale: 0.97 }],
     },
     accountChipTitle: {
       fontSize: 13,
@@ -940,6 +1100,17 @@ const createStyles = (
     },
     balanceCard: {
       gap: theme.spacing.lg,
+      overflow: "hidden",
+      borderColor: theme.colors.glassStroke,
+    },
+    balanceGradient: {
+      ...StyleSheet.absoluteFillObject,
+      opacity: 0.9,
+    },
+    balanceGlow: {
+      ...StyleSheet.absoluteFillObject,
+      backgroundColor: theme.colors.glow,
+      opacity: 0.25,
     },
     balanceHeader: {
       flexDirection: "row",
@@ -952,10 +1123,22 @@ const createStyles = (
       letterSpacing: 1.2,
       fontSize: 12,
     },
+    balanceValueWrap: {
+      overflow: "hidden",
+    },
     balanceValue: {
       fontSize: 36,
       fontWeight: "700",
       color: theme.colors.text,
+      letterSpacing: -0.5,
+    },
+    balanceShimmer: {
+      position: "absolute",
+      top: 0,
+      bottom: 0,
+      width: 150,
+      backgroundColor: "rgba(255,255,255,0.35)",
+      transform: [{ rotate: "-18deg" }],
     },
     balanceMetaRow: {
       flexDirection: "row",
@@ -963,12 +1146,15 @@ const createStyles = (
       alignItems: "center",
     },
     metaBadge: {
+      borderRadius: theme.radii.pill,
+      paddingHorizontal: theme.spacing.md,
+      paddingVertical: theme.spacing.xs,
+      borderWidth: 1,
+    },
+    metaBadgeContent: {
       flexDirection: "row",
       alignItems: "center",
       gap: 6,
-      paddingHorizontal: 10,
-      paddingVertical: 4,
-      borderRadius: 999,
     },
     metaText: {
       fontSize: 12,
@@ -1001,6 +1187,13 @@ const createStyles = (
       alignItems: "center",
       justifyContent: "flex-start",
       gap: 8,
+      alignSelf: "flex-start",
+      paddingHorizontal: theme.spacing.md,
+      paddingVertical: theme.spacing.xs,
+      borderRadius: theme.radii.pill,
+      borderWidth: 1,
+      borderColor: `${theme.colors.primary}55`,
+      backgroundColor: `${theme.colors.primary}12`,
     },
     reportsText: {
       fontSize: 14,
@@ -1025,18 +1218,24 @@ const createStyles = (
     },
     periodSwitch: {
       flexDirection: "row",
-      backgroundColor: theme.colors.surface,
-      borderRadius: 999,
+      backgroundColor: theme.colors.surfaceTransparent,
+      borderRadius: theme.radii.pill,
       padding: 4,
       gap: 4,
+      borderWidth: 1,
+      borderColor: theme.colors.glassStroke,
     },
     periodPill: {
       paddingHorizontal: theme.spacing.md,
       paddingVertical: 6,
-      borderRadius: 999,
+      borderRadius: theme.radii.pill,
     },
     periodPillActive: {
-      backgroundColor: theme.colors.primary,
+      backgroundColor: `${theme.colors.primary}1F`,
+      shadowColor: theme.colors.primary,
+      shadowOpacity: 0.25,
+      shadowRadius: 8,
+      shadowOffset: { width: 0, height: 4 },
     },
     periodLabel: {
       fontSize: 12,
@@ -1102,14 +1301,14 @@ const createStyles = (
     chartPill: {
       paddingHorizontal: 14,
       paddingVertical: 6,
-      borderRadius: 999,
+      borderRadius: theme.radii.pill,
       borderWidth: 1,
-      borderColor: theme.colors.border,
-      backgroundColor: theme.colors.surface,
+      borderColor: theme.colors.glassStroke,
+      backgroundColor: theme.colors.surfaceTransparent,
     },
     chartPillActive: {
       borderColor: theme.colors.primary,
-      backgroundColor: `${theme.colors.primary}14`,
+      backgroundColor: `${theme.colors.primary}15`,
     },
     chartLabel: {
       ...theme.typography.subtitle,
@@ -1145,9 +1344,13 @@ const createStyles = (
       borderRadius: theme.radii.md,
       paddingHorizontal: theme.spacing.sm,
       paddingVertical: theme.spacing.xs,
+      borderWidth: 1,
+      borderColor: theme.colors.glassStroke,
+      backgroundColor: theme.colors.surfaceTransparent,
     },
     topSpendingItemPressed: {
       backgroundColor: `${theme.colors.primary}1A`,
+      transform: [{ scale: 0.98 }],
     },
     topSpendingItemHeader: {
       flexDirection: "row",
@@ -1204,6 +1407,9 @@ const createStyles = (
       justifyContent: "space-between",
       alignItems: "center",
       gap: theme.spacing.md,
+      paddingVertical: theme.spacing.sm,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: `${theme.colors.glassStroke}88`,
     },
     recurringCopy: {
       flex: 1,
@@ -1230,6 +1436,7 @@ const createStyles = (
       borderRadius: 999,
       borderWidth: 1,
       borderColor: theme.colors.primary,
+      backgroundColor: `${theme.colors.primary}15`,
     },
     recurringActionText: {
       fontSize: 13,
@@ -1283,9 +1490,15 @@ const createStyles = (
       alignItems: "center",
       justifyContent: "space-between",
       gap: theme.spacing.md,
+      padding: theme.spacing.sm,
+      borderRadius: theme.radii.lg,
+      borderWidth: 1,
+      borderColor: theme.colors.glassStroke,
+      backgroundColor: theme.colors.surfaceTransparent,
     },
     recentRowPressed: {
       opacity: 0.7,
+      transform: [{ scale: 0.99 }],
     },
     recentAvatar: {
       width: 42,
@@ -1293,6 +1506,8 @@ const createStyles = (
       borderRadius: 21,
       alignItems: "center",
       justifyContent: "center",
+      borderWidth: 1,
+      borderColor: theme.colors.glassStroke,
     },
     avatarIncome: {
       backgroundColor: `${theme.colors.success}33`,

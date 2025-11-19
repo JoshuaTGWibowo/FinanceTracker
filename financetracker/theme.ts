@@ -5,16 +5,22 @@ import { ThemeMode, useFinanceStore } from "./lib/store";
 
 type Colors = {
   background: string;
+  backgroundAlt: string;
   surface: string;
   surfaceElevated: string;
+  surfaceTransparent: string;
   primary: string;
   primaryMuted: string;
   accent: string;
+  accentSecondary: string;
   text: string;
   textMuted: string;
   success: string;
   danger: string;
+  warning: string;
   border: string;
+  glassStroke: string;
+  glow: string;
 };
 
 export const spacing = {
@@ -24,6 +30,7 @@ export const spacing = {
   lg: 16,
   xl: 24,
   xxl: 32,
+  xxxl: 48,
 } as const;
 
 export const radii = {
@@ -34,32 +41,59 @@ export const radii = {
 } as const;
 
 const darkColors: Colors = {
-  background: "#050608",
-  surface: "#10121B",
-  surfaceElevated: "#161A26",
-  primary: "#3B82F6",
-  primaryMuted: "#2563EB",
-  accent: "#60A5FA",
-  text: "#F8FAFF",
-  textMuted: "#94A3B8",
-  success: "#34D399",
+  background: "#03050A",
+  backgroundAlt: "#060910",
+  surface: "#0F1421",
+  surfaceElevated: "#141B2D",
+  surfaceTransparent: "rgba(6, 10, 18, 0.72)",
+  primary: "#5C7CFA",
+  primaryMuted: "#3D5AFE",
+  accent: "#7DD3FC",
+  accentSecondary: "#A78BFA",
+  text: "#F8FBFF",
+  textMuted: "#91A4C7",
+  success: "#4ADE80",
   danger: "#FB7185",
-  border: "#1F2937",
+  warning: "#FACC15",
+  border: "#1E2640",
+  glassStroke: "rgba(255,255,255,0.08)",
+  glow: "rgba(92,124,250,0.45)",
 };
 
 const lightColors: Colors = {
-  background: "#F8FAFF",
+  background: "#F4F7FE",
+  backgroundAlt: "#EAF0FF",
   surface: "#FFFFFF",
-  surfaceElevated: "#EEF3FF",
+  surfaceElevated: "#F6F8FF",
+  surfaceTransparent: "rgba(255,255,255,0.82)",
   primary: "#2563EB",
   primaryMuted: "#1D4ED8",
   accent: "#60A5FA",
+  accentSecondary: "#818CF8",
   text: "#0F172A",
-  textMuted: "#475569",
-  success: "#047857",
-  danger: "#B91C1C",
+  textMuted: "#4C5973",
+  success: "#10B981",
+  danger: "#E11D48",
+  warning: "#EAB308",
   border: "#CBD5F5",
+  glassStroke: "rgba(15,23,42,0.06)",
+  glow: "rgba(37,99,235,0.35)",
 };
+
+const gradients = {
+  dark: {
+    hero: ["#1F2B50", "#0C1224"],
+    balance: ["#5C7CFA", "#8B5CF6", "#F472B6"],
+    chip: ["rgba(92,124,250,0.25)", "rgba(167,139,250,0.12)"],
+    tab: ["rgba(10,16,27,0.85)", "rgba(4,6,10,0.9)"],
+  },
+  light: {
+    hero: ["#E0E7FF", "#FDF2FF"],
+    balance: ["#2563EB", "#4F46E5", "#C026D3"],
+    chip: ["rgba(37,99,235,0.25)", "rgba(16,185,129,0.15)"],
+    tab: ["rgba(255,255,255,0.92)", "rgba(232,244,255,0.92)"],
+  },
+} as const satisfies Record<ThemeMode, Record<string, readonly string[]>>;
 
 const buildTypography = (colors: Colors) => ({
   title: {
@@ -67,6 +101,9 @@ const buildTypography = (colors: Colors) => ({
     fontWeight: "700" as const,
     color: colors.text,
     letterSpacing: 0.2,
+    textShadowColor: colors.glow,
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 6,
   },
   subtitle: {
     fontSize: 16,
@@ -94,11 +131,19 @@ const buildComponents = (colors: Colors) => ({
     backgroundColor: colors.surface,
     borderRadius: radii.lg,
     padding: spacing.xl,
+    borderWidth: 1,
+    borderColor: colors.glassStroke,
+    shadowColor: colors.background,
+    shadowOpacity: 0.18,
+    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 16 },
   },
   surface: {
     backgroundColor: colors.surfaceElevated,
     borderRadius: radii.md,
     padding: spacing.lg,
+    borderWidth: 1,
+    borderColor: colors.glassStroke,
   },
   buttonPrimary: {
     backgroundColor: colors.primary,
@@ -141,6 +186,22 @@ const buildComponents = (colors: Colors) => ({
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
     backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.glassStroke,
+  },
+  glassCard: {
+    borderRadius: radii.lg,
+    padding: spacing.xl,
+    backgroundColor: colors.surfaceTransparent,
+    borderWidth: 1,
+    borderColor: colors.glassStroke,
+    overflow: "hidden" as const,
+  },
+  glowBadge: {
+    borderRadius: radii.pill,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    backgroundColor: colors.glow,
   },
 });
 
@@ -152,6 +213,7 @@ const buildTheme = (mode: ThemeMode) => {
     radii,
     typography: buildTypography(colors),
     components: buildComponents(colors),
+    gradients: gradients[mode],
   } as const;
 };
 
