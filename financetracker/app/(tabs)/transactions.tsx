@@ -153,7 +153,7 @@ export default function TransactionsScreen() {
       .forEach((item) => {
         const occurrence = dayjs(item.nextOccurrence);
         if (occurrence.isSame(today, "day")) {
-          logRecurringTransaction(item.id);
+          void logRecurringTransaction(item.id);
         }
       });
   }, [logRecurringTransaction, recurringTransactions]);
@@ -774,7 +774,7 @@ export default function TransactionsScreen() {
                         </Text>
                       </View>
                       <Pressable
-                        onPress={() => logRecurringTransaction(item.id)}
+                        onPress={() => void logRecurringTransaction(item.id)}
                         style={styles.logButton}
                       >
                         <Text style={styles.logButtonText}>Log</Text>

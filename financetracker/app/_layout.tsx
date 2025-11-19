@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 
@@ -7,7 +8,17 @@ import { useFinanceStore } from "../lib/store";
 export default function RootLayout() {
   const theme = useAppTheme();
   const themeMode = useFinanceStore((state) => state.preferences.themeMode);
+  const hydrateFromDatabase = useFinanceStore((state) => state.hydrateFromDatabase);
+  const isHydrated = useFinanceStore((state) => state.isHydrated);
   const statusBarStyle = themeMode === "light" ? "dark" : "light";
+
+  useEffect(() => {
+    hydrateFromDatabase();
+  }, [hydrateFromDatabase]);
+
+  if (!isHydrated) {
+    return <StatusBar style={statusBarStyle} />;
+  }
 
   return (
     <>

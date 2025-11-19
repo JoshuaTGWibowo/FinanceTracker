@@ -33,8 +33,8 @@ export default function EditTransactionScreen() {
       submitLabel="Save changes"
       initialValues={transaction}
       onCancel={() => router.back()}
-      onSubmit={(values) => {
-        updateTransaction(transaction.id, values);
+      onSubmit={async (values) => {
+        await updateTransaction(transaction.id, values);
         router.back();
       }}
     />

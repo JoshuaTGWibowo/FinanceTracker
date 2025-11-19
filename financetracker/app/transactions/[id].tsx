@@ -74,8 +74,8 @@ export default function TransactionDetailsScreen() {
     );
   }
 
-  const handleDuplicate = () => {
-    duplicateTransaction(transaction.id);
+  const handleDuplicate = async () => {
+    await duplicateTransaction(transaction.id);
     Alert.alert("Duplicated", "We copied this transaction for you.");
   };
 
@@ -85,8 +85,8 @@ export default function TransactionDetailsScreen() {
       {
         text: "Delete",
         style: "destructive",
-        onPress: () => {
-          removeTransaction(transaction.id);
+        onPress: async () => {
+          await removeTransaction(transaction.id);
           router.back();
         },
       },

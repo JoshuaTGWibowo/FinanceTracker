@@ -81,7 +81,7 @@ export default function AccountScreen() {
     setCurrency(profile.currency);
   }, [profile.name, profile.currency]);
 
-  const handleSaveProfile = () => {
+  const handleSaveProfile = async () => {
     if (!name.trim()) {
       Alert.alert("Heads up", "Please add a display name.");
       return;
@@ -92,24 +92,24 @@ export default function AccountScreen() {
       return;
     }
 
-    updateProfile({ name: name.trim(), currency: currency.trim().toUpperCase() });
+    await updateProfile({ name: name.trim(), currency: currency.trim().toUpperCase() });
     Alert.alert("Saved", "Profile updated successfully.");
   };
 
-  const handleAddCategory = () => {
+  const handleAddCategory = async () => {
     if (!newCategory.trim()) {
       Alert.alert("Heads up", "Add a category label before saving.");
       return;
     }
 
     const value = newCategory.trim();
-    addCategory({ name: value, type: newCategoryType });
+    await addCategory({ name: value, type: newCategoryType });
     setGoalCategory(value);
     setNewCategory("");
     setNewCategoryType("expense");
   };
 
-  const handleCreateGoal = () => {
+  const handleCreateGoal = async () => {
     if (!goalName.trim()) {
       Alert.alert("Heads up", "Give your goal a descriptive name.");
       return;
@@ -121,7 +121,7 @@ export default function AccountScreen() {
       return;
     }
 
-    addBudgetGoal({
+    await addBudgetGoal({
       name: goalName.trim(),
       target: targetValue,
       period: goalPeriod,
@@ -161,7 +161,7 @@ export default function AccountScreen() {
     setAccountFormExcludeFromTotal(false);
   };
 
-  const handleSaveAccount = () => {
+  const handleSaveAccount = async () => {
     if (!accountFormName.trim()) {
       Alert.alert("Heads up", "Give the account a name first.");
       return;
@@ -178,7 +178,7 @@ export default function AccountScreen() {
     const normalizedCurrency = accountFormCurrency.trim().toUpperCase();
 
     if (editingAccountId) {
-      updateAccountAction(editingAccountId, {
+      await updateAccountAction(editingAccountId, {
         name: accountFormName,
         type: accountFormType,
         currency: normalizedCurrency,
@@ -186,7 +186,7 @@ export default function AccountScreen() {
         excludeFromTotal: accountFormExcludeFromTotal,
       });
     } else {
-      addAccount({
+      await addAccount({
         name: accountFormName,
         type: accountFormType,
         currency: normalizedCurrency,
@@ -198,8 +198,8 @@ export default function AccountScreen() {
     handleCloseAccountModal();
   };
 
-  const handleToggleArchive = (account: Account) => {
-    archiveAccount(account.id, !account.isArchived);
+  const handleToggleArchive = async (account: Account) => {
+    await archiveAccount(account.id, !account.isArchived);
   };
 
   return (
@@ -276,7 +276,7 @@ export default function AccountScreen() {
                   <Pressable
                     key={mode}
                     style={[styles.themeChip, active && styles.themeChipActive]}
-                    onPress={() => setThemeMode(mode)}
+                    onPress={() => void setThemeMode(mode)}
                     accessibilityRole="button"
                     accessibilityState={{ selected: active }}
                   >
@@ -492,7 +492,7 @@ export default function AccountScreen() {
                       </Text>
                     </View>
                     <Pressable
-                      onPress={() => removeBudgetGoal(goal.id)}
+                      onPress={() => void removeBudgetGoal(goal.id)}
                       style={styles.deleteButton}
                       accessibilityRole="button"
                     >

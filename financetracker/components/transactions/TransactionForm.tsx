@@ -35,13 +35,13 @@ interface TransactionFormProps {
   title: string;
   submitLabel: string;
   onCancel: () => void;
-  onSubmit: (transaction: Omit<Transaction, "id">) => void;
+  onSubmit: (transaction: Omit<Transaction, "id">) => Promise<void> | void;
   initialValues?: Partial<Transaction>;
   enableRecurringOption?: boolean;
   onSubmitRecurring?: (
     transaction: Omit<Transaction, "id">,
     config: { frequency: RecurringTransaction["frequency"]; startDate: string },
-  ) => void;
+  ) => Promise<void> | void;
 }
 
 const MAX_PHOTOS = 3;
@@ -414,7 +414,7 @@ export function TransactionForm({
     [groupingFormatter, separators],
   );
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     const parsedAmount = parseAmountInput(amount);
 
     if (Number.isNaN(parsedAmount) || parsedAmount <= 0) {
@@ -474,10 +474,10 @@ export function TransactionForm({
       toAccountId: transactionType === "transfer" ? toAccountId : null,
     };
 
-    onSubmit(payload);
+    await onSubmit(payload);
 
     if (enableRecurringOption && isRecurring && onSubmitRecurring) {
-      onSubmitRecurring(payload, {
+      await onSubmitRecurring(payload, {
         frequency: recurringFrequency,
         startDate: date.toISOString(),
       });

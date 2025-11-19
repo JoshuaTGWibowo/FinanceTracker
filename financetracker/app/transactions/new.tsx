@@ -15,13 +15,13 @@ export default function NewTransactionModal() {
       title="Add transaction"
       submitLabel="Add transaction"
       onCancel={() => router.back()}
-      onSubmit={(transaction) => {
-        addTransaction(transaction);
+      onSubmit={async (transaction) => {
+        await addTransaction(transaction);
         router.back();
       }}
       enableRecurringOption
-      onSubmitRecurring={(transaction, config) => {
-        addRecurringTransaction({
+      onSubmitRecurring={async (transaction, config) => {
+        await addRecurringTransaction({
           amount: transaction.amount,
           note: transaction.note,
           type: transaction.type,
