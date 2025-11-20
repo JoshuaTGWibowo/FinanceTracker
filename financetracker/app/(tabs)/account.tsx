@@ -53,9 +53,12 @@ export default function AccountScreen() {
   const addBudgetGoal = useFinanceStore((state) => state.addBudgetGoal);
   const removeBudgetGoal = useFinanceStore((state) => state.removeBudgetGoal);
   const accounts = useFinanceStore((state) => state.accounts);
+  const transactions = useFinanceStore((state) => state.transactions);
   const addAccount = useFinanceStore((state) => state.addAccount);
   const updateAccountAction = useFinanceStore((state) => state.updateAccount);
   const archiveAccount = useFinanceStore((state) => state.archiveAccount);
+  const loadMockData = useFinanceStore((state) => state.loadMockData);
+  const clearAllDataAndReload = useFinanceStore((state) => state.clearAllDataAndReload);
 
   const [name, setName] = useState(profile.name);
   const [currency, setCurrency] = useState(profile.currency);
@@ -72,6 +75,7 @@ export default function AccountScreen() {
   const [accountFormCurrency, setAccountFormCurrency] = useState(profile.currency);
   const [accountFormInitialBalance, setAccountFormInitialBalance] = useState("");
   const [accountFormExcludeFromTotal, setAccountFormExcludeFromTotal] = useState(false);
+  const [isLoadingMockData, setIsLoadingMockData] = useState(false);
 
   const insets = useSafeAreaInsets();
   const styles = useMemo(() => createStyles(theme, insets), [theme, insets]);
@@ -202,6 +206,57 @@ export default function AccountScreen() {
     await archiveAccount(account.id, !account.isArchived);
   };
 
+  const handleLoadMockData = () => {
+    Alert.alert(
+      "Load Mock Data",
+      "This will add sample accounts, transactions, recurring events, and budget goals for testing. Continue?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Load",
+          onPress: async () => {
+            setIsLoadingMockData(true);
+            try {
+              await loadMockData();
+              Alert.alert("Success", "Mock data has been loaded successfully.");
+            } catch (error) {
+              Alert.alert("Error", "Failed to load mock data.");
+              console.error(error);
+            } finally {
+              setIsLoadingMockData(false);
+            }
+          },
+        },
+      ],
+    );
+  };
+
+  const handleClearAllData = () => {
+    Alert.alert(
+      "Clear All Data",
+      "This will delete ALL transactions, accounts, budget goals, and recurring events. This action cannot be undone. Continue?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Clear",
+          style: "destructive",
+          onPress: async () => {
+            setIsLoadingMockData(true);
+            try {
+              await clearAllDataAndReload();
+              Alert.alert("Success", "All data has been cleared.");
+            } catch (error) {
+              Alert.alert("Error", "Failed to clear data.");
+              console.error(error);
+            } finally {
+              setIsLoadingMockData(false);
+            }
+          },
+        },
+      ],
+    );
+  };
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <KeyboardAvoidingView
@@ -291,6 +346,46 @@ export default function AccountScreen() {
                   </Pressable>
                 );
               })}
+            </View>
+          </View>
+
+          <View style={[theme.components.surface, styles.sectionCard]}>
+            <Text style={styles.sectionTitle}>Developer Tools</Text>
+            <Text style={styles.sectionSubtitle}>
+              Testing utilities for development and debugging.
+            </Text>
+
+            <View style={styles.fieldGroup}>
+              <View style={styles.devToolRow}>
+                <View style={styles.flex}>
+                  <Text style={styles.label}>Mock Data</Text>
+                  <Text style={styles.helperText}>
+                    {transactions.length > 0
+                      ? `${transactions.length} transactions, ${accounts.length} accounts`
+                      : "No data yet"}
+                  </Text>
+                </View>
+                <View style={styles.devToolActions}>
+                  <Pressable
+                    style={[styles.secondaryButton, isLoadingMockData && styles.buttonDisabled]}
+                    onPress={handleLoadMockData}
+                    disabled={isLoadingMockData}
+                  >
+                    <Ionicons name="cloud-download-outline" size={16} color={theme.colors.text} />
+                    <Text style={styles.secondaryButtonText}>
+                      {isLoadingMockData ? "Loading..." : "Load"}
+                    </Text>
+                  </Pressable>
+                  <Pressable
+                    style={[styles.dangerButton, isLoadingMockData && styles.buttonDisabled]}
+                    onPress={handleClearAllData}
+                    disabled={isLoadingMockData}
+                  >
+                    <Ionicons name="trash-outline" size={16} color={"#fff"} />
+                    <Text style={styles.dangerButtonText}>Clear</Text>
+                  </Pressable>
+                </View>
+              </View>
             </View>
           </View>
 
@@ -933,4 +1028,33 @@ const createStyles = (
       justifyContent: "flex-end",
       gap: theme.spacing.md,
     },
+    devToolRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: theme.spacing.md,
+    },
+    devToolActions: {
+      flexDirection: "row",
+      gap: theme.spacing.sm,
+    },
+    dangerButton: {
+      borderRadius: theme.radii.md,
+      backgroundColor: theme.colors.danger,
+      paddingHorizontal: theme.spacing.lg,
+      paddingVertical: theme.spacing.sm,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: theme.spacing.xs,
+      justifyContent: "center",
+    },
+    dangerButtonText: {
+      color: "#fff",
+      fontWeight: "600",
+      fontSize: 14,
+    },
+    buttonDisabled: {
+      opacity: 0.5,
+    },
   });
+
