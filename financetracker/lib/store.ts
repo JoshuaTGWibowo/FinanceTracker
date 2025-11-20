@@ -16,6 +16,7 @@ import {
   createDefaultAccount,
 } from "./types";
 import {
+  clearAllData,
   deleteBudgetGoal,
   deleteTransaction,
   fetchFinanceState,
@@ -27,6 +28,7 @@ import {
   saveThemeMode,
   saveTransaction,
 } from "./storage/sqlite";
+import { generateAllMockData } from "./mockData";
 
 export interface FinanceState {
   profile: Profile;
@@ -74,6 +76,8 @@ export interface FinanceState {
     >,
   ) => Promise<void>;
   archiveAccount: (id: string, archived?: boolean) => Promise<void>;
+  loadMockData: () => Promise<void>;
+  clearAllDataAndReload: () => Promise<void>;
 }
 
 const applyAccountBalanceUpdate = (state: FinanceState, transactions: Transaction[]) => ({
@@ -426,9 +430,9 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
         recurringTransactions: state.recurringTransactions.map((item) =>
           item.id === id
             ? {
-                ...item,
-                nextOccurrence,
-              }
+              ...item,
+              nextOccurrence,
+            }
             : item,
         ),
       };
@@ -629,6 +633,38 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
         ],
       },
     }));
+  },
+  loadMockData: async () => {
+    const state = get();
+    const mockData = generateAllMockData(state.profile.currency);
+
+    // Save all mock data to database
+    for (const account of mockData.accounts) {
+      await saveAccount(account);
+    }
+
+    for (const category of mockData.customCategories) {
+      await saveCategory(category);
+    }
+
+    for (const transaction of mockData.transactions) {
+      await saveTransaction(transaction);
+    }
+
+    for (const recurring of mockData.recurringTransactions) {
+      await saveRecurringTransaction(recurring);
+    }
+
+    for (const goal of mockData.budgetGoals) {
+      await saveBudgetGoal(goal);
+    }
+
+    // Reload state from database
+    await get().hydrateFromDatabase();
+  },
+  clearAllDataAndReload: async () => {
+    await clearAllData();
+    await get().hydrateFromDatabase();
   },
 }));
 

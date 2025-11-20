@@ -472,3 +472,52 @@ export const saveAccount = async (account: Account) => {
     ],
   );
 };
+
+/**
+ * Clear all data from the database (for mock data toggle)
+ */
+export const clearAllData = async () => {
+  const db = await getDatabase();
+  await db.execAsync(`
+    DELETE FROM transactions;
+    DELETE FROM recurring_transactions;
+    DELETE FROM budget_goals;
+    DELETE FROM accounts;
+    DELETE FROM categories;
+  `);
+
+  // Re-insert default categories
+  for (const category of DEFAULT_CATEGORIES) {
+    await db.runAsync("INSERT INTO categories (id, name, type) VALUES (?, ?, ?)", [
+      category.id,
+      category.name,
+      category.type,
+    ]);
+  }
+
+  // Re-insert default account
+  const profile = await db.getFirstAsync<Profile>("SELECT name, currency FROM profile LIMIT 1");
+  const defaultAccount = createDefaultAccount(profile?.currency || "USD");
+  await db.runAsync(
+    `INSERT INTO accounts (
+      id,
+      name,
+      type,
+      initialBalance,
+      currency,
+      excludeFromTotal,
+      isArchived,
+      createdAt
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      defaultAccount.id,
+      defaultAccount.name,
+      defaultAccount.type,
+      defaultAccount.initialBalance,
+      defaultAccount.currency,
+      defaultAccount.excludeFromTotal ? 1 : 0,
+      defaultAccount.isArchived ? 1 : 0,
+      defaultAccount.createdAt,
+    ],
+  );
+};
