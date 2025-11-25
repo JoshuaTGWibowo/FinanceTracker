@@ -2,12 +2,10 @@ import { useEffect, useMemo, useState } from "react";
 import {
   Alert,
   KeyboardAvoidingView,
-  Modal,
   Platform,
   Pressable,
   ScrollView,
   StyleSheet,
-  Switch,
   Text,
   TextInput,
   View,
@@ -17,29 +15,10 @@ import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 
 import { useAppTheme } from "../../theme";
-import {
-  Account,
-  AccountType,
-  ThemeMode,
-  useFinanceStore,
-} from "../../lib/store";
+import { ThemeMode, useFinanceStore } from "../../lib/store";
 
 const currencies = ["USD", "EUR", "GBP", "CAD", "AUD", "JPY"];
 const goalPeriods = ["month", "week"] as const;
-const accountTypes: AccountType[] = ["cash", "bank", "card", "investment"];
-const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
-  cash: "Cash",
-  bank: "Bank",
-  card: "Card",
-  investment: "Investment",
-};
-
-const formatCurrency = (value: number, currency: string) =>
-  new Intl.NumberFormat(undefined, {
-    style: "currency",
-    currency,
-    maximumFractionDigits: Number.isInteger(value) ? 0 : 2,
-  }).format(value);
 
 export default function AccountScreen() {
   const theme = useAppTheme();
@@ -54,9 +33,6 @@ export default function AccountScreen() {
   const removeBudgetGoal = useFinanceStore((state) => state.removeBudgetGoal);
   const accounts = useFinanceStore((state) => state.accounts);
   const transactions = useFinanceStore((state) => state.transactions);
-  const addAccount = useFinanceStore((state) => state.addAccount);
-  const updateAccountAction = useFinanceStore((state) => state.updateAccount);
-  const archiveAccount = useFinanceStore((state) => state.archiveAccount);
   const loadMockData = useFinanceStore((state) => state.loadMockData);
   const clearAllDataAndReload = useFinanceStore((state) => state.clearAllDataAndReload);
 
@@ -66,13 +42,6 @@ export default function AccountScreen() {
   const [goalTarget, setGoalTarget] = useState("");
   const [goalPeriod, setGoalPeriod] = useState<(typeof goalPeriods)[number]>("month");
   const [goalCategory, setGoalCategory] = useState<string | null>(null);
-  const [accountModalVisible, setAccountModalVisible] = useState(false);
-  const [editingAccountId, setEditingAccountId] = useState<string | null>(null);
-  const [accountFormName, setAccountFormName] = useState("");
-  const [accountFormType, setAccountFormType] = useState<AccountType>("bank");
-  const [accountFormCurrency, setAccountFormCurrency] = useState(profile.currency);
-  const [accountFormInitialBalance, setAccountFormInitialBalance] = useState("");
-  const [accountFormExcludeFromTotal, setAccountFormExcludeFromTotal] = useState(false);
   const [isLoadingMockData, setIsLoadingMockData] = useState(false);
 
   const insets = useSafeAreaInsets();
@@ -119,76 +88,6 @@ export default function AccountScreen() {
 
     setGoalName("");
     setGoalTarget("");
-  };
-
-  const openAccountModal = (account?: Account) => {
-    if (account) {
-      setEditingAccountId(account.id);
-      setAccountFormName(account.name);
-      setAccountFormType(account.type);
-      setAccountFormCurrency((account.currency || profile.currency).toUpperCase());
-      setAccountFormInitialBalance(account.initialBalance.toString());
-      setAccountFormExcludeFromTotal(Boolean(account.excludeFromTotal));
-    } else {
-      setEditingAccountId(null);
-      setAccountFormName("");
-      setAccountFormType("bank");
-      setAccountFormCurrency(profile.currency.toUpperCase());
-      setAccountFormInitialBalance("");
-      setAccountFormExcludeFromTotal(false);
-    }
-    setAccountModalVisible(true);
-  };
-
-  const handleCloseAccountModal = () => {
-    setAccountModalVisible(false);
-    setEditingAccountId(null);
-    setAccountFormName("");
-    setAccountFormType("bank");
-    setAccountFormCurrency(profile.currency.toUpperCase());
-    setAccountFormInitialBalance("");
-    setAccountFormExcludeFromTotal(false);
-  };
-
-  const handleSaveAccount = async () => {
-    if (!accountFormName.trim()) {
-      Alert.alert("Heads up", "Give the account a name first.");
-      return;
-    }
-
-    if (!accountFormCurrency.trim()) {
-      Alert.alert("Heads up", "Currency code cannot be empty.");
-      return;
-    }
-
-    const sanitizedBalance = accountFormInitialBalance.replace(/[^0-9.-]/g, "");
-    const parsedInitial = sanitizedBalance ? Number(sanitizedBalance) : 0;
-    const initialBalanceValue = Number.isNaN(parsedInitial) ? 0 : parsedInitial;
-    const normalizedCurrency = accountFormCurrency.trim().toUpperCase();
-
-    if (editingAccountId) {
-      await updateAccountAction(editingAccountId, {
-        name: accountFormName,
-        type: accountFormType,
-        currency: normalizedCurrency,
-        initialBalance: initialBalanceValue,
-        excludeFromTotal: accountFormExcludeFromTotal,
-      });
-    } else {
-      await addAccount({
-        name: accountFormName,
-        type: accountFormType,
-        currency: normalizedCurrency,
-        initialBalance: initialBalanceValue,
-        excludeFromTotal: accountFormExcludeFromTotal,
-      });
-    }
-
-    handleCloseAccountModal();
-  };
-
-  const handleToggleArchive = async (account: Account) => {
-    await archiveAccount(account.id, !account.isArchived);
   };
 
   const handleLoadMockData = () => {
@@ -348,6 +247,18 @@ export default function AccountScreen() {
               </View>
               <Ionicons name="chevron-forward" size={18} color={theme.colors.textMuted} />
             </Pressable>
+            <Pressable style={styles.linkRow} onPress={() => router.push("/accounts")}>
+              <View style={styles.linkRowContent}>
+                <View style={styles.linkIcon}>
+                  <Ionicons name="wallet-outline" size={18} color={theme.colors.primary} />
+                </View>
+                <View style={styles.flex}>
+                  <Text style={styles.linkTitle}>Accounts</Text>
+                  <Text style={styles.linkSubtitle}>View and manage all wallets and balances.</Text>
+                </View>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={theme.colors.textMuted} />
+            </Pressable>
           </View>
 
           <View style={[theme.components.surface, styles.sectionCard]}>
@@ -388,65 +299,6 @@ export default function AccountScreen() {
                 </View>
               </View>
             </View>
-          </View>
-
-          <View style={[theme.components.surface, styles.sectionCard]}>
-            <View style={styles.sectionHeaderRow}>
-              <View>
-                <Text style={styles.sectionTitle}>Accounts</Text>
-                <Text style={styles.sectionSubtitle}>Organize wallets and track balances.</Text>
-              </View>
-              <Pressable style={styles.secondaryButton} onPress={() => openAccountModal()}>
-                <Ionicons name="add" size={16} color={theme.colors.text} />
-                <Text style={styles.secondaryButtonText}>Add</Text>
-              </Pressable>
-            </View>
-            {accounts.length === 0 ? (
-              <Text style={[styles.helperText, styles.emptyStateText]}>
-                Add your first account to start tracking balances.
-              </Text>
-            ) : (
-              <View style={styles.accountsList}>
-                {accounts.map((account) => (
-                  <View
-                    key={account.id}
-                    style={[styles.accountRow, account.isArchived && styles.archivedAccount]}
-                  >
-                    <View style={styles.flex}>
-                      <Text style={styles.accountName}>{account.name}</Text>
-                      <Text style={styles.accountMeta}>
-                        {ACCOUNT_TYPE_LABELS[account.type]} • {formatCurrency(
-                          account.balance,
-                          account.currency || profile.currency,
-                        )}
-                        {account.isArchived ? " • Archived" : ""}
-                        {account.excludeFromTotal ? " • Excluded" : ""}
-                      </Text>
-                    </View>
-                    <View style={styles.accountActions}>
-                      <Pressable
-                        onPress={() => openAccountModal(account)}
-                        style={styles.iconButton}
-                        accessibilityRole="button"
-                      >
-                        <Ionicons name="create-outline" size={18} color={theme.colors.text} />
-                      </Pressable>
-                      <Pressable
-                        onPress={() => handleToggleArchive(account)}
-                        style={styles.iconButton}
-                        accessibilityRole="button"
-                      >
-                        <Ionicons
-                          name={account.isArchived ? "refresh" : "archive-outline"}
-                          size={18}
-                          color={account.isArchived ? theme.colors.success : theme.colors.text}
-                        />
-                      </Pressable>
-                    </View>
-                  </View>
-                ))}
-              </View>
-            )}
           </View>
 
           <View style={[theme.components.surface, styles.sectionCard]}>
@@ -558,136 +410,6 @@ export default function AccountScreen() {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
-
-      <Modal
-        visible={accountModalVisible}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={handleCloseAccountModal}
-      >
-        <SafeAreaView style={[styles.accountModal, { backgroundColor: theme.colors.background }]}>
-          <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>
-              {editingAccountId ? "Edit account" : "Add account"}
-            </Text>
-            <Pressable style={styles.modalClose} onPress={handleCloseAccountModal}>
-              <Ionicons name="close" size={20} color={theme.colors.text} />
-            </Pressable>
-          </View>
-
-          <View style={styles.accountModalBody}>
-            <View style={styles.fieldGroup}>
-              <Text style={styles.label}>Account name</Text>
-              <TextInput
-                value={accountFormName}
-                onChangeText={setAccountFormName}
-                placeholder="Vacation savings"
-                placeholderTextColor={theme.colors.textMuted}
-                style={styles.input}
-              />
-            </View>
-
-            <View style={styles.fieldGroup}>
-              <Text style={styles.label}>Type</Text>
-              <View style={styles.accountTypeRow}>
-                {accountTypes.map((type) => {
-                  const active = accountFormType === type;
-                  return (
-                    <Pressable
-                      key={type}
-                      style={[styles.accountTypeChip, active && styles.accountTypeChipActive]}
-                      onPress={() => setAccountFormType(type)}
-                    >
-                      <Text
-                        style={[styles.accountTypeChipText, active && styles.accountTypeChipTextActive]}
-                      >
-                        {ACCOUNT_TYPE_LABELS[type]}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-            </View>
-
-            <View style={styles.fieldGroup}>
-              <Text style={styles.label}>Currency</Text>
-              <View style={styles.row}>
-                <TextInput
-                  value={accountFormCurrency}
-                  onChangeText={(value) => setAccountFormCurrency(value.toUpperCase())}
-                  placeholder="USD"
-                  placeholderTextColor={theme.colors.textMuted}
-                  autoCapitalize="characters"
-                  style={[styles.input, styles.currencyInput, styles.flex]}
-                />
-                <ScrollView
-                  style={styles.flex}
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.chipsRow}
-                >
-                  {currencies.map((code) => {
-                    const active = accountFormCurrency === code;
-                    return (
-                      <Pressable
-                        key={code}
-                        onPress={() => setAccountFormCurrency(code)}
-                        style={[styles.currencyChip, active && styles.currencyChipActive]}
-                      >
-                        <Text
-                          style={[
-                            styles.currencyChipText,
-                            active && styles.currencyChipTextActive,
-                          ]}
-                        >
-                          {code}
-                        </Text>
-                      </Pressable>
-                    );
-                  })}
-                </ScrollView>
-              </View>
-            </View>
-
-            <View style={styles.fieldGroup}>
-              <Text style={styles.label}>Initial balance</Text>
-              <TextInput
-                value={accountFormInitialBalance}
-                onChangeText={setAccountFormInitialBalance}
-                keyboardType="decimal-pad"
-                placeholder="0.00"
-                placeholderTextColor={theme.colors.textMuted}
-                style={styles.input}
-              />
-              <Text style={styles.helperText}>Set the starting balance for this account.</Text>
-            </View>
-
-            <View style={styles.toggleRow}>
-              <View style={styles.flex}>
-                <Text style={styles.label}>Exclude from totals</Text>
-                <Text style={styles.helperText}>
-                  Hide this wallet from total balance and overview cards.
-                </Text>
-              </View>
-              <Switch
-                value={accountFormExcludeFromTotal}
-                onValueChange={setAccountFormExcludeFromTotal}
-                thumbColor={accountFormExcludeFromTotal ? theme.colors.primary : theme.colors.surface}
-                trackColor={{ true: `${theme.colors.primary}55`, false: theme.colors.border }}
-              />
-            </View>
-
-            <View style={styles.modalActions}>
-              <Pressable style={styles.secondaryButton} onPress={handleCloseAccountModal}>
-                <Text style={styles.secondaryButtonText}>Cancel</Text>
-              </Pressable>
-              <Pressable style={styles.primaryButton} onPress={handleSaveAccount}>
-                <Text style={styles.primaryButtonText}>Save</Text>
-              </Pressable>
-            </View>
-          </View>
-        </SafeAreaView>
-      </Modal>
     </SafeAreaView>
   );
 }
@@ -787,40 +509,6 @@ const createStyles = (
     },
     currencyChipTextActive: {
       color: theme.colors.text,
-    },
-    accountsList: {
-      gap: theme.spacing.md,
-    },
-    accountRow: {
-      flexDirection: "row",
-      alignItems: "center",
-      justifyContent: "space-between",
-      paddingVertical: theme.spacing.md,
-      borderBottomWidth: StyleSheet.hairlineWidth,
-      borderBottomColor: theme.colors.border,
-    },
-    archivedAccount: {
-      opacity: 0.6,
-    },
-    accountName: {
-      fontSize: 16,
-      fontWeight: "600",
-      color: theme.colors.text,
-    },
-    accountMeta: {
-      fontSize: 13,
-      color: theme.colors.textMuted,
-      marginTop: 2,
-    },
-    accountActions: {
-      flexDirection: "row",
-      gap: theme.spacing.sm,
-      marginLeft: theme.spacing.md,
-    },
-    iconButton: {
-      padding: theme.spacing.sm,
-      borderRadius: theme.radii.md,
-      backgroundColor: theme.colors.surface,
     },
     emptyStateText: {
       ...theme.typography.subtitle,
@@ -946,45 +634,6 @@ const createStyles = (
       borderRadius: theme.radii.md,
       borderWidth: 1,
       borderColor: theme.colors.danger,
-    },
-    accountModal: {
-      flex: 1,
-    },
-    accountModalBody: {
-      paddingHorizontal: theme.spacing.xl,
-      paddingBottom: theme.spacing.xl,
-      gap: theme.spacing.lg,
-    },
-    accountTypeRow: {
-      flexDirection: "row",
-      flexWrap: "wrap",
-      gap: theme.spacing.sm,
-    },
-    accountTypeChip: {
-      paddingHorizontal: theme.spacing.md,
-      paddingVertical: theme.spacing.sm,
-      borderRadius: theme.radii.pill,
-      borderWidth: 1,
-      borderColor: theme.colors.border,
-      backgroundColor: theme.colors.surface,
-    },
-    accountTypeChipActive: {
-      borderColor: theme.colors.primary,
-      backgroundColor: `${theme.colors.primary}22`,
-    },
-    accountTypeChipText: {
-      fontSize: 14,
-      color: theme.colors.textMuted,
-      fontWeight: "500",
-    },
-    accountTypeChipTextActive: {
-      color: theme.colors.text,
-      fontWeight: "600",
-    },
-    modalActions: {
-      flexDirection: "row",
-      justifyContent: "flex-end",
-      gap: theme.spacing.md,
     },
     devToolRow: {
       flexDirection: "row",

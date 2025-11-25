@@ -68,6 +68,13 @@ export default function RootLayout() {
           }}
         />
         <Stack.Screen
+          name="accounts/index"
+          options={{
+            headerShown: false,
+            animation: "slide_from_right",
+          }}
+        />
+        <Stack.Screen
           name="transactions/new"
           options={{
             presentation: "modal",
