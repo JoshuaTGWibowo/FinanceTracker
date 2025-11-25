@@ -40,7 +40,14 @@ export interface FinanceState {
   budgetGoals: BudgetGoal[];
   isHydrated: boolean;
   isHydrating: boolean;
-  categoryFormDraft: { icon: string; parentCategoryId: string | null };
+  categoryFormDraft: {
+    id?: string;
+    name: string;
+    type: CategoryType;
+    icon: string;
+    parentCategoryId: string | null;
+    activeAccountIds: string[] | null;
+  } | null;
   hydrateFromDatabase: () => Promise<void>;
   addTransaction: (transaction: Omit<Transaction, "id">) => Promise<void>;
   updateTransaction: (
@@ -63,8 +70,26 @@ export interface FinanceState {
   setThemeMode: (mode: ThemeMode) => Promise<void>;
   addCategory: (category: Omit<Category, "id">) => Promise<void>;
   updateCategory: (id: string, updates: Partial<Omit<Category, "id">>) => Promise<void>;
-  setCategoryFormDraft: (updates: Partial<{ icon: string; parentCategoryId: string | null }>) => void;
-  resetCategoryFormDraft: (initial?: Partial<{ icon: string; parentCategoryId: string | null }>) => void;
+  setCategoryFormDraft: (
+    updates: Partial<{
+      id?: string;
+      name: string;
+      type: CategoryType;
+      icon: string;
+      parentCategoryId: string | null;
+      activeAccountIds: string[] | null;
+    }>,
+  ) => void;
+  resetCategoryFormDraft: (
+    initial?: Partial<{
+      id?: string;
+      name: string;
+      type: CategoryType;
+      icon: string;
+      parentCategoryId: string | null;
+      activeAccountIds: string[] | null;
+    }>,
+  ) => void;
   addAccount: (
     account: {
       name: string;
@@ -184,7 +209,7 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
   budgetGoals: [],
   isHydrated: false,
   isHydrating: false,
-  categoryFormDraft: { icon: "pricetag", parentCategoryId: null },
+  categoryFormDraft: null,
   hydrateFromDatabase: async () => {
     if (get().isHydrated || get().isHydrating) {
       return;
@@ -500,19 +525,39 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
     }));
   },
   setCategoryFormDraft: (updates) =>
-    set((state) => ({
-      categoryFormDraft: {
-        ...state.categoryFormDraft,
-        ...updates,
-      },
-    })),
+    set((state) => {
+      const activeAccounts = state.accounts.filter((account) => !account.isArchived);
+      const baseDraft =
+        state.categoryFormDraft ?? {
+          id: undefined,
+          name: "",
+          type: "expense" as CategoryType,
+          icon: "pricetag",
+          parentCategoryId: null,
+          activeAccountIds: activeAccounts.map((account) => account.id),
+        };
+
+      return {
+        categoryFormDraft: {
+          ...baseDraft,
+          ...updates,
+        },
+      };
+    }),
   resetCategoryFormDraft: (initial) =>
-    set(() => ({
-      categoryFormDraft: {
-        icon: initial?.icon ?? "pricetag",
-        parentCategoryId: initial?.parentCategoryId ?? null,
-      },
-    })),
+    set((state) => {
+      const activeAccounts = state.accounts.filter((account) => !account.isArchived);
+      return {
+        categoryFormDraft: {
+          id: initial?.id,
+          name: initial?.name ?? "",
+          type: initial?.type ?? (state.categoryFormDraft?.type ?? "expense"),
+          icon: initial?.icon ?? "pricetag",
+          parentCategoryId: initial?.parentCategoryId ?? null,
+          activeAccountIds: initial?.activeAccountIds ?? activeAccounts.map((account) => account.id),
+        },
+      };
+    }),
   addAccount: async ({ name, type, currency, initialBalance, excludeFromTotal }) => {
     const state = get();
     const value = name.trim();

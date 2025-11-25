@@ -1,82 +1,102 @@
 import { useEffect, useMemo } from "react";
-import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { Alert, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 
 import { useAppTheme } from "../../theme";
-import { DEFAULT_CATEGORIES, type CategoryType } from "../../lib/types";
+import { DEFAULT_CATEGORIES } from "../../lib/types";
 import { useFinanceStore } from "../../lib/store";
-
-const CATEGORY_TABS: { label: string; value: CategoryType }[] = [
-  { label: "Expense", value: "expense" },
-  { label: "Income", value: "income" },
-  { label: "Debt/Loan", value: "debt" },
-];
 
 const iconToName = (value?: string | null) =>
   (value as keyof typeof Ionicons.glyphMap) || ("pricetag" as keyof typeof Ionicons.glyphMap);
 
-export default function NewCategoryScreen() {
+export default function EditCategoryScreen() {
   const theme = useAppTheme();
   const router = useRouter();
-  const params = useLocalSearchParams<{ type?: string }>();
+  const { id } = useLocalSearchParams<{ id: string }>();
+
   const categories = useFinanceStore((state) => state.preferences.categories);
-  const availableCategories = categories.length ? categories : DEFAULT_CATEGORIES;
   const accounts = useFinanceStore((state) => state.accounts.filter((account) => !account.isArchived));
-  const addCategory = useFinanceStore((state) => state.addCategory);
+  const updateCategory = useFinanceStore((state) => state.updateCategory);
   const draft = useFinanceStore((state) => state.categoryFormDraft);
   const setDraft = useFinanceStore((state) => state.setCategoryFormDraft);
   const resetDraft = useFinanceStore((state) => state.resetCategoryFormDraft);
 
-  const initialTypeParam = (params.type as CategoryType | undefined) ?? "expense";
+  const allCategories = categories.length ? categories : DEFAULT_CATEGORIES;
+  const category = allCategories.find((entry) => entry.id === id);
 
   useEffect(() => {
-    const shouldReset = !draft || Boolean(draft.id);
-    if (shouldReset) {
-      resetDraft({
-        name: "",
-        type: initialTypeParam,
-        icon: "pricetag",
-        parentCategoryId: null,
-        activeAccountIds: accounts.map((account) => account.id),
+    if (category) {
+      setDraft({
+        id: category.id,
+        name: category.name,
+        type: category.type,
+        icon: category.icon ?? "pricetag",
+        parentCategoryId: category.parentCategoryId ?? null,
+        activeAccountIds:
+          category.activeAccountIds ?? accounts.map((account) => account.id),
       });
     }
-  }, [accounts, draft, initialTypeParam, resetDraft]);
-
-  const type = draft?.type ?? initialTypeParam;
-  const name = draft?.name ?? "";
-  const icon = iconToName(draft?.icon);
-  const parentCategoryId = draft?.parentCategoryId ?? null;
+    return () => {
+      resetDraft({ name: "", parentCategoryId: null, icon: "pricetag" });
+    };
+  }, [accounts, category, resetDraft, setDraft]);
 
   const styles = useMemo(() => createStyles(theme), [theme]);
 
-  const parentName =
-    parentCategoryId && availableCategories.find((category) => category.id === parentCategoryId)?.name;
+  if (!category || !draft) {
+    return (
+      <SafeAreaView style={styles.safeArea} edges={["top", "left", "right"]}>
+        <View style={styles.header}>
+          <Pressable onPress={() => router.back()} hitSlop={10} style={styles.backButton}>
+            <Ionicons name="chevron-back" size={22} color={theme.colors.text} />
+          </Pressable>
+          <Text style={styles.headerTitle}>Category</Text>
+          <View style={{ width: 32 }} />
+        </View>
+        <View style={styles.missingBox}>
+          <Text style={styles.helperText}>This category could not be found.</Text>
+          <Pressable style={styles.saveButton} onPress={() => router.back()}>
+            <Text style={styles.saveButtonText}>Go back</Text>
+          </Pressable>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
-  const isSaveDisabled = !name.trim();
+  const icon = iconToName(draft.icon);
+  const parentName =
+    draft.parentCategoryId && allCategories.find((item) => item.id === draft.parentCategoryId)?.name;
+  const activeIds = draft.activeAccountIds ?? accounts.map((account) => account.id);
+  const isSaveDisabled = !draft.name.trim();
+
+  const toggleAccount = (accountId: string) => {
+    const current = new Set(activeIds);
+    if (current.has(accountId)) {
+      current.delete(accountId);
+    } else {
+      current.add(accountId);
+    }
+    setDraft({ activeAccountIds: Array.from(current) });
+  };
 
   const handleSave = async () => {
-    if (!name.trim()) {
+    if (!draft.name.trim()) {
       Alert.alert("Add a name", "Please enter a category name to continue.");
       return;
     }
 
-    await addCategory({
-      name: name.trim(),
-      type,
+    const normalizedParent = draft.parentCategoryId === draft.id ? null : draft.parentCategoryId;
+
+    await updateCategory(draft.id!, {
+      name: draft.name.trim(),
+      type: draft.type,
       icon,
-      parentCategoryId,
-      activeAccountIds: draft?.activeAccountIds ?? accounts.map((account) => account.id),
+      parentCategoryId: normalizedParent,
+      activeAccountIds: Array.from(activeIds),
     });
 
-    resetDraft({
-      name: "",
-      type: initialTypeParam,
-      icon: "pricetag",
-      parentCategoryId: null,
-      activeAccountIds: accounts.map((account) => account.id),
-    });
     router.back();
   };
 
@@ -91,7 +111,7 @@ export default function NewCategoryScreen() {
         >
           <Ionicons name="chevron-back" size={22} color={theme.colors.text} />
         </Pressable>
-        <Text style={styles.headerTitle}>New category</Text>
+        <Text style={styles.headerTitle}>Edit category</Text>
         <View style={{ width: 32 }} />
       </View>
 
@@ -99,55 +119,24 @@ export default function NewCategoryScreen() {
         <View style={styles.card}>
           <View style={styles.cardHeader}>
             <View style={styles.badge}>
-              <Ionicons name="sparkles" size={14} color={theme.colors.primary} />
+              <Ionicons name="create" size={14} color={theme.colors.primary} />
               <Text style={styles.badgeText}>Details</Text>
             </View>
-            <Text style={styles.cardTitle}>Give your category a voice.</Text>
+            <Text style={styles.cardTitle}>Refresh the label and placement.</Text>
           </View>
 
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Name</Text>
             <TextInput
-              value={name}
+              value={draft.name}
               onChangeText={(text) => setDraft({ name: text })}
-              placeholder="e.g. Coffee, Gifts, Tips"
+              placeholder="Category name"
               placeholderTextColor={theme.colors.textMuted}
               style={styles.input}
             />
           </View>
 
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Type</Text>
-            <View style={styles.tabRow}>
-              {CATEGORY_TABS.map((tab) => {
-                const active = tab.value === type;
-                return (
-                  <Pressable
-                    key={tab.value}
-                    style={[styles.tabChip, active && styles.tabChipActive]}
-                    onPress={() => setDraft({ type: tab.value })}
-                  >
-                    <Text style={[styles.tabChipText, active && styles.tabChipTextActive]}>{tab.label}</Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-          </View>
-        </View>
-
-        <View style={styles.card}>
-          <View style={styles.cardHeader}>
-            <View style={styles.badgeAlt}>
-              <Ionicons name="color-palette" size={14} color={theme.colors.text} />
-              <Text style={styles.badgeAltText}>Appearance & Relationships</Text>
-            </View>
-            <Text style={styles.cardTitle}>Choose an icon and where it belongs.</Text>
-          </View>
-
-          <Pressable
-            style={styles.selectorRow}
-            onPress={() => router.push("/categories/select-icon")}
-          >
+          <Pressable style={styles.selectorRow} onPress={() => router.push("/categories/select-icon")}>
             <View style={styles.selectorLeft}>
               <View style={styles.selectorIcon}>
                 <Ionicons name={icon} size={18} color={theme.colors.text} />
@@ -160,38 +149,59 @@ export default function NewCategoryScreen() {
             <Ionicons name="chevron-forward" size={18} color={theme.colors.textMuted} />
           </Pressable>
 
-          <Pressable
-            style={styles.selectorRow}
-            onPress={() => router.push("/categories/select-parent")}
-          >
+          <Pressable style={styles.selectorRow} onPress={() => router.push("/categories/select-parent")}>
             <View style={styles.selectorLeft}>
               <View style={[styles.selectorIcon, styles.selectorIconAlt]}>
                 <Ionicons name="git-branch" size={16} color={theme.colors.primary} />
               </View>
               <View>
                 <Text style={styles.selectorTitle}>Parent category</Text>
-                <Text style={styles.selectorSubtitle}>
-                  {parentName ? parentName : "None"}
-                </Text>
+                <Text style={styles.selectorSubtitle}>{parentName ? parentName : "None"}</Text>
               </View>
             </View>
             <Ionicons name="chevron-forward" size={18} color={theme.colors.textMuted} />
           </Pressable>
+        </View>
+
+        <View style={styles.card}>
+          <View style={styles.cardHeader}>
+            <View style={styles.badgeAlt}>
+              <Ionicons name="wallet" size={14} color={theme.colors.text} />
+              <Text style={styles.badgeAltText}>Wallet activation</Text>
+            </View>
+            <Text style={styles.cardTitle}>Choose where this category stays active.</Text>
+          </View>
 
           <View style={styles.helperBox}>
             <Ionicons name="information-circle" size={16} color={theme.colors.textMuted} />
             <Text style={styles.helperText}>
-              Tip: Start from the tab matching the category type (Expense, Income, or Debt/Loan) before
-              adding a new one.
+              Transactions for inactive wallets will still appear in history and reports, but you won't be able to
+              pick this category when adding new transactions there.
             </Text>
           </View>
-        </View>
 
-        <View style={styles.cardMuted}>
-          <Ionicons name="wallet" size={16} color={theme.colors.textMuted} />
-          <Text style={styles.helperText}>
-            New categories are active in all of your current wallets by default.
-          </Text>
+          {accounts.map((account) => {
+            const active = activeIds.includes(account.id);
+            return (
+              <View key={account.id} style={styles.walletRow}>
+                <View style={styles.walletInfo}>
+                  <View style={styles.walletIcon}>
+                    <Ionicons name="card" size={14} color={theme.colors.text} />
+                  </View>
+                  <View>
+                    <Text style={styles.walletName}>{account.name}</Text>
+                    <Text style={styles.walletMeta}>{account.currency}</Text>
+                  </View>
+                </View>
+                <Switch
+                  value={active}
+                  onValueChange={() => toggleAccount(account.id)}
+                  trackColor={{ false: theme.colors.border, true: theme.colors.primary }}
+                  thumbColor={theme.colors.surface}
+                />
+              </View>
+            );
+          })}
         </View>
       </ScrollView>
 
@@ -201,7 +211,7 @@ export default function NewCategoryScreen() {
           disabled={isSaveDisabled}
           onPress={handleSave}
         >
-          <Text style={styles.saveButtonText}>Save</Text>
+          <Text style={styles.saveButtonText}>Save changes</Text>
         </Pressable>
       </View>
     </SafeAreaView>
@@ -234,6 +244,13 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>) =>
       ...theme.typography.title,
       fontSize: 18,
     },
+    missingBox: {
+      margin: theme.spacing.lg,
+      padding: theme.spacing.lg,
+      borderRadius: theme.radii.xl,
+      backgroundColor: theme.colors.surface,
+      gap: theme.spacing.md,
+    },
     content: {
       paddingHorizontal: theme.spacing.lg,
       paddingBottom: theme.spacing.xl,
@@ -249,14 +266,6 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>) =>
       shadowOffset: { width: 0, height: 6 },
       shadowRadius: 10,
       elevation: 3,
-    },
-    cardMuted: {
-      flexDirection: "row",
-      gap: theme.spacing.sm,
-      alignItems: "center",
-      backgroundColor: theme.colors.surfaceAlt,
-      borderRadius: theme.radii.lg,
-      padding: theme.spacing.md,
     },
     cardHeader: {
       gap: theme.spacing.xs,
@@ -316,29 +325,6 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>) =>
       color: theme.colors.text,
       backgroundColor: theme.colors.surfaceAlt,
     },
-    tabRow: {
-      flexDirection: "row",
-      gap: theme.spacing.sm,
-    },
-    tabChip: {
-      flex: 1,
-      paddingVertical: theme.spacing.sm,
-      borderRadius: theme.radii.pill,
-      alignItems: "center",
-      borderWidth: 1,
-      borderColor: theme.colors.border,
-    },
-    tabChipActive: {
-      backgroundColor: `${theme.colors.primary}22`,
-      borderColor: theme.colors.primary,
-    },
-    tabChipText: {
-      fontWeight: "600",
-      color: theme.colors.text,
-    },
-    tabChipTextActive: {
-      color: theme.colors.primary,
-    },
     selectorRow: {
       flexDirection: "row",
       alignItems: "center",
@@ -388,6 +374,33 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>) =>
       flex: 1,
       fontSize: 13,
       lineHeight: 18,
+    },
+    walletRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      paddingVertical: theme.spacing.sm,
+    },
+    walletInfo: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: theme.spacing.md,
+    },
+    walletIcon: {
+      width: 36,
+      height: 36,
+      borderRadius: theme.radii.full,
+      backgroundColor: theme.colors.surfaceAlt,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    walletName: {
+      ...theme.typography.subtitle,
+      fontSize: 14,
+    },
+    walletMeta: {
+      color: theme.colors.textMuted,
+      fontSize: 12,
     },
     footer: {
       padding: theme.spacing.lg,

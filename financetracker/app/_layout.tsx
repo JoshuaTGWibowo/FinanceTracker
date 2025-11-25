@@ -47,6 +47,27 @@ export default function RootLayout() {
           }}
         />
         <Stack.Screen
+          name="categories/[id]"
+          options={{
+            headerShown: false,
+            animation: "slide_from_right",
+          }}
+        />
+        <Stack.Screen
+          name="categories/select-icon"
+          options={{
+            headerShown: false,
+            animation: "fade",
+          }}
+        />
+        <Stack.Screen
+          name="categories/select-parent"
+          options={{
+            headerShown: false,
+            animation: "fade",
+          }}
+        />
+        <Stack.Screen
           name="transactions/new"
           options={{
             presentation: "modal",
