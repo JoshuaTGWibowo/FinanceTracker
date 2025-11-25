@@ -1054,7 +1054,6 @@ export default function TransactionsScreen() {
                   <Pressable
                     style={styles.selectionTile}
                     onPress={() => {
-                      setSearchVisible(false);
                       setCategoryPickerVisible(true);
                     }}
                     accessibilityRole="button"
