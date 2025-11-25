@@ -5,6 +5,7 @@ import {
   type AccountType,
   type BudgetGoal,
   type Category,
+  type CategoryType,
   DEFAULT_ACCOUNT_ID,
   DEFAULT_CATEGORIES,
   type Preferences,
@@ -39,6 +40,14 @@ export interface FinanceState {
   budgetGoals: BudgetGoal[];
   isHydrated: boolean;
   isHydrating: boolean;
+  categoryFormDraft: {
+    id?: string;
+    name: string;
+    type: CategoryType;
+    icon: string;
+    parentCategoryId: string | null;
+    activeAccountIds: string[] | null;
+  } | null;
   hydrateFromDatabase: () => Promise<void>;
   addTransaction: (transaction: Omit<Transaction, "id">) => Promise<void>;
   updateTransaction: (
@@ -60,6 +69,27 @@ export interface FinanceState {
   updateProfile: (payload: Partial<Profile>) => Promise<void>;
   setThemeMode: (mode: ThemeMode) => Promise<void>;
   addCategory: (category: Omit<Category, "id">) => Promise<void>;
+  updateCategory: (id: string, updates: Partial<Omit<Category, "id">>) => Promise<void>;
+  setCategoryFormDraft: (
+    updates: Partial<{
+      id?: string;
+      name: string;
+      type: CategoryType;
+      icon: string;
+      parentCategoryId: string | null;
+      activeAccountIds: string[] | null;
+    }>,
+  ) => void;
+  resetCategoryFormDraft: (
+    initial?: Partial<{
+      id?: string;
+      name: string;
+      type: CategoryType;
+      icon: string;
+      parentCategoryId: string | null;
+      activeAccountIds: string[] | null;
+    }>,
+  ) => void;
   addAccount: (
     account: {
       name: string;
@@ -179,6 +209,7 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
   budgetGoals: [],
   isHydrated: false,
   isHydrating: false,
+  categoryFormDraft: null,
   hydrateFromDatabase: async () => {
     if (get().isHydrated || get().isHydrating) {
       return;
@@ -493,6 +524,40 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
       },
     }));
   },
+  setCategoryFormDraft: (updates) =>
+    set((state) => {
+      const activeAccounts = state.accounts.filter((account) => !account.isArchived);
+      const baseDraft =
+        state.categoryFormDraft ?? {
+          id: undefined,
+          name: "",
+          type: "expense" as CategoryType,
+          icon: "pricetag",
+          parentCategoryId: null,
+          activeAccountIds: activeAccounts.map((account) => account.id),
+        };
+
+      return {
+        categoryFormDraft: {
+          ...baseDraft,
+          ...updates,
+        },
+      };
+    }),
+  resetCategoryFormDraft: (initial) =>
+    set((state) => {
+      const activeAccounts = state.accounts.filter((account) => !account.isArchived);
+      return {
+        categoryFormDraft: {
+          id: initial?.id,
+          name: initial?.name ?? "",
+          type: initial?.type ?? (state.categoryFormDraft?.type ?? "expense"),
+          icon: initial?.icon ?? "pricetag",
+          parentCategoryId: initial?.parentCategoryId ?? null,
+          activeAccountIds: initial?.activeAccountIds ?? activeAccounts.map((account) => account.id),
+        },
+      };
+    }),
   addAccount: async ({ name, type, currency, initialBalance, excludeFromTotal }) => {
     const state = get();
     const value = name.trim();
@@ -620,17 +685,54 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
       return;
     }
 
-    const entry = { id, name: value, type: category.type };
+    const activeAccounts = get().accounts.filter((account) => !account.isArchived);
+    const entry: Category = {
+      id,
+      name: value,
+      type: category.type as CategoryType,
+      icon: category.icon ?? "pricetag",
+      parentCategoryId: category.parentCategoryId ?? null,
+      activeAccountIds: category.activeAccountIds ?? activeAccounts.map((account) => account.id),
+    };
 
     await saveCategory(entry);
 
     set((state) => ({
       preferences: {
         ...state.preferences,
-        categories: [
-          ...state.preferences.categories,
-          entry,
-        ],
+        categories: [...state.preferences.categories, entry],
+      },
+    }));
+  },
+  updateCategory: async (id, updates) => {
+    const existing = get().preferences.categories.find((category) => category.id === id);
+    if (!existing) {
+      return;
+    }
+
+    const activeAccounts = get().accounts.filter((account) => !account.isArchived);
+    const normalizedName = updates.name?.trim();
+    const normalizedActiveAccounts =
+      updates.activeAccountIds !== undefined
+        ? updates.activeAccountIds
+        : existing.activeAccountIds ?? activeAccounts.map((account) => account.id);
+
+    const next: Category = {
+      ...existing,
+      ...updates,
+      name: normalizedName ?? existing.name,
+      parentCategoryId:
+        updates.parentCategoryId === undefined ? existing.parentCategoryId ?? null : updates.parentCategoryId,
+      icon: updates.icon ?? existing.icon ?? "pricetag",
+      activeAccountIds: normalizedActiveAccounts,
+    };
+
+    await saveCategory(next);
+
+    set((state) => ({
+      preferences: {
+        ...state.preferences,
+        categories: state.preferences.categories.map((category) => (category.id === id ? next : category)),
       },
     }));
   },

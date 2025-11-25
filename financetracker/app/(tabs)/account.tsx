@@ -13,6 +13,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 
 import { useAppTheme } from "../../theme";
@@ -20,7 +21,6 @@ import {
   Account,
   AccountType,
   ThemeMode,
-  TransactionType,
   useFinanceStore,
 } from "../../lib/store";
 
@@ -43,11 +43,11 @@ const formatCurrency = (value: number, currency: string) =>
 
 export default function AccountScreen() {
   const theme = useAppTheme();
+  const router = useRouter();
   const profile = useFinanceStore((state) => state.profile);
   const updateProfile = useFinanceStore((state) => state.updateProfile);
   const themeMode = useFinanceStore((state) => state.preferences.themeMode);
   const setThemeMode = useFinanceStore((state) => state.setThemeMode);
-  const addCategory = useFinanceStore((state) => state.addCategory);
   const categories = useFinanceStore((state) => state.preferences.categories);
   const budgetGoals = useFinanceStore((state) => state.budgetGoals);
   const addBudgetGoal = useFinanceStore((state) => state.addBudgetGoal);
@@ -62,12 +62,10 @@ export default function AccountScreen() {
 
   const [name, setName] = useState(profile.name);
   const [currency, setCurrency] = useState(profile.currency);
-  const [newCategory, setNewCategory] = useState("");
   const [goalName, setGoalName] = useState("");
   const [goalTarget, setGoalTarget] = useState("");
   const [goalPeriod, setGoalPeriod] = useState<(typeof goalPeriods)[number]>("month");
   const [goalCategory, setGoalCategory] = useState<string | null>(null);
-  const [newCategoryType, setNewCategoryType] = useState<TransactionType>("expense");
   const [accountModalVisible, setAccountModalVisible] = useState(false);
   const [editingAccountId, setEditingAccountId] = useState<string | null>(null);
   const [accountFormName, setAccountFormName] = useState("");
@@ -98,19 +96,6 @@ export default function AccountScreen() {
 
     await updateProfile({ name: name.trim(), currency: currency.trim().toUpperCase() });
     Alert.alert("Saved", "Profile updated successfully.");
-  };
-
-  const handleAddCategory = async () => {
-    if (!newCategory.trim()) {
-      Alert.alert("Heads up", "Add a category label before saving.");
-      return;
-    }
-
-    const value = newCategory.trim();
-    await addCategory({ name: value, type: newCategoryType });
-    setGoalCategory(value);
-    setNewCategory("");
-    setNewCategoryType("expense");
   };
 
   const handleCreateGoal = async () => {
@@ -350,6 +335,22 @@ export default function AccountScreen() {
           </View>
 
           <View style={[theme.components.surface, styles.sectionCard]}>
+            <Text style={styles.sectionTitle}>Manage</Text>
+            <Pressable style={styles.linkRow} onPress={() => router.push("/categories")}>
+              <View style={styles.linkRowContent}>
+                <View style={styles.linkIcon}>
+                  <Ionicons name="pricetags-outline" size={18} color={theme.colors.primary} />
+                </View>
+                <View style={styles.flex}>
+                  <Text style={styles.linkTitle}>Categories</Text>
+                  <Text style={styles.linkSubtitle}>View and manage expense, income, and debt lists.</Text>
+                </View>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={theme.colors.textMuted} />
+            </Pressable>
+          </View>
+
+          <View style={[theme.components.surface, styles.sectionCard]}>
             <Text style={styles.sectionTitle}>Developer Tools</Text>
             <Text style={styles.sectionSubtitle}>
               Testing utilities for development and debugging.
@@ -446,51 +447,6 @@ export default function AccountScreen() {
                 ))}
               </View>
             )}
-          </View>
-
-          <View style={[theme.components.surface, styles.sectionCard]}>
-            <Text style={styles.sectionTitle}>Custom categories</Text>
-            <View style={styles.fieldGroup}>
-              <Text style={styles.label}>Add new category</Text>
-              <View style={styles.row}>
-                <TextInput
-                  value={newCategory}
-                  onChangeText={setNewCategory}
-                  placeholder="e.g. Wellness"
-                  placeholderTextColor={theme.colors.textMuted}
-                  style={[styles.input, styles.flex]}
-                />
-                <Pressable style={styles.secondaryButton} onPress={handleAddCategory}>
-                  <Text style={styles.secondaryButtonText}>Add</Text>
-                </Pressable>
-              </View>
-              <View style={styles.themeRow}>
-                {(["expense", "income"] as TransactionType[]).map((type) => {
-                  const active = newCategoryType === type;
-                  return (
-                    <Pressable
-                      key={type}
-                      style={[styles.themeChip, active && styles.themeChipActive]}
-                      onPress={() => setNewCategoryType(type)}
-                    >
-                      <Text style={[styles.themeChipText, active && styles.themeChipTextActive]}>
-                        {type === "expense" ? "Expense" : "Income"}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-            </View>
-            <View style={styles.chipCloud}>
-              {categories.map((category) => (
-                <View key={category.id} style={styles.categoryPill}>
-                  <Text style={styles.categoryPillText}>{category.name}</Text>
-                  <Text style={styles.categoryTypeBadge}>
-                    {category.type === "expense" ? "Expense" : "Income"}
-                  </Text>
-                </View>
-              ))}
-            </View>
           </View>
 
           <View style={[theme.components.surface, styles.sectionCard]}>
@@ -928,33 +884,35 @@ const createStyles = (
       justifyContent: "space-between",
       gap: theme.spacing.md,
     },
-    chipCloud: {
+    linkRow: {
       flexDirection: "row",
-      flexWrap: "wrap",
-      gap: theme.spacing.sm,
+      alignItems: "center",
+      justifyContent: "space-between",
+      paddingVertical: theme.spacing.md,
+      gap: theme.spacing.md,
     },
-    categoryPill: {
-      paddingHorizontal: theme.spacing.md,
-      paddingVertical: theme.spacing.xs,
+    linkRowContent: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: theme.spacing.md,
+      flex: 1,
+    },
+    linkIcon: {
+      width: 40,
+      height: 40,
       borderRadius: theme.radii.lg,
-      backgroundColor: theme.colors.surface,
-      borderWidth: 1,
-      borderColor: theme.colors.border,
-      minWidth: 100,
-      gap: 2,
+      backgroundColor: `${theme.colors.primary}22`,
+      alignItems: "center",
+      justifyContent: "center",
     },
-    categoryPillText: {
-      fontSize: 12,
-      fontWeight: "600",
-      color: theme.colors.text,
+    linkTitle: {
+      ...theme.typography.subtitle,
+      fontSize: 15,
     },
-    categoryTypeBadge: {
-      marginTop: 2,
-      fontSize: 10,
-      fontWeight: "600",
+    linkSubtitle: {
       color: theme.colors.textMuted,
-      textTransform: "uppercase",
-      letterSpacing: 1,
+      fontSize: 13,
+      marginTop: 2,
     },
     periodField: {
       maxWidth: 150,

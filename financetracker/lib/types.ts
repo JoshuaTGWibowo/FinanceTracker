@@ -1,5 +1,7 @@
 export type TransactionType = "income" | "expense" | "transfer";
 
+export type CategoryType = "expense" | "income" | "debt";
+
 export type AccountType = "cash" | "bank" | "card" | "investment";
 
 export interface Account {
@@ -32,39 +34,90 @@ export interface Transaction {
 export interface Category {
   id: string;
   name: string;
-  type: TransactionType;
+  type: CategoryType;
+  icon?: string | null;
+  parentCategoryId?: string | null;
+  activeAccountIds?: string[] | null;
 }
 
 export const DEFAULT_CATEGORIES: Category[] = [
-  { id: "cat-food-expense", name: "Food", type: "expense" },
-  { id: "cat-groceries-expense", name: "Groceries", type: "expense" },
-  { id: "cat-dining-expense", name: "Dining", type: "expense" },
-  { id: "cat-lifestyle-expense", name: "Lifestyle", type: "expense" },
-  { id: "cat-fitness-expense", name: "Fitness", type: "expense" },
-  { id: "cat-travel-expense", name: "Travel", type: "expense" },
-  { id: "cat-transport-expense", name: "Transport", type: "expense" },
-  { id: "cat-home-expense", name: "Home", type: "expense" },
-  { id: "cat-bills-expense", name: "Bills", type: "expense" },
-  { id: "cat-gear-expense", name: "Gear", type: "expense" },
-  { id: "cat-creativity-expense", name: "Creativity", type: "expense" },
-  { id: "cat-outdoors-expense", name: "Outdoors", type: "expense" },
-  { id: "cat-work-expense", name: "Work Expenses", type: "expense" },
-  { id: "cat-entertainment-expense", name: "Entertainment", type: "expense" },
-  { id: "cat-pets-expense", name: "Pets", type: "expense" },
-  { id: "cat-family-expense", name: "Family", type: "expense" },
-  { id: "cat-health-expense", name: "Health", type: "expense" },
-  { id: "cat-education-expense", name: "Education", type: "expense" },
-  { id: "cat-utilities-expense", name: "Utilities", type: "expense" },
-  { id: "cat-rent-expense", name: "Rent", type: "expense" },
-  { id: "cat-side-hustle-income", name: "Side Hustle", type: "income" },
-  { id: "cat-client-work-income", name: "Client Work", type: "income" },
-  { id: "cat-salary-income", name: "Salary", type: "income" },
-  { id: "cat-consulting-income", name: "Consulting", type: "income" },
-  { id: "cat-resale-income", name: "Resale", type: "income" },
-  { id: "cat-creative-sales-income", name: "Creative Sales", type: "income" },
-  { id: "cat-investing-income", name: "Investing", type: "income" },
-  { id: "cat-bonus-income", name: "Bonus", type: "income" },
-  { id: "cat-dividends-income", name: "Dividends", type: "income" },
+  { id: "cat-food-expense", name: "Food", type: "expense", icon: "restaurant" },
+  {
+    id: "cat-groceries-expense",
+    name: "Groceries",
+    type: "expense",
+    icon: "cart",
+    parentCategoryId: "cat-food-expense",
+  },
+  {
+    id: "cat-dining-expense",
+    name: "Dining",
+    type: "expense",
+    icon: "fast-food",
+    parentCategoryId: "cat-food-expense",
+  },
+  { id: "cat-lifestyle-expense", name: "Lifestyle", type: "expense", icon: "sparkles" },
+  {
+    id: "cat-fitness-expense",
+    name: "Fitness",
+    type: "expense",
+    icon: "barbell",
+    parentCategoryId: "cat-lifestyle-expense",
+  },
+  {
+    id: "cat-entertainment-expense",
+    name: "Entertainment",
+    type: "expense",
+    icon: "film",
+    parentCategoryId: "cat-lifestyle-expense",
+  },
+  { id: "cat-travel-expense", name: "Travel", type: "expense", icon: "airplane" },
+  {
+    id: "cat-transport-expense",
+    name: "Transport",
+    type: "expense",
+    icon: "car",
+    parentCategoryId: "cat-travel-expense",
+  },
+  { id: "cat-home-expense", name: "Home", type: "expense", icon: "home" },
+  {
+    id: "cat-bills-expense",
+    name: "Bills",
+    type: "expense",
+    icon: "file-tray-full",
+    parentCategoryId: "cat-home-expense",
+  },
+  {
+    id: "cat-utilities-expense",
+    name: "Utilities",
+    type: "expense",
+    icon: "flash",
+    parentCategoryId: "cat-home-expense",
+  },
+  {
+    id: "cat-rent-expense",
+    name: "Rent",
+    type: "expense",
+    icon: "business",
+    parentCategoryId: "cat-home-expense",
+  },
+  { id: "cat-gear-expense", name: "Gear", type: "expense", icon: "hardware-chip" },
+  { id: "cat-creativity-expense", name: "Creativity", type: "expense", icon: "color-palette" },
+  { id: "cat-outdoors-expense", name: "Outdoors", type: "expense", icon: "leaf" },
+  { id: "cat-work-expense", name: "Work Expenses", type: "expense", icon: "briefcase" },
+  { id: "cat-pets-expense", name: "Pets", type: "expense", icon: "paw" },
+  { id: "cat-family-expense", name: "Family", type: "expense", icon: "people" },
+  { id: "cat-health-expense", name: "Health", type: "expense", icon: "medkit" },
+  { id: "cat-education-expense", name: "Education", type: "expense", icon: "school" },
+  { id: "cat-side-hustle-income", name: "Side Hustle", type: "income", icon: "rocket" },
+  { id: "cat-client-work-income", name: "Client Work", type: "income", icon: "briefcase-outline" },
+  { id: "cat-salary-income", name: "Salary", type: "income", icon: "cash" },
+  { id: "cat-consulting-income", name: "Consulting", type: "income", icon: "chatbubbles" },
+  { id: "cat-resale-income", name: "Resale", type: "income", icon: "swap-horizontal" },
+  { id: "cat-creative-sales-income", name: "Creative Sales", type: "income", icon: "brush" },
+  { id: "cat-investing-income", name: "Investing", type: "income", icon: "trending-up" },
+  { id: "cat-bonus-income", name: "Bonus", type: "income", icon: "gift" },
+  { id: "cat-dividends-income", name: "Dividends", type: "income", icon: "pie-chart" },
 ];
 
 export const DEFAULT_ACCOUNT_ID = "account-main";

@@ -17,7 +17,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import dayjs, { type Dayjs } from "dayjs";
 
 import { useAppTheme } from "../../theme";
-import { Transaction, useFinanceStore } from "../../lib/store";
+import { Category, Transaction, TransactionType, useFinanceStore } from "../../lib/store";
 import {
   filterTransactionsByAccount,
   getTransactionDelta,
@@ -99,6 +99,9 @@ const formatPercentage = (current: number, previous: number): string => {
   return `${change >= 0 ? "+" : ""}${change.toFixed(1)}%`;
 };
 
+const toIconName = (value?: string | null) =>
+  (value as keyof typeof Ionicons.glyphMap) || ("pricetag" as keyof typeof Ionicons.glyphMap);
+
 export default function TransactionsScreen() {
   const theme = useAppTheme();
   const transactions = useFinanceStore((state) => state.transactions);
@@ -164,7 +167,12 @@ export default function TransactionsScreen() {
   const [filtersExpanded, setFiltersExpanded] = useState(false);
   const [minAmount, setMinAmount] = useState("");
   const [maxAmount, setMaxAmount] = useState("");
-  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
+  const [categoryTypeFilter, setCategoryTypeFilter] = useState<
+    Extract<TransactionType, "expense" | "income"> | null
+  >(null);
+  const [categoryPickerVisible, setCategoryPickerVisible] = useState(false);
+  const [categorySearch, setCategorySearch] = useState("");
   const [startDate, setStartDate] = useState<Dayjs | null>(null);
   const [endDate, setEndDate] = useState<Dayjs | null>(null);
   const [showStartPicker, setShowStartPicker] = useState(false);
@@ -187,14 +195,12 @@ export default function TransactionsScreen() {
     }
 
     const normalized = Array.from(new Set(sanitized));
-
-    setSelectedCategories((prev) => {
-      if (prev.length === normalized.length && prev.every((value, index) => value === normalized[index])) {
-        return prev;
-      }
-      return normalized;
-    });
-  }, [categoryParam]);
+    const match = categories.find((category) => normalized.includes(category.name));
+    if (match) {
+      setSelectedCategoryId(match.id);
+      setCategoryTypeFilter(normalizeCategoryType(match.type));
+    }
+  }, [categories, categoryParam]);
 
   const insets = useSafeAreaInsets();
   const styles = useMemo(() => createStyles(theme, insets), [theme, insets]);
@@ -217,20 +223,71 @@ export default function TransactionsScreen() {
     [accountLookup],
   );
 
-  const toggleCategory = (category: string) => {
-    setSelectedCategories((prev) =>
-      prev.includes(category)
-        ? prev.filter((item) => item !== category)
-        : [...prev, category],
+  const normalizeCategoryType = (type?: Category["type"]): Extract<TransactionType, "expense" | "income"> =>
+    type === "income" ? "income" : "expense";
+
+  const selectedCategory = useMemo(
+    () => (selectedCategoryId ? categories.find((category) => category.id === selectedCategoryId) ?? null : null),
+    [categories, selectedCategoryId],
+  );
+
+  useEffect(() => {
+    if (selectedCategory && categoryTypeFilter) {
+      const derived = normalizeCategoryType(selectedCategory.type);
+      if (derived !== categoryTypeFilter) {
+        setSelectedCategoryId(null);
+      }
+    }
+  }, [categoryTypeFilter, selectedCategory]);
+
+  const filteredCategoriesForPicker = useMemo(() => {
+    const query = categorySearch.trim().toLowerCase();
+    const matchesSearch = (category: Category) =>
+      query ? category.name.toLowerCase().includes(query) : true;
+
+    const typeFiltered = categoryTypeFilter
+      ? categories.filter((category) => normalizeCategoryType(category.type) === categoryTypeFilter)
+      : categories;
+
+    const childrenMap = new Map<string, Category[]>();
+
+    typeFiltered.forEach((category) => {
+      if (category.parentCategoryId) {
+        const children = childrenMap.get(category.parentCategoryId) ?? [];
+        children.push(category);
+        childrenMap.set(category.parentCategoryId, children);
+      }
+    });
+
+    const parents = typeFiltered.filter((category) => !category.parentCategoryId);
+    const orphans = typeFiltered.filter(
+      (category) => category.parentCategoryId && !parents.find((parent) => parent.id === category.parentCategoryId),
     );
-  };
+
+    return [
+      ...parents.map((parent) => ({ parent, children: childrenMap.get(parent.id) ?? [] })),
+      ...orphans.map((parent) => ({ parent, children: [] })),
+    ]
+      .map((group) => {
+        const visibleChildren = query ? group.children.filter((child) => matchesSearch(child)) : group.children;
+        return {
+          ...group,
+          children: visibleChildren,
+          visible: matchesSearch(group.parent) || visibleChildren.length > 0,
+        };
+      })
+      .filter((group) => group.visible)
+      .sort((a, b) => a.parent.name.localeCompare(b.parent.name));
+  }, [categories, categorySearch, categoryTypeFilter]);
 
   const clearFilters = () => {
     setSearchTerm("");
     setDraftSearchTerm("");
     setMinAmount("");
     setMaxAmount("");
-    setSelectedCategories([]);
+    setSelectedCategoryId(null);
+    setCategoryTypeFilter(null);
+    setCategorySearch("");
     setStartDate(null);
     setEndDate(null);
   };
@@ -243,6 +300,8 @@ export default function TransactionsScreen() {
 
   const closeSearch = () => {
     setSearchVisible(false);
+    setCategoryPickerVisible(false);
+    setCategorySearch("");
     setDraftSearchTerm(searchTerm);
     setShowStartPicker(false);
     setShowEndPicker(false);
@@ -283,11 +342,23 @@ export default function TransactionsScreen() {
     if (endDate) {
       filters.push({ key: "end", label: endDate.format("MMM D"), type: "end" });
     }
-    selectedCategories.forEach((category) => {
-      filters.push({ key: `cat-${category}`, label: category, type: "category", value: category });
-    });
+    if (categoryTypeFilter) {
+      filters.push({
+        key: `type-${categoryTypeFilter}`,
+        label: categoryTypeFilter === "income" ? "Income" : "Expense",
+        type: "categoryType",
+      });
+    }
+    if (selectedCategory) {
+      filters.push({
+        key: `cat-${selectedCategory.id}`,
+        label: selectedCategory.name,
+        type: "category",
+        value: selectedCategory.id,
+      });
+    }
     return filters;
-  }, [currency, endDate, maxAmount, minAmount, searchTerm, selectedCategories, startDate]);
+  }, [categoryTypeFilter, currency, endDate, maxAmount, minAmount, searchTerm, selectedCategory, startDate]);
 
   const hasActiveFilters = activeFilters.length > 0;
 
@@ -334,7 +405,11 @@ export default function TransactionsScreen() {
       if (maxAmountValue !== undefined && amount > maxAmountValue) return false;
       
       // Category filter
-      if (selectedCategories.length && !selectedCategories.includes(transaction.category)) {
+      if (categoryTypeFilter && transaction.type !== categoryTypeFilter) {
+        return false;
+      }
+
+      if (selectedCategory && transaction.category !== selectedCategory.name) {
         return false;
       }
       
@@ -497,7 +572,8 @@ export default function TransactionsScreen() {
     recurringTransactions,
     searchTerm,
     selectedPeriod,
-    selectedCategories,
+    categoryTypeFilter,
+    selectedCategory,
     selectedAccountId,
     startDate,
     transactions,
@@ -672,11 +748,8 @@ export default function TransactionsScreen() {
                         else if (filter.type === "max") setMaxAmount("");
                         else if (filter.type === "start") setStartDate(null);
                         else if (filter.type === "end") setEndDate(null);
-                        else if (filter.type === "category" && filter.value) {
-                          setSelectedCategories((prev) =>
-                            prev.filter((c) => c !== filter.value),
-                          );
-                        }
+                        else if (filter.type === "category") setSelectedCategoryId(null);
+                        else if (filter.type === "categoryType") setCategoryTypeFilter(null);
                       }}
                       style={styles.filterChipClose}
                     >
@@ -948,22 +1021,69 @@ export default function TransactionsScreen() {
                   </Pressable>
                 </View>
 
-                <Text style={styles.filterSectionTitle}>Categories</Text>
-                <View style={styles.categoryGrid}>
-                  {categories.map((category) => {
-                    const selected = selectedCategories.includes(category.name);
-                    return (
-                      <Pressable
-                        key={category.id}
-                        onPress={() => toggleCategory(category.name)}
-                        style={styles.categoryOption(selected)}
-                      >
-                        <Text style={styles.categoryOptionText(selected)}>
-                          {category.name}
+                <Text style={styles.filterSectionTitle}>Type & category</Text>
+                <View style={styles.filterCard}>
+                  <View style={styles.filterRowHeader}>
+                    <Text style={styles.filterCardTitle}>Focus your search</Text>
+                    <Ionicons name="pricetag" size={18} color={theme.colors.textMuted} />
+                  </View>
+                  <View style={styles.typeRow}>
+                    {(["expense", "income"] as Extract<TransactionType, "expense" | "income">[]).map(
+                      (typeOption) => {
+                        const active = categoryTypeFilter === typeOption;
+                        return (
+                          <Pressable
+                            key={typeOption}
+                            style={styles.typeChip(active, typeOption)}
+                            onPress={() => {
+                              setCategoryTypeFilter(active ? null : typeOption);
+                              if (selectedCategory && normalizeCategoryType(selectedCategory.type) !== typeOption) {
+                                setSelectedCategoryId(null);
+                              }
+                            }}
+                          >
+                            <Text style={styles.typeChipText(active)}>
+                              {typeOption === "expense" ? "Expense" : "Income"}
+                            </Text>
+                          </Pressable>
+                        );
+                      },
+                    )}
+                  </View>
+
+                  <Pressable
+                    style={styles.selectionTile}
+                    onPress={() => {
+                      setSearchVisible(false);
+                      setCategoryPickerVisible(true);
+                    }}
+                    accessibilityRole="button"
+                  >
+                    <View style={styles.selectionTileInfo}>
+                      <Text style={styles.selectionLabel}>Category</Text>
+                      <Text style={styles.selectionValue}>
+                        {selectedCategory ? selectedCategory.name : "Any category"}
+                      </Text>
+                    </View>
+                    <View style={styles.selectionIcon}>
+                      <Ionicons name="chevron-forward" size={20} color={theme.colors.text} />
+                    </View>
+                  </Pressable>
+
+                  {selectedCategory && (
+                    <View style={styles.selectionBadgeRow}>
+                      <View style={styles.typeBadge(normalizeCategoryType(selectedCategory.type))}>
+                        <Ionicons
+                          name={normalizeCategoryType(selectedCategory.type) === "income" ? "arrow-down-circle" : "arrow-up-circle"}
+                          size={14}
+                          color={theme.colors.text}
+                        />
+                        <Text style={styles.typeBadgeText}>
+                          {normalizeCategoryType(selectedCategory.type) === "income" ? "Income" : "Expense"}
                         </Text>
-                      </Pressable>
-                    );
-                  })}
+                      </View>
+                    </View>
+                  )}
                 </View>
               </View>
             )}
@@ -994,6 +1114,175 @@ export default function TransactionsScreen() {
               <Text style={styles.primaryButtonText}>Apply</Text>
             </Pressable>
           </View>
+        </SafeAreaView>
+      </Modal>
+
+      <Modal
+        visible={categoryPickerVisible}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => {
+          setCategoryPickerVisible(false);
+          setCategorySearch("");
+          setSearchVisible(true);
+        }}
+      >
+        <SafeAreaView style={styles.modal}>
+          <View style={styles.modalHeader}>
+            <Pressable
+              onPress={() => {
+                setCategoryPickerVisible(false);
+                setCategorySearch("");
+                setSearchVisible(true);
+              }}
+              style={styles.modalClose}
+            >
+              <Ionicons name="close" size={24} color={theme.colors.text} />
+            </Pressable>
+            <Text style={styles.modalTitle}>Select category</Text>
+            <View style={styles.modalSpacer} />
+          </View>
+
+          <ScrollView
+            contentContainerStyle={styles.categoryPickerContent}
+            showsVerticalScrollIndicator={false}
+          >
+            <View style={styles.categoryHeroCard}>
+              <View>
+                <Text style={styles.heroLabel}>Filter by type</Text>
+                <Text style={styles.heroHint}>Choose a type and a category to sharpen results.</Text>
+              </View>
+              <View style={styles.typeRow}>
+                {(["expense", "income"] as Extract<TransactionType, "expense" | "income">[]).map(
+                  (typeOption) => {
+                    const active = categoryTypeFilter === typeOption;
+                    return (
+                      <Pressable
+                        key={typeOption}
+                        style={styles.typeChip(active, typeOption)}
+                        onPress={() => {
+                          setCategoryTypeFilter(active ? null : typeOption);
+                          setCategorySearch("");
+                          if (
+                            selectedCategory &&
+                            normalizeCategoryType(selectedCategory.type) !== typeOption
+                          ) {
+                            setSelectedCategoryId(null);
+                          }
+                        }}
+                      >
+                        <Text style={styles.typeChipText(active)}>
+                          {typeOption === "expense" ? "Expense" : "Income"}
+                        </Text>
+                      </Pressable>
+                    );
+                  },
+                )}
+              </View>
+            </View>
+
+            <View style={styles.categorySearchRow}>
+              <Ionicons name="search" size={16} color={theme.colors.textMuted} />
+              <TextInput
+                value={categorySearch}
+                onChangeText={setCategorySearch}
+                placeholder="Search categories"
+                placeholderTextColor={theme.colors.textMuted}
+                style={styles.categorySearchInput}
+              />
+              {categorySearch ? (
+                <Pressable onPress={() => setCategorySearch("")}>
+                  <Ionicons name="close" size={16} color={theme.colors.textMuted} />
+                </Pressable>
+              ) : null}
+            </View>
+
+            <View style={styles.categoryGroupGrid}>
+              {filteredCategoriesForPicker.length === 0 ? (
+                <Text style={styles.emptyText}>No categories match your filters yet.</Text>
+              ) : (
+                filteredCategoriesForPicker.map((group) => {
+                  const iconName = toIconName(group.parent.icon);
+                  const isSelected = selectedCategory?.id === group.parent.id;
+                  return (
+                    <View key={group.parent.id} style={styles.categoryGroupCard}>
+                      <Pressable
+                        style={styles.parentRow}
+                        onPress={() => {
+                          setSelectedCategoryId(group.parent.id);
+                          setCategoryTypeFilter(normalizeCategoryType(group.parent.type));
+                          setCategoryPickerVisible(false);
+                          setCategorySearch("");
+                          setSearchVisible(true);
+                        }}
+                      >
+                        <View style={styles.avatarCircle}>
+                          <Ionicons name={iconName} size={18} color={theme.colors.text} />
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.parentName}>{group.parent.name}</Text>
+                          <Text style={styles.metaText}>Tap to filter by this category</Text>
+                        </View>
+                        {isSelected ? (
+                          <Ionicons name="checkmark-circle" size={18} color={theme.colors.primary} />
+                        ) : (
+                          <Ionicons name="chevron-forward" size={18} color={theme.colors.textMuted} />
+                        )}
+                      </Pressable>
+
+                      {group.children.length > 0 ? (
+                        <View style={styles.childrenList}>
+                          {group.children.map((child, index) => {
+                            const isLast = index === group.children.length - 1;
+                            const childIcon = toIconName(child.icon);
+                            const childSelected = selectedCategory?.id === child.id;
+                            return (
+                              <Pressable
+                                key={child.id}
+                                style={styles.childRow}
+                                onPress={() => {
+                                  setSelectedCategoryId(child.id);
+                                  setCategoryTypeFilter(normalizeCategoryType(child.type));
+                                  setCategoryPickerVisible(false);
+                                  setCategorySearch("");
+                                  setSearchVisible(true);
+                                }}
+                              >
+                                <View style={styles.connectorColumn}>
+                                  <View style={[styles.connectorLine, isLast && styles.connectorLineEnd]} />
+                                  <View style={styles.connectorDot} />
+                                </View>
+                                <View style={styles.childAvatar}>
+                                  <Ionicons name={childIcon} size={14} color={theme.colors.text} />
+                                </View>
+                                <View style={{ flex: 1 }}>
+                                  <Text style={styles.childName}>{child.name}</Text>
+                                  <Text style={styles.metaText}>Child category</Text>
+                                </View>
+                                {childSelected ? (
+                                  <Ionicons
+                                    name="checkmark-circle"
+                                    size={18}
+                                    color={theme.colors.primary}
+                                  />
+                                ) : (
+                                  <Ionicons
+                                    name="chevron-forward"
+                                    size={16}
+                                    color={theme.colors.textMuted}
+                                  />
+                                )}
+                              </Pressable>
+                            );
+                          })}
+                        </View>
+                      ) : null}
+                    </View>
+                  );
+                })
+              )}
+            </View>
+          </ScrollView>
         </SafeAreaView>
       </Modal>
 
@@ -1584,24 +1873,225 @@ const createStyles = (theme: any, insets: any) =>
       fontSize: 15,
       color: theme.colors.text,
     },
-    categoryGrid: {
+    filterCard: {
+      backgroundColor: theme.colors.surface,
+      borderRadius: 16,
+      padding: 14,
+      gap: 12,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+    },
+    filterRowHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+    },
+    filterCardTitle: {
+      fontSize: 16,
+      fontWeight: "700",
+      color: theme.colors.text,
+    },
+    typeRow: {
       flexDirection: "row",
       flexWrap: "wrap",
       gap: 8,
     },
-    categoryOption: (selected: boolean) => ({
-      paddingHorizontal: 14,
-      paddingVertical: 8,
+    typeChip: (active: boolean, type: TransactionType) => ({
+      paddingHorizontal: 16,
+      paddingVertical: 10,
       borderRadius: 20,
-      backgroundColor: selected ? theme.colors.primaryMuted : theme.colors.surface,
       borderWidth: 1,
-      borderColor: selected ? theme.colors.primaryMuted : theme.colors.border,
+      borderColor: active ? theme.colors.primary : theme.colors.border,
+      backgroundColor: active
+        ? type === "income"
+          ? `${theme.colors.success}22`
+          : `${theme.colors.danger}22`
+        : theme.colors.surface,
     }),
-    categoryOptionText: (selected: boolean) => ({
-      fontSize: 13,
+    typeChipText: (active: boolean) => ({
+      fontSize: 14,
+      fontWeight: "700",
+      color: active ? theme.colors.text : theme.colors.textMuted,
+    }),
+    selectionTile: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      borderRadius: 14,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      backgroundColor: theme.colors.surfaceElevated,
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      gap: 12,
+    },
+    selectionTileInfo: {
+      flex: 1,
+      gap: 4,
+    },
+    selectionLabel: {
+      fontSize: 12,
+      textTransform: "uppercase",
+      letterSpacing: 1,
+      color: theme.colors.textMuted,
+    },
+    selectionValue: {
+      fontSize: 15,
       fontWeight: "600",
-      color: selected ? "#fff" : theme.colors.text,
+      color: theme.colors.text,
+    },
+    selectionIcon: {
+      width: 32,
+      height: 32,
+      borderRadius: 10,
+      backgroundColor: theme.colors.surface,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    selectionBadgeRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+    },
+    typeBadge: (type: Extract<TransactionType, "income" | "expense">) => ({
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+      borderRadius: 12,
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      backgroundColor:
+        type === "income" ? `${theme.colors.success}22` : `${theme.colors.danger}22`,
     }),
+    typeBadgeText: {
+      fontSize: 12,
+      fontWeight: "700",
+      color: theme.colors.text,
+    },
+    categoryPickerContent: {
+      padding: 16,
+      paddingBottom: insets.bottom + 16,
+      gap: 12,
+    },
+    categoryHeroCard: {
+      backgroundColor: theme.colors.surface,
+      borderRadius: 16,
+      padding: 16,
+      gap: 12,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      shadowColor: theme.colors.background,
+      shadowOpacity: 0.08,
+      shadowOffset: { width: 0, height: 6 },
+    },
+    heroLabel: {
+      fontSize: 12,
+      letterSpacing: 1,
+      textTransform: "uppercase",
+      color: theme.colors.textMuted,
+    },
+    heroHint: {
+      fontSize: 16,
+      fontWeight: "700",
+      color: theme.colors.text,
+    },
+    categorySearchRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 10,
+      borderRadius: 14,
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+      backgroundColor: theme.colors.surface,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+    },
+    categorySearchInput: {
+      flex: 1,
+      fontSize: 15,
+      color: theme.colors.text,
+    },
+    categoryGroupGrid: {
+      gap: 12,
+    },
+    categoryGroupCard: {
+      backgroundColor: theme.colors.surface,
+      borderRadius: 16,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      padding: 12,
+      gap: 10,
+      shadowColor: theme.colors.background,
+      shadowOpacity: 0.05,
+      shadowOffset: { width: 0, height: 4 },
+    },
+    parentRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+    },
+    avatarCircle: {
+      width: 42,
+      height: 42,
+      borderRadius: 16,
+      backgroundColor: theme.colors.surfaceElevated,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    parentName: {
+      fontSize: 16,
+      fontWeight: "700",
+      color: theme.colors.text,
+    },
+    metaText: {
+      fontSize: 12,
+      color: theme.colors.textMuted,
+    },
+    childrenList: {
+      marginLeft: 8,
+      gap: 8,
+    },
+    childRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+      paddingVertical: 6,
+      paddingHorizontal: 4,
+      borderRadius: 10,
+    },
+    connectorColumn: {
+      width: 18,
+      alignItems: "center",
+    },
+    connectorLine: {
+      width: 2,
+      flex: 1,
+      backgroundColor: theme.colors.border,
+      marginBottom: 4,
+      borderRadius: 4,
+    },
+    connectorLineEnd: {
+      height: 10,
+    },
+    connectorDot: {
+      width: 10,
+      height: 10,
+      borderRadius: 6,
+      backgroundColor: theme.colors.border,
+    },
+    childAvatar: {
+      width: 34,
+      height: 34,
+      borderRadius: 12,
+      backgroundColor: theme.colors.surfaceElevated,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    childName: {
+      fontSize: 14,
+      fontWeight: "700",
+      color: theme.colors.text,
+    },
     toggleFilters: {
       flexDirection: "row",
       alignItems: "center",
