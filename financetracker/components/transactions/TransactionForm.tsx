@@ -241,12 +241,14 @@ export function TransactionForm({
   );
   const [note, setNote] = useState(initialValues?.note ?? "");
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(findInitialCategory);
+  const normalizeCategoryType = (type?: Category["type"]): TransactionType =>
+    type === "income" ? "income" : "expense";
   const [transactionType, setTransactionType] = useState<TransactionType>(() => {
     if (initialValues?.type) {
       return initialValues.type;
     }
     const initialCategory = findInitialCategory();
-    return initialCategory?.type ?? "expense";
+    return normalizeCategoryType(initialCategory?.type);
   });
   const [categoryModalVisible, setCategoryModalVisible] = useState(false);
   const [date, setDate] = useState(() => {
@@ -308,8 +310,11 @@ export function TransactionForm({
       return;
     }
 
-    if (selectedCategory && selectedCategory.type !== transactionType) {
-      setTransactionType(selectedCategory.type);
+    if (selectedCategory) {
+      const derivedType = normalizeCategoryType(selectedCategory.type);
+      if (derivedType !== transactionType) {
+        setTransactionType(derivedType);
+      }
     }
   }, [selectedCategory, transactionType]);
 
@@ -318,6 +323,10 @@ export function TransactionForm({
       setToAccountId(null);
     }
   }, [transactionType, toAccountId]);
+
+  const selectedCategoryTransactionType = selectedCategory
+    ? normalizeCategoryType(selectedCategory.type)
+    : null;
 
   const handleNoteChange = (value: string) => {
     const words = value
@@ -402,7 +411,7 @@ export function TransactionForm({
       setSelectedCategory(null);
     }
 
-    if (selectedCategory && selectedCategory.type !== nextType) {
+    if (selectedCategory && normalizeCategoryType(selectedCategory.type) !== nextType) {
       setSelectedCategory(null);
     }
   };
@@ -581,14 +590,14 @@ export function TransactionForm({
 
             {transactionType !== "transfer" && selectedCategory && (
               <View style={styles.selectionBadgeRow}>
-                <View style={styles.typeBadge(selectedCategory.type)}>
+                <View style={styles.typeBadge(selectedCategoryTransactionType ?? transactionType)}>
                   <Ionicons
-                    name={selectedCategory.type === "income" ? "arrow-down-circle" : "arrow-up-circle"}
+                    name={selectedCategoryTransactionType === "income" ? "arrow-down-circle" : "arrow-up-circle"}
                     size={14}
                     color={theme.colors.text}
                   />
                   <Text style={styles.typeBadgeText}>
-                    {selectedCategory.type === "expense" ? "Expense" : "Income"}
+                    {selectedCategoryTransactionType === "income" ? "Income" : "Expense"}
                   </Text>
                 </View>
               </View>

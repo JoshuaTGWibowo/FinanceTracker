@@ -367,11 +367,16 @@ export const generateMockBudgetGoals = (): BudgetGoal[] => {
  */
 export const generateMockCategories = (): Category[] => {
     return [
-        { id: "cat-subscriptions-expense", name: "Subscriptions", type: "expense" },
-        { id: "cat-gifts-expense", name: "Gifts", type: "expense" },
-        { id: "cat-books-expense", name: "Books", type: "expense" },
-        { id: "cat-freelance-income", name: "Freelance", type: "income" },
-        { id: "cat-refunds-income", name: "Refunds", type: "income" },
+        {
+            id: "cat-subscriptions-expense",
+            name: "Subscriptions",
+            type: "expense",
+            icon: "repeat",
+        },
+        { id: "cat-gifts-expense", name: "Gifts", type: "expense", icon: "gift-outline" },
+        { id: "cat-books-expense", name: "Books", type: "expense", icon: "book" },
+        { id: "cat-freelance-income", name: "Freelance", type: "income", icon: "briefcase" },
+        { id: "cat-refunds-income", name: "Refunds", type: "income", icon: "refresh" },
     ];
 };
 

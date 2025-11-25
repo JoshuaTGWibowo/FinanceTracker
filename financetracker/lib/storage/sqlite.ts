@@ -41,6 +41,20 @@ const getDatabase = async () => {
   return db;
 };
 
+const ensureColumnExists = async (
+  db: SQLiteDatabase,
+  table: string,
+  column: string,
+  type: string,
+  defaultClause?: string,
+) => {
+  const existingColumns = await db.getAllAsync<{ name: string }>(`PRAGMA table_info(${table})`);
+  const hasColumn = existingColumns.some((item) => item.name === column);
+  if (!hasColumn) {
+    await db.execAsync(`ALTER TABLE ${table} ADD COLUMN ${column} ${type} ${defaultClause ?? ""};`);
+  }
+};
+
 const ensureSchema = async (db: SQLiteDatabase) => {
   await db.execAsync(`
     PRAGMA journal_mode = WAL;
@@ -57,7 +71,9 @@ const ensureSchema = async (db: SQLiteDatabase) => {
     CREATE TABLE IF NOT EXISTS categories (
       id TEXT PRIMARY KEY NOT NULL,
       name TEXT NOT NULL,
-      type TEXT NOT NULL
+      type TEXT NOT NULL,
+      icon TEXT,
+      parentCategoryId TEXT
     );
     CREATE TABLE IF NOT EXISTS accounts (
       id TEXT PRIMARY KEY NOT NULL,
@@ -104,6 +120,9 @@ const ensureSchema = async (db: SQLiteDatabase) => {
     );
   `);
 
+  await ensureColumnExists(db, "categories", "icon", "TEXT");
+  await ensureColumnExists(db, "categories", "parentCategoryId", "TEXT");
+
   const profileCount = await db.getFirstAsync<{ count: number }>("SELECT COUNT(*) as count FROM profile");
   if (!profileCount?.count) {
     await db.runAsync("INSERT INTO profile (id, name, currency) VALUES (1, ?, ?)", [
@@ -124,11 +143,10 @@ const ensureSchema = async (db: SQLiteDatabase) => {
   );
   if (!categoryCount?.count) {
     for (const category of DEFAULT_CATEGORIES) {
-      await db.runAsync("INSERT INTO categories (id, name, type) VALUES (?, ?, ?)", [
-        category.id,
-        category.name,
-        category.type,
-      ]);
+      await db.runAsync(
+        "INSERT INTO categories (id, name, type, icon, parentCategoryId) VALUES (?, ?, ?, ?, ?)",
+        [category.id, category.name, category.type, category.icon ?? null, category.parentCategoryId ?? null],
+      );
     }
   }
 
@@ -220,7 +238,7 @@ export const fetchFinanceState = async (): Promise<FinanceStatePayload> => {
   );
 
   const categories = await db.getAllAsync<Category>(
-    "SELECT id, name, type FROM categories ORDER BY name COLLATE NOCASE",
+    "SELECT id, name, type, icon, parentCategoryId FROM categories ORDER BY rowid",
   );
 
   const accountRows = await db.getAllAsync<AccountRow>(
@@ -430,12 +448,14 @@ export const saveThemeMode = async (mode: ThemeMode) => {
 export const saveCategory = async (category: Category) => {
   const db = await getDatabase();
   await db.runAsync(
-    `INSERT INTO categories (id, name, type)
-     VALUES (?, ?, ?)
+    `INSERT INTO categories (id, name, type, icon, parentCategoryId)
+     VALUES (?, ?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET
        name=excluded.name,
-       type=excluded.type`,
-    [category.id, category.name, category.type],
+       type=excluded.type,
+       icon=excluded.icon,
+       parentCategoryId=excluded.parentCategoryId`,
+    [category.id, category.name, category.type, category.icon ?? null, category.parentCategoryId ?? null],
   );
 };
 
@@ -488,11 +508,10 @@ export const clearAllData = async () => {
 
   // Re-insert default categories
   for (const category of DEFAULT_CATEGORIES) {
-    await db.runAsync("INSERT INTO categories (id, name, type) VALUES (?, ?, ?)", [
-      category.id,
-      category.name,
-      category.type,
-    ]);
+    await db.runAsync(
+      "INSERT INTO categories (id, name, type, icon, parentCategoryId) VALUES (?, ?, ?, ?, ?)",
+      [category.id, category.name, category.type, category.icon ?? null, category.parentCategoryId ?? null],
+    );
   }
 
   // Re-insert default account

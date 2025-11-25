@@ -5,6 +5,7 @@ import {
   type AccountType,
   type BudgetGoal,
   type Category,
+  type CategoryType,
   DEFAULT_ACCOUNT_ID,
   DEFAULT_CATEGORIES,
   type Preferences,
@@ -620,17 +621,20 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
       return;
     }
 
-    const entry = { id, name: value, type: category.type };
+    const entry: Category = {
+      id,
+      name: value,
+      type: category.type as CategoryType,
+      icon: category.icon ?? "pricetag",
+      parentCategoryId: category.parentCategoryId ?? null,
+    };
 
     await saveCategory(entry);
 
     set((state) => ({
       preferences: {
         ...state.preferences,
-        categories: [
-          ...state.preferences.categories,
-          entry,
-        ],
+        categories: [...state.preferences.categories, entry],
       },
     }));
   },
