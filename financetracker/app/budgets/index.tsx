@@ -47,15 +47,21 @@ export default function BudgetsScreen() {
       return;
     }
 
+    if (!goalCategory) {
+      Alert.alert("Heads up", "Please select a category for this budget goal.");
+      return;
+    }
+
     await addBudgetGoal({
       name: goalName.trim(),
       target: targetValue,
       period: goalPeriod,
-      category: goalCategory || null,
+      category: goalCategory,
     });
 
     setGoalName("");
     setGoalTarget("");
+    setGoalCategory(null);
     Alert.alert("Success", "Budget goal created successfully.");
   };
 
@@ -77,7 +83,7 @@ export default function BudgetsScreen() {
             </Pressable>
             <View style={styles.headerText}>
               <Text style={styles.title}>Budget Goals</Text>
-              <Text style={styles.subtitle}>Set spending limits and savings targets.</Text>
+              <Text style={styles.subtitle}>Set spending limits for your categories.</Text>
             </View>
           </View>
 
@@ -126,21 +132,12 @@ export default function BudgetsScreen() {
               </View>
             </View>
             <View style={styles.fieldGroup}>
-              <Text style={styles.label}>Track category (optional)</Text>
+              <Text style={styles.label}>Category</Text>
               <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
                 contentContainerStyle={styles.chipsRow}
               >
-                <Pressable
-                  key="all"
-                  onPress={() => setGoalCategory(null)}
-                  style={[styles.categoryChip, goalCategory === null && styles.categoryChipActive]}
-                >
-                  <Text style={[styles.categoryChipText, goalCategory === null && styles.categoryChipTextActive]}>
-                    Savings goal
-                  </Text>
-                </Pressable>
                 {categories.map((category) => {
                   const active = goalCategory === category.name;
                   return (
@@ -173,8 +170,7 @@ export default function BudgetsScreen() {
                     <View style={styles.goalCopy}>
                       <Text style={styles.goalName}>{goal.name}</Text>
                       <Text style={styles.goalMeta}>
-                        Target: {goal.target.toLocaleString()} • Period: {goal.period}
-                        {goal.category ? ` • Category: ${goal.category}` : ""}
+                        Target: {goal.target.toLocaleString()} • Period: {goal.period} • Category: {goal.category}
                       </Text>
                     </View>
                     <Pressable

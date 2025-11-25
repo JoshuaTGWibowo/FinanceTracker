@@ -142,7 +142,7 @@ export interface BudgetGoal {
   name: string;
   target: number;
   period: "week" | "month";
-  category?: string | null;
+  category: string;
 }
 
 export interface Profile {

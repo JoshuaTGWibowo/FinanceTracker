@@ -319,13 +319,6 @@ export const generateMockBudgetGoals = (): BudgetGoal[] => {
     return [
         {
             id: generateId("g"),
-            name: "Monthly Savings Goal",
-            target: 1000,
-            period: "month" as const,
-            category: null,
-        },
-        {
-            id: generateId("g"),
             name: "Grocery Budget",
             target: 600,
             period: "month" as const,
@@ -344,13 +337,6 @@ export const generateMockBudgetGoals = (): BudgetGoal[] => {
             target: 200,
             period: "month" as const,
             category: "Entertainment",
-        },
-        {
-            id: generateId("g"),
-            name: "Weekly Spending Target",
-            target: 250,
-            period: "week" as const,
-            category: null,
         },
         {
             id: generateId("g"),

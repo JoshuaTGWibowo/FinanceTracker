@@ -236,7 +236,7 @@ export default function AccountScreen() {
                 </View>
                 <View style={styles.flex}>
                   <Text style={styles.linkTitle}>Budgets</Text>
-                  <Text style={styles.linkSubtitle}>Set spending limits and savings targets.</Text>
+                  <Text style={styles.linkSubtitle}>Set spending limits for your categories.</Text>
                 </View>
               </View>
               <Ionicons name="chevron-forward" size={18} color={theme.colors.textMuted} />
