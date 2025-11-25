@@ -167,7 +167,8 @@ export default function TransactionsScreen() {
   const [endDate, setEndDate] = useState<Dayjs | null>(null);
   const [showStartPicker, setShowStartPicker] = useState(false);
   const [showEndPicker, setShowEndPicker] = useState(false);
-  const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
+  const selectedAccountId = useFinanceStore((state) => state.selectedAccountId);
+  const setSelectedAccountId = useFinanceStore((state) => state.setSelectedAccountId);
   const [recurringExpanded, setRecurringExpanded] = useState(false);
 
   useEffect(() => {
@@ -1498,7 +1499,7 @@ const createStyles = (theme: any, insets: any) =>
     accountChipRow: {
       flexDirection: "row",
       gap: theme.spacing.sm,
-      marginBottom: theme.spacing.sm,
+      marginBottom: theme.spacing.xl,
     },
     accountChip: {
       paddingHorizontal: theme.spacing.md,

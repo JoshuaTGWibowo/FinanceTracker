@@ -85,7 +85,8 @@ export default function HomeScreen() {
     [transactions],
   );
 
-  const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
+  const selectedAccountId = useFinanceStore((state) => state.selectedAccountId);
+  const setSelectedAccountId = useFinanceStore((state) => state.setSelectedAccountId);
 
   const accountLookup = useMemo(() => {
     const map = new Map<string, string>();
