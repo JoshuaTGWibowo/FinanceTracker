@@ -758,7 +758,12 @@ export default function HomeScreen() {
               <Text style={styles.sectionTitle}>Budget goals</Text>
               <Text style={styles.sectionCaption}>Stay on track</Text>
             </View>
-            <View style={styles.goalList}>
+            <ScrollView
+              contentContainerStyle={styles.goalList}
+              style={budgetGoals.length > 5 ? { maxHeight: 420 } : undefined}
+              nestedScrollEnabled
+              showsVerticalScrollIndicator={false}
+            >
               {budgetGoals.map((goal) => {
                 const progress = summarizeGoalProgress(
                   goal,
@@ -802,7 +807,7 @@ export default function HomeScreen() {
                   </View>
                 );
               })}
-            </View>
+            </ScrollView>
           </View>
         )}
 
@@ -1237,7 +1242,7 @@ const createStyles = (
       gap: theme.spacing.md,
     },
     goalList: {
-      gap: theme.spacing.lg,
+      gap: theme.spacing.md,
     },
     goalRow: {
       gap: theme.spacing.sm,
