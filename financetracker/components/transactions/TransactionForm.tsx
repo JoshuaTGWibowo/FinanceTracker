@@ -199,6 +199,9 @@ const recurringOptions: { label: string; value: RecurringTransaction["frequency"
   { label: "Monthly", value: "monthly" },
 ];
 
+const toIconName = (value?: string | null) =>
+  (value as keyof typeof Ionicons.glyphMap) || ("pricetag" as keyof typeof Ionicons.glyphMap);
+
 export function TransactionForm({
   title,
   submitLabel,
@@ -257,6 +260,7 @@ export function TransactionForm({
     return normalizeCategoryType(initialCategory?.type);
   });
   const [categoryModalVisible, setCategoryModalVisible] = useState(false);
+  const [categorySearch, setCategorySearch] = useState("");
   const [date, setDate] = useState(() => {
     const base = initialValues?.date ? new Date(initialValues.date) : new Date();
     base.setHours(0, 0, 0, 0);
@@ -339,6 +343,46 @@ export function TransactionForm({
   const selectedCategoryTransactionType = selectedCategory
     ? normalizeCategoryType(selectedCategory.type)
     : null;
+
+  const groupedCategories = useMemo(() => {
+    const query = categorySearch.trim().toLowerCase();
+    const matchesSearch = (category: Category) =>
+      query ? category.name.toLowerCase().includes(query) : true;
+
+    const candidates = availableCategories
+      .filter((category) => normalizeCategoryType(category.type) === transactionType)
+      .filter((category) => (accountId ? isCategoryActiveInAccount(category, accountId) : true));
+
+    const childrenMap = new Map<string, Category[]>();
+
+    candidates.forEach((category) => {
+      if (category.parentCategoryId) {
+        const children = childrenMap.get(category.parentCategoryId) ?? [];
+        children.push(category);
+        childrenMap.set(category.parentCategoryId, children);
+      }
+    });
+
+    const parents = candidates.filter((category) => !category.parentCategoryId);
+    const orphans = candidates.filter(
+      (category) => category.parentCategoryId && !parents.find((parent) => parent.id === category.parentCategoryId),
+    );
+
+    return [
+      ...parents.map((parent) => ({ parent, children: childrenMap.get(parent.id) ?? [] })),
+      ...orphans.map((parent) => ({ parent, children: [] })),
+    ]
+      .map((group) => {
+        const visibleChildren = query ? group.children.filter((child) => matchesSearch(child)) : group.children;
+        return {
+          ...group,
+          children: visibleChildren,
+          visible: matchesSearch(group.parent) || visibleChildren.length > 0,
+        };
+      })
+      .filter((group) => group.visible)
+      .sort((a, b) => a.parent.name.localeCompare(b.parent.name));
+  }, [accountId, availableCategories, categorySearch, isCategoryActiveInAccount, transactionType]);
 
   const handleNoteChange = (value: string) => {
     const words = value
@@ -851,14 +895,20 @@ export function TransactionForm({
       <Modal
         visible={categoryModalVisible}
         animationType="slide"
-        onRequestClose={() => setCategoryModalVisible(false)}
+        onRequestClose={() => {
+          setCategoryModalVisible(false);
+          setCategorySearch("");
+        }}
         presentationStyle="pageSheet"
       >
         <SafeAreaView style={styles.modal}>
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>Select category</Text>
             <Pressable
-              onPress={() => setCategoryModalVisible(false)}
+              onPress={() => {
+                setCategoryModalVisible(false);
+                setCategorySearch("");
+              }}
               style={styles.modalClose}
               accessibilityRole="button"
             >
@@ -870,48 +920,112 @@ export function TransactionForm({
             contentContainerStyle={styles.modalContent}
             showsVerticalScrollIndicator={false}
           >
-            {(["expense", "income"] as TransactionType[])
-              .filter((type) => type === transactionType)
-              .map((type) => {
-                const entries = availableCategories
-                  .filter((category) => category.type === type)
-                  .filter((category) => isCategoryActiveInAccount(category, accountId));
-                if (!entries.length) {
+            <View style={styles.categoryHeroCard}>
+              <View style={styles.categoryHeroBadge}>
+                <Ionicons
+                  name={transactionType === "income" ? "arrow-down-circle" : "arrow-up-circle"}
+                  size={18}
+                  color={theme.colors.text}
+                />
+                <Text style={styles.categoryHeroBadgeText}>
+                  {transactionType === "income" ? "Income" : "Expense"}
+                </Text>
+              </View>
+              <Text style={styles.categoryHeroTitle}>Pick the best fit</Text>
+              <Text style={styles.helperText}>
+                Categories shown here respect the wallet you're using.
+              </Text>
+            </View>
+
+            <View style={styles.categorySearchRow}>
+              <Ionicons name="search" size={16} color={theme.colors.textMuted} />
+              <TextInput
+                value={categorySearch}
+                onChangeText={setCategorySearch}
+                placeholder="Search categories"
+                placeholderTextColor={theme.colors.textMuted}
+                style={styles.categorySearchInput}
+              />
+              {categorySearch ? (
+                <Pressable onPress={() => setCategorySearch("")}>
+                  <Ionicons name="close" size={16} color={theme.colors.textMuted} />
+                </Pressable>
+              ) : null}
+            </View>
+
+            <View style={styles.categoryGroupGrid}>
+              {groupedCategories.length === 0 ? (
+                <Text style={styles.helperText}>No categories available yet.</Text>
+              ) : (
+                groupedCategories.map((group) => {
+                  const iconName = toIconName(group.parent.icon);
+                  const isSelected = selectedCategory?.id === group.parent.id;
                   return (
-                    <View key={type} style={styles.modalSection}>
-                      <Text style={styles.modalSectionTitle}>
-                        {type === "expense" ? "Expenses" : "Income"}
-                      </Text>
-                      <Text style={styles.helperText}>No categories available yet.</Text>
+                    <View key={group.parent.id} style={styles.categoryGroupCard}>
+                      <Pressable
+                        style={styles.parentRow}
+                        onPress={() => {
+                          setSelectedCategory(group.parent);
+                          setCategoryModalVisible(false);
+                          setCategorySearch("");
+                        }}
+                      >
+                        <View style={styles.parentAvatar}>
+                          <Ionicons name={iconName} size={18} color={theme.colors.text} />
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.parentName}>{group.parent.name}</Text>
+                          <Text style={styles.metaText}>Tap to choose this category</Text>
+                        </View>
+                        {isSelected ? (
+                          <Ionicons name="checkmark-circle" size={18} color={theme.colors.primary} />
+                        ) : (
+                          <Ionicons name="chevron-forward" size={18} color={theme.colors.textMuted} />
+                        )}
+                      </Pressable>
+
+                      {group.children.length > 0 ? (
+                        <View style={styles.childrenList}>
+                          {group.children.map((child, index) => {
+                            const isLast = index === group.children.length - 1;
+                            const childIcon = toIconName(child.icon);
+                            const isChildSelected = selectedCategory?.id === child.id;
+                            return (
+                              <Pressable
+                                key={child.id}
+                                style={styles.childRow}
+                                onPress={() => {
+                                  setSelectedCategory(child);
+                                  setCategoryModalVisible(false);
+                                  setCategorySearch("");
+                                }}
+                              >
+                                <View style={styles.connectorColumn}>
+                                  <View style={[styles.connectorLine, isLast && styles.connectorLineEnd]} />
+                                  <View style={styles.connectorDot} />
+                                </View>
+                                <View style={styles.childAvatar}>
+                                  <Ionicons name={childIcon} size={14} color={theme.colors.text} />
+                                </View>
+                                <View style={{ flex: 1 }}>
+                                  <Text style={styles.childName}>{child.name}</Text>
+                                  <Text style={styles.metaText}>Child category</Text>
+                                </View>
+                                {isChildSelected ? (
+                                  <Ionicons name="checkmark-circle" size={18} color={theme.colors.primary} />
+                                ) : (
+                                  <Ionicons name="chevron-forward" size={16} color={theme.colors.textMuted} />
+                                )}
+                              </Pressable>
+                            );
+                          })}
+                        </View>
+                      ) : null}
                     </View>
                   );
-                }
-
-                return (
-                  <View key={type} style={styles.modalSection}>
-                    <Text style={styles.modalSectionTitle}>
-                      {type === "expense" ? "Expenses" : "Income"}
-                    </Text>
-                    <View style={styles.modalGrid}>
-                      {entries.map((category) => {
-                        const active = selectedCategory?.id === category.id;
-                        return (
-                          <Pressable
-                            key={category.id}
-                            style={styles.modalOption(active)}
-                            onPress={() => {
-                              setSelectedCategory(category);
-                              setCategoryModalVisible(false);
-                            }}
-                          >
-                            <Text style={styles.modalOptionText(active)}>{category.name}</Text>
-                          </Pressable>
-                        );
-                      })}
-                    </View>
-                  </View>
-                );
-              })}
+                })
+              )}
+            </View>
           </ScrollView>
         </SafeAreaView>
       </Modal>
@@ -1366,35 +1480,135 @@ const createStyles = (
     },
     modalContent: {
       paddingHorizontal: theme.spacing.xl,
-      paddingBottom: theme.spacing.xl,
+      paddingBottom: insets.bottom + theme.spacing.lg,
       gap: theme.spacing.lg,
     },
-    modalSection: {
+    categoryHeroCard: {
+      backgroundColor: theme.colors.surface,
+      borderRadius: theme.radii.xl,
+      padding: theme.spacing.lg,
       gap: theme.spacing.sm,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      shadowColor: theme.colors.background,
+      shadowOpacity: 0.08,
+      shadowOffset: { width: 0, height: 8 },
     },
-    modalSectionTitle: {
-      fontSize: 13,
+    categoryHeroBadge: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: theme.spacing.xs,
+      alignSelf: "flex-start",
+      paddingHorizontal: theme.spacing.md,
+      paddingVertical: theme.spacing.xs,
+      borderRadius: theme.radii.pill,
+      backgroundColor: `${theme.colors.primary}15`,
+    },
+    categoryHeroBadgeText: {
+      fontSize: 12,
       fontWeight: "700",
       color: theme.colors.text,
-      textTransform: "uppercase",
-      letterSpacing: 1,
     },
-    modalGrid: {
+    categoryHeroTitle: {
+      fontSize: 18,
+      fontWeight: "800",
+      color: theme.colors.text,
+    },
+    categorySearchRow: {
       flexDirection: "row",
-      flexWrap: "wrap",
+      alignItems: "center",
+      gap: theme.spacing.sm,
+      borderRadius: theme.radii.lg,
+      paddingHorizontal: theme.spacing.lg,
+      paddingVertical: theme.spacing.md,
+      backgroundColor: theme.colors.surface,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+    },
+    categorySearchInput: {
+      flex: 1,
+      fontSize: 15,
+      color: theme.colors.text,
+    },
+    categoryGroupGrid: {
+      gap: theme.spacing.md,
+    },
+    categoryGroupCard: {
+      backgroundColor: theme.colors.surface,
+      borderRadius: theme.radii.xl,
+      padding: theme.spacing.md,
+      gap: theme.spacing.sm,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      shadowColor: theme.colors.background,
+      shadowOpacity: 0.05,
+      shadowOffset: { width: 0, height: 6 },
+    },
+    parentRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: theme.spacing.md,
+    },
+    parentAvatar: {
+      width: 44,
+      height: 44,
+      borderRadius: theme.radii.lg,
+      backgroundColor: theme.colors.surfaceElevated,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    parentName: {
+      fontSize: 16,
+      fontWeight: "700",
+      color: theme.colors.text,
+    },
+    metaText: {
+      fontSize: 12,
+      color: theme.colors.textMuted,
+    },
+    childrenList: {
+      marginLeft: theme.spacing.sm,
       gap: theme.spacing.sm,
     },
-    modalOption: (active: boolean) => ({
-      paddingHorizontal: theme.spacing.lg,
-      paddingVertical: theme.spacing.sm,
-      borderRadius: theme.radii.pill,
-      borderWidth: 1,
-      borderColor: active ? theme.colors.primary : theme.colors.border,
-      backgroundColor: active ? `${theme.colors.primary}22` : theme.colors.surface,
-    }),
-    modalOptionText: (active: boolean) => ({
-      fontSize: 13,
-      fontWeight: "600",
-      color: active ? theme.colors.text : theme.colors.textMuted,
-    }),
+    childRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: theme.spacing.md,
+      paddingVertical: theme.spacing.xs,
+      paddingHorizontal: theme.spacing.sm,
+      borderRadius: theme.radii.md,
+    },
+    connectorColumn: {
+      width: 18,
+      alignItems: "center",
+    },
+    connectorLine: {
+      width: 2,
+      flex: 1,
+      backgroundColor: theme.colors.border,
+      marginBottom: 4,
+      borderRadius: 4,
+    },
+    connectorLineEnd: {
+      height: 10,
+    },
+    connectorDot: {
+      width: 10,
+      height: 10,
+      borderRadius: 6,
+      backgroundColor: theme.colors.border,
+    },
+    childAvatar: {
+      width: 34,
+      height: 34,
+      borderRadius: theme.radii.md,
+      backgroundColor: theme.colors.surfaceElevated,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    childName: {
+      fontSize: 14,
+      fontWeight: "700",
+      color: theme.colors.text,
+    },
   });
