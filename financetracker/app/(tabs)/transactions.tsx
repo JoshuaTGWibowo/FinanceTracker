@@ -32,25 +32,15 @@ const formatCurrency = (
   currency: string,
   options?: Intl.NumberFormatOptions,
 ) => {
-  const maxDigits =
-    options?.maximumFractionDigits !== undefined
-      ? options.maximumFractionDigits
-      : Number.isInteger(value)
-        ? 0
-        : 2;
-  const minDigits =
-    options?.minimumFractionDigits !== undefined
-      ? options.minimumFractionDigits
-      : Number.isInteger(value)
-        ? 0
-        : Math.min(2, maxDigits);
+  const maximumFractionDigits = options?.maximumFractionDigits ?? 2;
+  const minimumFractionDigits = Math.min(options?.minimumFractionDigits ?? 0, maximumFractionDigits);
 
   return new Intl.NumberFormat(undefined, {
     style: "currency",
     currency,
     ...options,
-    maximumFractionDigits: maxDigits,
-    minimumFractionDigits: minDigits,
+    maximumFractionDigits,
+    minimumFractionDigits,
   }).format(value);
 };
 
@@ -580,17 +570,10 @@ export default function TransactionsScreen() {
     visibleAccountIds,
   ]);
 
-  const closingBalanceDisplay = useMemo(() => {
-    const amount = summary.closingBalance;
-    const hasCents = !Number.isInteger(Math.round(amount * 100) / 100)
-      ? true
-      : !Number.isInteger(amount);
-
-    return formatCurrency(amount, currency || "USD", {
-      minimumFractionDigits: hasCents ? 2 : 0,
-      maximumFractionDigits: 2,
-    });
-  }, [currency, summary.closingBalance]);
+  const closingBalanceDisplay = useMemo(
+    () => formatCurrency(summary.closingBalance, currency || "USD"),
+    [currency, summary.closingBalance],
+  );
 
   const balanceFontSize = useMemo(() => {
     const digitCount = closingBalanceDisplay.replace(/[^0-9]/g, "").length;

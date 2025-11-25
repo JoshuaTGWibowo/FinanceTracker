@@ -128,7 +128,7 @@ const recalculateAccountBalances = (
     initialBalance: Number.isFinite(account.initialBalance) ? account.initialBalance : 0,
     currency: account.currency || fallbackCurrency,
     excludeFromTotal: account.excludeFromTotal ?? false,
-    balance: Number.isFinite(account.initialBalance) ? account.initialBalance : 0,
+    balance: 0,
   }));
   const extras: Account[] = [];
 
@@ -182,6 +182,65 @@ const recalculateAccountBalances = (
   return [...base, ...extras];
 };
 
+const normalizeDateOnly = (value: string | undefined) => {
+  const date = value ? new Date(value) : new Date();
+  date.setHours(0, 0, 0, 0);
+  return date.toISOString();
+};
+
+const createInitialBalanceTransaction = (account: Account): Transaction | null => {
+  const amount = Number.isFinite(account.initialBalance)
+    ? Math.round(account.initialBalance * 100) / 100
+    : 0;
+
+  if (!amount) {
+    return null;
+  }
+
+  const type: TransactionType = amount >= 0 ? "income" : "expense";
+
+  return {
+    id: generateId("t"),
+    amount: Math.abs(amount),
+    note: "Initial balance",
+    type,
+    category: "Initial Balance",
+    date: normalizeDateOnly(account.createdAt),
+    accountId: account.id,
+    toAccountId: null,
+  };
+};
+
+const ensureInitialBalanceTransactions = async (
+  accounts: Account[],
+  transactions: Transaction[],
+): Promise<Transaction[]> => {
+  const nextTransactions = [...transactions];
+
+  for (const account of accounts) {
+    const initialTransaction = createInitialBalanceTransaction(account);
+    if (!initialTransaction) {
+      continue;
+    }
+
+    const hasInitialBalanceTransaction = nextTransactions.some(
+      (transaction) =>
+        transaction.accountId === account.id &&
+        transaction.note.trim().toLowerCase() === "initial balance" &&
+        transaction.type === initialTransaction.type,
+    );
+
+    if (hasInitialBalanceTransaction) {
+      continue;
+    }
+
+    await saveTransaction(initialTransaction);
+    nextTransactions.push(initialTransaction);
+  }
+
+  return nextTransactions;
+};
+
 const nextOccurrenceForFrequency = (fromDate: string, frequency: RecurringTransaction["frequency"]) => {
   const base = new Date(fromDate);
   if (frequency === "weekly") {
@@ -221,9 +280,13 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
       const sourceAccounts = data.accounts.length
         ? data.accounts
         : [createDefaultAccount(data.profile.currency || "USD")];
-      const normalizedAccounts = recalculateAccountBalances(
+      const transactionsWithInitialBalance = await ensureInitialBalanceTransactions(
         sourceAccounts,
         data.transactions,
+      );
+      const normalizedAccounts = recalculateAccountBalances(
+        sourceAccounts,
+        transactionsWithInitialBalance,
         data.profile.currency,
       );
 
@@ -231,7 +294,7 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
         profile: data.profile,
         preferences: data.preferences,
         accounts: normalizedAccounts,
-        transactions: data.transactions,
+        transactions: transactionsWithInitialBalance,
         recurringTransactions: data.recurringTransactions,
         budgetGoals: data.budgetGoals,
         isHydrated: true,
@@ -587,11 +650,20 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
 
     await saveAccount(nextAccount);
 
+    const initialTransaction = createInitialBalanceTransaction(nextAccount);
+    if (initialTransaction) {
+      await saveTransaction(initialTransaction);
+    }
+
     set((current) => {
       const nextAccounts = [...current.accounts, nextAccount];
-      return {
-        accounts: recalculateAccountBalances(nextAccounts, current.transactions, current.profile.currency),
-      };
+      const nextTransactions = initialTransaction
+        ? [initialTransaction, ...current.transactions]
+        : current.transactions;
+      return applyAccountBalanceUpdate(
+        { ...current, accounts: nextAccounts },
+        nextTransactions,
+      );
     });
   },
   updateAccount: async (id, updates) => {

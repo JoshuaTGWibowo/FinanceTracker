@@ -29,7 +29,8 @@ const formatCurrency = (value: number, currency: string) =>
   new Intl.NumberFormat(undefined, {
     style: "currency",
     currency,
-    maximumFractionDigits: Number.isInteger(value) ? 0 : 2,
+    maximumFractionDigits: 2,
+    minimumFractionDigits: 0,
   }).format(value);
 
 export function AccountPicker({

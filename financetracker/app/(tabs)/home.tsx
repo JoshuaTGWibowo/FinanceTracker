@@ -20,7 +20,8 @@ const formatCurrency = (
   new Intl.NumberFormat(undefined, {
     style: "currency",
     currency,
-    maximumFractionDigits: 0,
+    maximumFractionDigits: 2,
+    minimumFractionDigits: 0,
     ...options,
   }).format(value);
 
@@ -577,7 +578,7 @@ export default function HomeScreen() {
                     { color: spentLess ? theme.colors.success : theme.colors.danger },
                   ]}
                 >
-                  {`${formatCurrency(Math.abs(trendDelta), currency, { maximumFractionDigits: 0 })} ${
+                  {`${formatCurrency(Math.abs(trendDelta), currency)} ${
                     spentLess ? "less" : "more"
                   }`}
                 </Text>
@@ -608,18 +609,14 @@ export default function HomeScreen() {
               <SpendingLineChart
                 data={monthlyLineSeries.current}
                 comparison={monthlyLineSeries.previous}
-                formatValue={(value) =>
-                  formatCurrency(value, currency, { maximumFractionDigits: 0 })
-                }
+                formatValue={(value) => formatCurrency(value, currency)}
                 style={styles.chart}
               />
             ) : (
               <SpendingBarChart
                 data={overviewPeriod === "month" ? monthlyComparison : periodDailySpending}
                 style={styles.chart}
-                formatValue={(value) =>
-                  formatCurrency(value, currency, { maximumFractionDigits: 0 })
-                }
+                formatValue={(value) => formatCurrency(value, currency)}
               />
             )}
           </View>

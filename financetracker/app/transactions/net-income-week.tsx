@@ -24,25 +24,15 @@ const formatCurrency = (
   currency: string,
   options?: Intl.NumberFormatOptions,
 ) => {
-  const maxDigits =
-    options?.maximumFractionDigits !== undefined
-      ? options.maximumFractionDigits
-      : Number.isInteger(value)
-        ? 0
-        : 2;
-  const minDigits =
-    options?.minimumFractionDigits !== undefined
-      ? options.minimumFractionDigits
-      : Number.isInteger(value)
-        ? 0
-        : Math.min(2, maxDigits);
+  const maximumFractionDigits = options?.maximumFractionDigits ?? 2;
+  const minimumFractionDigits = Math.min(options?.minimumFractionDigits ?? 0, maximumFractionDigits);
 
   return new Intl.NumberFormat(undefined, {
     style: "currency",
     currency,
     ...options,
-    maximumFractionDigits: maxDigits,
-    minimumFractionDigits: minDigits,
+    maximumFractionDigits,
+    minimumFractionDigits,
   }).format(value);
 };
 
