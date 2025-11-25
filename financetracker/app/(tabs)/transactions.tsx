@@ -169,8 +169,8 @@ export default function TransactionsScreen() {
   const [maxAmount, setMaxAmount] = useState("");
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
   const [categoryTypeFilter, setCategoryTypeFilter] = useState<
-    Extract<TransactionType, "expense" | "income">
-  > | null>(null);
+    Extract<TransactionType, "expense" | "income"> | null
+  >(null);
   const [categoryPickerVisible, setCategoryPickerVisible] = useState(false);
   const [categorySearch, setCategorySearch] = useState("");
   const [startDate, setStartDate] = useState<Dayjs | null>(null);
