@@ -300,6 +300,8 @@ export default function TransactionsScreen() {
 
   const closeSearch = () => {
     setSearchVisible(false);
+    setCategoryPickerVisible(false);
+    setCategorySearch("");
     setDraftSearchTerm(searchTerm);
     setShowStartPicker(false);
     setShowEndPicker(false);
@@ -1051,7 +1053,10 @@ export default function TransactionsScreen() {
 
                   <Pressable
                     style={styles.selectionTile}
-                    onPress={() => setCategoryPickerVisible(true)}
+                    onPress={() => {
+                      setSearchVisible(false);
+                      setCategoryPickerVisible(true);
+                    }}
                     accessibilityRole="button"
                   >
                     <View style={styles.selectionTileInfo}>
@@ -1119,6 +1124,7 @@ export default function TransactionsScreen() {
         onRequestClose={() => {
           setCategoryPickerVisible(false);
           setCategorySearch("");
+          setSearchVisible(true);
         }}
       >
         <SafeAreaView style={styles.modal}>
@@ -1127,6 +1133,7 @@ export default function TransactionsScreen() {
               onPress={() => {
                 setCategoryPickerVisible(false);
                 setCategorySearch("");
+                setSearchVisible(true);
               }}
               style={styles.modalClose}
             >
@@ -1206,6 +1213,7 @@ export default function TransactionsScreen() {
                           setCategoryTypeFilter(normalizeCategoryType(group.parent.type));
                           setCategoryPickerVisible(false);
                           setCategorySearch("");
+                          setSearchVisible(true);
                         }}
                       >
                         <View style={styles.avatarCircle}>
@@ -1237,6 +1245,7 @@ export default function TransactionsScreen() {
                                   setCategoryTypeFilter(normalizeCategoryType(child.type));
                                   setCategoryPickerVisible(false);
                                   setCategorySearch("");
+                                  setSearchVisible(true);
                                 }}
                               >
                                 <View style={styles.connectorColumn}>
