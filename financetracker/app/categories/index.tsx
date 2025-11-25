@@ -28,13 +28,15 @@ export default function CategoriesScreen() {
   const theme = useAppTheme();
   const router = useRouter();
   const categories = useFinanceStore((state) => state.preferences.categories);
-  const accounts = useFinanceStore((state) => state.accounts.filter((account) => !account.isArchived));
+  const accounts = useFinanceStore((state) => state.accounts);
+  const activeAccounts = useMemo(() => accounts.filter((account) => !account.isArchived), [accounts]);
   const items = categories.length ? categories : DEFAULT_CATEGORIES;
 
   const [activeTab, setActiveTab] = useState<CategoryType>("expense");
   const [query, setQuery] = useState("");
 
-  const accountLabel = accounts.length === 1 ? accounts[0].name : `${accounts.length} wallets`;
+  const accountLabel =
+    activeAccounts.length === 1 ? activeAccounts[0].name : `${activeAccounts.length} wallets`;
 
   const groupedCategories = useMemo(() => {
     const searchText = query.trim().toLowerCase();
@@ -80,12 +82,12 @@ export default function CategoriesScreen() {
   const styles = useMemo(() => createStyles(theme), [theme]);
 
   const walletSummary = (category: Category) => {
-    const activeAccounts = category.activeAccountIds ?? accounts.map((account) => account.id);
-    if (!accounts.length) return "Active";
-    if (activeAccounts.length === accounts.length) {
+    const active = category.activeAccountIds ?? activeAccounts.map((account) => account.id);
+    if (!activeAccounts.length) return "Active";
+    if (active.length === activeAccounts.length) {
       return "Active in all wallets";
     }
-    return `Active in ${activeAccounts.length}/${accounts.length} wallets`;
+    return `Active in ${active.length}/${activeAccounts.length} wallets`;
   };
 
   return (

@@ -23,7 +23,8 @@ export default function NewCategoryScreen() {
   const params = useLocalSearchParams<{ type?: string }>();
   const categories = useFinanceStore((state) => state.preferences.categories);
   const availableCategories = categories.length ? categories : DEFAULT_CATEGORIES;
-  const accounts = useFinanceStore((state) => state.accounts.filter((account) => !account.isArchived));
+  const accounts = useFinanceStore((state) => state.accounts);
+  const activeAccounts = useMemo(() => accounts.filter((account) => !account.isArchived), [accounts]);
   const addCategory = useFinanceStore((state) => state.addCategory);
   const draft = useFinanceStore((state) => state.categoryFormDraft);
   const setDraft = useFinanceStore((state) => state.setCategoryFormDraft);
@@ -39,10 +40,10 @@ export default function NewCategoryScreen() {
         type: initialTypeParam,
         icon: "pricetag",
         parentCategoryId: null,
-        activeAccountIds: accounts.map((account) => account.id),
+        activeAccountIds: activeAccounts.map((account) => account.id),
       });
     }
-  }, [accounts, draft, initialTypeParam, resetDraft]);
+  }, [activeAccounts, draft, initialTypeParam, resetDraft]);
 
   const type = draft?.type ?? initialTypeParam;
   const name = draft?.name ?? "";
@@ -67,7 +68,7 @@ export default function NewCategoryScreen() {
       type,
       icon,
       parentCategoryId,
-      activeAccountIds: draft?.activeAccountIds ?? accounts.map((account) => account.id),
+      activeAccountIds: draft?.activeAccountIds ?? activeAccounts.map((account) => account.id),
     });
 
     resetDraft({
@@ -75,7 +76,7 @@ export default function NewCategoryScreen() {
       type: initialTypeParam,
       icon: "pricetag",
       parentCategoryId: null,
-      activeAccountIds: accounts.map((account) => account.id),
+      activeAccountIds: activeAccounts.map((account) => account.id),
     });
     router.back();
   };

@@ -17,7 +17,8 @@ export default function EditCategoryScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
 
   const categories = useFinanceStore((state) => state.preferences.categories);
-  const accounts = useFinanceStore((state) => state.accounts.filter((account) => !account.isArchived));
+  const accounts = useFinanceStore((state) => state.accounts);
+  const activeAccounts = useMemo(() => accounts.filter((account) => !account.isArchived), [accounts]);
   const updateCategory = useFinanceStore((state) => state.updateCategory);
   const draft = useFinanceStore((state) => state.categoryFormDraft);
   const setDraft = useFinanceStore((state) => state.setCategoryFormDraft);
@@ -34,14 +35,13 @@ export default function EditCategoryScreen() {
         type: category.type,
         icon: category.icon ?? "pricetag",
         parentCategoryId: category.parentCategoryId ?? null,
-        activeAccountIds:
-          category.activeAccountIds ?? accounts.map((account) => account.id),
+        activeAccountIds: category.activeAccountIds ?? activeAccounts.map((account) => account.id),
       });
     }
     return () => {
       resetDraft({ name: "", parentCategoryId: null, icon: "pricetag" });
     };
-  }, [accounts, category, resetDraft, setDraft]);
+  }, [activeAccounts, category, resetDraft, setDraft]);
 
   const styles = useMemo(() => createStyles(theme), [theme]);
 
@@ -68,7 +68,7 @@ export default function EditCategoryScreen() {
   const icon = iconToName(draft.icon);
   const parentName =
     draft.parentCategoryId && allCategories.find((item) => item.id === draft.parentCategoryId)?.name;
-  const activeIds = draft.activeAccountIds ?? accounts.map((account) => account.id);
+  const activeIds = draft.activeAccountIds ?? activeAccounts.map((account) => account.id);
   const isSaveDisabled = !draft.name.trim();
 
   const toggleAccount = (accountId: string) => {
@@ -180,7 +180,7 @@ export default function EditCategoryScreen() {
             </Text>
           </View>
 
-          {accounts.map((account) => {
+          {activeAccounts.map((account) => {
             const active = activeIds.includes(account.id);
             return (
               <View key={account.id} style={styles.walletRow}>
