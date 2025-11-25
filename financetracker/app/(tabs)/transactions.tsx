@@ -54,6 +54,9 @@ const formatCurrency = (
   }).format(value);
 };
 
+const formatWholeCurrency = (value: number, currency: string) =>
+  formatCurrency(Math.floor(value), currency, { maximumFractionDigits: 0, minimumFractionDigits: 0 });
+
 const parseAmountFilterValue = (value: string): number | undefined => {
   if (!value.trim()) {
     return undefined;
@@ -580,17 +583,10 @@ export default function TransactionsScreen() {
     visibleAccountIds,
   ]);
 
-  const closingBalanceDisplay = useMemo(() => {
-    const amount = summary.closingBalance;
-    const hasCents = !Number.isInteger(Math.round(amount * 100) / 100)
-      ? true
-      : !Number.isInteger(amount);
-
-    return formatCurrency(amount, currency || "USD", {
-      minimumFractionDigits: hasCents ? 2 : 0,
-      maximumFractionDigits: 2,
-    });
-  }, [currency, summary.closingBalance]);
+  const closingBalanceDisplay = useMemo(
+    () => formatWholeCurrency(summary.closingBalance, currency || "USD"),
+    [currency, summary.closingBalance],
+  );
 
   const balanceFontSize = useMemo(() => {
     const digitCount = closingBalanceDisplay.replace(/[^0-9]/g, "").length;
@@ -654,21 +650,21 @@ export default function TransactionsScreen() {
                 <View style={styles.metric}>
                   <Text style={styles.metricLabel}>Income</Text>
                   <Text style={styles.metricValue(theme.colors.success)}>
-                    {formatCurrency(summary.income, currency || "USD")}
+                    {formatWholeCurrency(summary.income, currency || "USD")}
                   </Text>
                 </View>
                 <View style={styles.metricDivider} />
                 <View style={styles.metric}>
                   <Text style={styles.metricLabel}>Expenses</Text>
                   <Text style={styles.metricValue(theme.colors.danger)}>
-                    {formatCurrency(summary.expense, currency || "USD")}
+                    {formatWholeCurrency(summary.expense, currency || "USD")}
                   </Text>
                 </View>
                 <View style={styles.metricDivider} />
                 <View style={styles.metric}>
                   <Text style={styles.metricLabel}>Previous</Text>
                   <Text style={styles.metricValue(theme.colors.text)}>
-                    {formatCurrency(summary.openingBalance, currency || "USD")}
+                    {formatWholeCurrency(summary.openingBalance, currency || "USD")}
                   </Text>
                 </View>
               </View>
