@@ -37,6 +37,7 @@ export interface Category {
   type: CategoryType;
   icon?: string | null;
   parentCategoryId?: string | null;
+  activeAccountIds?: string[] | null;
 }
 
 export const DEFAULT_CATEGORIES: Category[] = [

@@ -73,7 +73,8 @@ const ensureSchema = async (db: SQLiteDatabase) => {
       name TEXT NOT NULL,
       type TEXT NOT NULL,
       icon TEXT,
-      parentCategoryId TEXT
+      parentCategoryId TEXT,
+      activeAccountIds TEXT
     );
     CREATE TABLE IF NOT EXISTS accounts (
       id TEXT PRIMARY KEY NOT NULL,
@@ -122,6 +123,7 @@ const ensureSchema = async (db: SQLiteDatabase) => {
 
   await ensureColumnExists(db, "categories", "icon", "TEXT");
   await ensureColumnExists(db, "categories", "parentCategoryId", "TEXT");
+  await ensureColumnExists(db, "categories", "activeAccountIds", "TEXT");
 
   const profileCount = await db.getFirstAsync<{ count: number }>("SELECT COUNT(*) as count FROM profile");
   if (!profileCount?.count) {
@@ -144,8 +146,15 @@ const ensureSchema = async (db: SQLiteDatabase) => {
   if (!categoryCount?.count) {
     for (const category of DEFAULT_CATEGORIES) {
       await db.runAsync(
-        "INSERT INTO categories (id, name, type, icon, parentCategoryId) VALUES (?, ?, ?, ?, ?)",
-        [category.id, category.name, category.type, category.icon ?? null, category.parentCategoryId ?? null],
+        "INSERT INTO categories (id, name, type, icon, parentCategoryId, activeAccountIds) VALUES (?, ?, ?, ?, ?, ?)",
+        [
+          category.id,
+          category.name,
+          category.type,
+          category.icon ?? null,
+          category.parentCategoryId ?? null,
+          category.activeAccountIds ? JSON.stringify(category.activeAccountIds) : null,
+        ],
       );
     }
   }
@@ -237,9 +246,23 @@ export const fetchFinanceState = async (): Promise<FinanceStatePayload> => {
     "SELECT themeMode FROM preferences LIMIT 1",
   );
 
-  const categories = await db.getAllAsync<Category>(
-    "SELECT id, name, type, icon, parentCategoryId FROM categories ORDER BY rowid",
-  );
+  const categoryRows = await db.getAllAsync<{
+    id: string;
+    name: string;
+    type: Category["type"];
+    icon: string | null;
+    parentCategoryId: string | null;
+    activeAccountIds: string | null;
+  }>("SELECT id, name, type, icon, parentCategoryId, activeAccountIds FROM categories ORDER BY rowid");
+
+  const categories: Category[] = categoryRows.map((row) => ({
+    id: row.id,
+    name: row.name,
+    type: row.type,
+    icon: row.icon,
+    parentCategoryId: row.parentCategoryId,
+    activeAccountIds: row.activeAccountIds ? (JSON.parse(row.activeAccountIds) as string[]) : null,
+  }));
 
   const accountRows = await db.getAllAsync<AccountRow>(
     "SELECT id, name, type, initialBalance, currency, excludeFromTotal, isArchived, createdAt FROM accounts ORDER BY createdAt",
@@ -448,14 +471,22 @@ export const saveThemeMode = async (mode: ThemeMode) => {
 export const saveCategory = async (category: Category) => {
   const db = await getDatabase();
   await db.runAsync(
-    `INSERT INTO categories (id, name, type, icon, parentCategoryId)
-     VALUES (?, ?, ?, ?, ?)
+    `INSERT INTO categories (id, name, type, icon, parentCategoryId, activeAccountIds)
+     VALUES (?, ?, ?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET
        name=excluded.name,
        type=excluded.type,
        icon=excluded.icon,
-       parentCategoryId=excluded.parentCategoryId`,
-    [category.id, category.name, category.type, category.icon ?? null, category.parentCategoryId ?? null],
+       parentCategoryId=excluded.parentCategoryId,
+       activeAccountIds=excluded.activeAccountIds`,
+    [
+      category.id,
+      category.name,
+      category.type,
+      category.icon ?? null,
+      category.parentCategoryId ?? null,
+      category.activeAccountIds ? JSON.stringify(category.activeAccountIds) : null,
+    ],
   );
 };
 

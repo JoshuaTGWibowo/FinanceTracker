@@ -29,6 +29,7 @@ import {
   TransactionType,
   useFinanceStore,
 } from "../../lib/store";
+import { isCategoryActiveForAccount } from "../../lib/categoryUtils";
 import { AccountPicker } from "../accounts/AccountPicker";
 
 interface TransactionFormProps {
@@ -211,8 +212,13 @@ export function TransactionForm({
   const insets = useSafeAreaInsets();
   const styles = useMemo(() => createStyles(theme, insets), [theme, insets]);
   const currency = useFinanceStore((state) => state.profile.currency);
+  const accounts = useFinanceStore((state) => state.accounts);
   const categories = useFinanceStore((state) => state.preferences.categories);
   const availableCategories = categories.length ? categories : DEFAULT_CATEGORIES;
+  const activeAccounts = useMemo(() => accounts.filter((account) => !account.isArchived), [accounts]);
+
+  const isCategoryActiveInAccount = (category: Category, accountIdValue: string) =>
+    isCategoryActiveForAccount(category, accountIdValue, activeAccounts);
 
   const findInitialCategory = () => {
     if (!initialValues?.category) {
@@ -323,6 +329,12 @@ export function TransactionForm({
       setToAccountId(null);
     }
   }, [transactionType, toAccountId]);
+
+  useEffect(() => {
+    if (selectedCategory && !isCategoryActiveInAccount(selectedCategory, accountId)) {
+      setSelectedCategory(null);
+    }
+  }, [accountId, activeAccounts, isCategoryActiveInAccount, selectedCategory]);
 
   const selectedCategoryTransactionType = selectedCategory
     ? normalizeCategoryType(selectedCategory.type)
@@ -861,43 +873,45 @@ export function TransactionForm({
             {(["expense", "income"] as TransactionType[])
               .filter((type) => type === transactionType)
               .map((type) => {
-                const entries = availableCategories.filter((category) => category.type === type);
+                const entries = availableCategories
+                  .filter((category) => category.type === type)
+                  .filter((category) => isCategoryActiveInAccount(category, accountId));
                 if (!entries.length) {
                   return (
                     <View key={type} style={styles.modalSection}>
                       <Text style={styles.modalSectionTitle}>
+                        {type === "expense" ? "Expenses" : "Income"}
+                      </Text>
+                      <Text style={styles.helperText}>No categories available yet.</Text>
+                    </View>
+                  );
+                }
+
+                return (
+                  <View key={type} style={styles.modalSection}>
+                    <Text style={styles.modalSectionTitle}>
                       {type === "expense" ? "Expenses" : "Income"}
                     </Text>
-                    <Text style={styles.helperText}>No categories available yet.</Text>
+                    <View style={styles.modalGrid}>
+                      {entries.map((category) => {
+                        const active = selectedCategory?.id === category.id;
+                        return (
+                          <Pressable
+                            key={category.id}
+                            style={styles.modalOption(active)}
+                            onPress={() => {
+                              setSelectedCategory(category);
+                              setCategoryModalVisible(false);
+                            }}
+                          >
+                            <Text style={styles.modalOptionText(active)}>{category.name}</Text>
+                          </Pressable>
+                        );
+                      })}
+                    </View>
                   </View>
                 );
-              }
-
-              return (
-                <View key={type} style={styles.modalSection}>
-                  <Text style={styles.modalSectionTitle}>
-                    {type === "expense" ? "Expenses" : "Income"}
-                  </Text>
-                  <View style={styles.modalGrid}>
-                    {entries.map((category) => {
-                      const active = selectedCategory?.id === category.id;
-                      return (
-                        <Pressable
-                          key={category.id}
-                          style={styles.modalOption(active)}
-                          onPress={() => {
-                            setSelectedCategory(category);
-                            setCategoryModalVisible(false);
-                          }}
-                        >
-                          <Text style={styles.modalOptionText(active)}>{category.name}</Text>
-                        </Pressable>
-                      );
-                    })}
-                  </View>
-                </View>
-              );
-            })}
+              })}
           </ScrollView>
         </SafeAreaView>
       </Modal>
