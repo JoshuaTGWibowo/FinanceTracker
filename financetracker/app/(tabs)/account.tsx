@@ -452,7 +452,7 @@ const createStyles = (
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "space-between",
-      paddingVertical: theme.spacing.md,
+      paddingVertical: theme.spacing.xs,
       gap: theme.spacing.md,
     },
     linkRowContent: {
