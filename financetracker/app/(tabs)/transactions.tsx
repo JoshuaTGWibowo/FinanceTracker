@@ -638,7 +638,7 @@ export default function TransactionsScreen() {
                     color={summary.net >= 0 ? theme.colors.success : theme.colors.danger}
                   />
                   <Text style={styles.changeValue(summary.net)}>
-                    {formatCurrency(Math.abs(summary.net), currency || "USD")}
+                    {formatWholeCurrency(Math.abs(summary.net), currency || "USD")}
                   </Text>
                   <Text style={styles.changePercent}>
                     {summary.percentageChange}
