@@ -429,7 +429,7 @@ const createStyles = (
     content: {
       flexGrow: 1,
       paddingTop: theme.spacing.xl,
-      paddingHorizontal: theme.spacing.xl,
+      paddingHorizontal: theme.spacing.md,
       paddingBottom: theme.spacing.xl + insets.bottom,
       gap: theme.spacing.xl,
     },

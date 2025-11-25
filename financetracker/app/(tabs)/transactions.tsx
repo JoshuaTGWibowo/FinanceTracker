@@ -1289,7 +1289,7 @@ const createStyles = (theme: any, insets: any) =>
       paddingBottom: 100,
     },
     header: {
-      paddingHorizontal: 16,
+      paddingHorizontal: 12,
       paddingTop: 16,
     },
     
@@ -1632,7 +1632,7 @@ const createStyles = (theme: any, insets: any) =>
     }),
     dayCard: {
       backgroundColor: theme.colors.surface,
-      marginHorizontal: 16,
+      marginHorizontal: 12,
       borderRadius: 12,
       overflow: "hidden",
     },

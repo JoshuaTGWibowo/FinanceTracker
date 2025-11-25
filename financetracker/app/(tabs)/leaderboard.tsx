@@ -55,7 +55,7 @@ const createStyles = (
       flex: 1,
       backgroundColor: theme.colors.background,
       paddingTop: theme.spacing.xl,
-      paddingHorizontal: theme.spacing.xl,
+      paddingHorizontal: theme.spacing.md,
       paddingBottom: theme.spacing.xl + insets.bottom,
     },
     header: {
