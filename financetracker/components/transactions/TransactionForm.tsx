@@ -933,7 +933,7 @@ export function TransactionForm({
               </View>
               <Text style={styles.categoryHeroTitle}>Pick the best fit</Text>
               <Text style={styles.helperText}>
-                Categories shown here respect the wallet you're using.
+                Categories shown here respect the wallet you are using.
               </Text>
             </View>
 

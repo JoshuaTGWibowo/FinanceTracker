@@ -67,6 +67,7 @@ All dependencies ship with Expo SDK 54 defaults, so no native configuration is r
 | `npm run android` | Shortcut for `expo start --android` |
 | `npm run web` | Launch the web preview |
 | `npm run lint` | Run Expo's ESLint preset |
+| `npm test` | Run the Node test suite via `tsx --test` |
 
 ## Next steps
 

@@ -9,7 +9,12 @@ import { DonutChart } from "../../components/DonutChart";
 import { SpendingBarChart, SpendingLineChart } from "../../components/SpendingCharts";
 import { useAppTheme } from "../../theme";
 import { BudgetGoal, useFinanceStore } from "../../lib/store";
-import { filterTransactionsByAccount, getTransactionDelta, getTransactionVisualState } from "../../lib/transactions";
+import {
+  filterTransactionsByAccount,
+  getTransactionDelta,
+  getTransactionVisualState,
+} from "../../lib/transactions";
+import { calculateMonthlySummary } from "../../lib/summary";
 import { truncateWords } from "../../lib/text";
 
 const formatCurrency = (
@@ -157,29 +162,15 @@ export default function HomeScreen() {
 
   const summary = useMemo(
     () =>
-      scopedTransactions.reduce(
-        (acc, transaction) => {
-          const date = dayjs(transaction.date);
-          const delta = getTransactionDelta(transaction, selectedAccountId);
-
-          if (date.isBefore(startOfMonth)) {
-            acc.openingBalance += delta;
-          }
-
-          if (!date.isBefore(startOfMonth) && !date.isAfter(endOfMonth)) {
-            if (transaction.type === "income") {
-              acc.income += transaction.amount;
-            } else if (transaction.type === "expense") {
-              acc.expense += transaction.amount;
-            }
-            acc.monthNet += delta;
-          }
-
-          return acc;
-        },
-        { income: 0, expense: 0, openingBalance: 0, monthNet: 0 },
-      ),
-    [endOfMonth, scopedTransactions, selectedAccountId, startOfMonth],
+      calculateMonthlySummary({
+        accounts,
+        transactions: scopedTransactions,
+        visibleAccountIds,
+        selectedAccountId,
+        startOfMonth,
+        endOfMonth,
+      }),
+    [accounts, endOfMonth, scopedTransactions, selectedAccountId, startOfMonth, visibleAccountIds],
   );
 
   const {
@@ -470,9 +461,7 @@ export default function HomeScreen() {
             <View style={styles.balanceColumn}>
               <Text style={styles.breakdownLabel}>Ending balance</Text>
               <Text style={styles.breakdownValue}>
-                {showBalance
-                  ? formatCurrency(summary.openingBalance + summary.monthNet, currency)
-                  : "••••"}
+                {showBalance ? formatCurrency(summary.endingBalance, currency) : "••••"}
               </Text>
             </View>
           </View>

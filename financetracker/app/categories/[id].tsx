@@ -175,7 +175,7 @@ export default function EditCategoryScreen() {
           <View style={styles.helperBox}>
             <Ionicons name="information-circle" size={16} color={theme.colors.textMuted} />
             <Text style={styles.helperText}>
-              Transactions for inactive wallets will still appear in history and reports, but you won't be able to
+              Transactions for inactive wallets will still appear in history and reports, but you will not be able to
               pick this category when adding new transactions there.
             </Text>
           </View>
