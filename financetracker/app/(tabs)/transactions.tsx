@@ -32,30 +32,17 @@ const formatCurrency = (
   currency: string,
   options?: Intl.NumberFormatOptions,
 ) => {
-  const maxDigits =
-    options?.maximumFractionDigits !== undefined
-      ? options.maximumFractionDigits
-      : Number.isInteger(value)
-        ? 0
-        : 2;
-  const minDigits =
-    options?.minimumFractionDigits !== undefined
-      ? options.minimumFractionDigits
-      : Number.isInteger(value)
-        ? 0
-        : Math.min(2, maxDigits);
+  const maximumFractionDigits = options?.maximumFractionDigits ?? 2;
+  const minimumFractionDigits = Math.min(options?.minimumFractionDigits ?? 0, maximumFractionDigits);
 
   return new Intl.NumberFormat(undefined, {
     style: "currency",
     currency,
     ...options,
-    maximumFractionDigits: maxDigits,
-    minimumFractionDigits: minDigits,
+    maximumFractionDigits,
+    minimumFractionDigits,
   }).format(value);
 };
-
-const formatWholeCurrency = (value: number, currency: string) =>
-  formatCurrency(Math.floor(value), currency, { maximumFractionDigits: 0, minimumFractionDigits: 0 });
 
 const parseAmountFilterValue = (value: string): number | undefined => {
   if (!value.trim()) {
@@ -584,7 +571,7 @@ export default function TransactionsScreen() {
   ]);
 
   const closingBalanceDisplay = useMemo(
-    () => formatWholeCurrency(summary.closingBalance, currency || "USD"),
+    () => formatCurrency(summary.closingBalance, currency || "USD"),
     [currency, summary.closingBalance],
   );
 
@@ -638,7 +625,7 @@ export default function TransactionsScreen() {
                     color={summary.net >= 0 ? theme.colors.success : theme.colors.danger}
                   />
                   <Text style={styles.changeValue(summary.net)}>
-                    {formatWholeCurrency(Math.abs(summary.net), currency || "USD")}
+                    {formatCurrency(Math.abs(summary.net), currency || "USD")}
                   </Text>
                   <Text style={styles.changePercent}>
                     {summary.percentageChange}
@@ -650,21 +637,21 @@ export default function TransactionsScreen() {
                 <View style={styles.metric}>
                   <Text style={styles.metricLabel}>Income</Text>
                   <Text style={styles.metricValue(theme.colors.success)}>
-                    {formatWholeCurrency(summary.income, currency || "USD")}
+                    {formatCurrency(summary.income, currency || "USD")}
                   </Text>
                 </View>
                 <View style={styles.metricDivider} />
                 <View style={styles.metric}>
                   <Text style={styles.metricLabel}>Expenses</Text>
                   <Text style={styles.metricValue(theme.colors.danger)}>
-                    {formatWholeCurrency(summary.expense, currency || "USD")}
+                    {formatCurrency(summary.expense, currency || "USD")}
                   </Text>
                 </View>
                 <View style={styles.metricDivider} />
                 <View style={styles.metric}>
                   <Text style={styles.metricLabel}>Previous</Text>
                   <Text style={styles.metricValue(theme.colors.text)}>
-                    {formatWholeCurrency(summary.openingBalance, currency || "USD")}
+                    {formatCurrency(summary.openingBalance, currency || "USD")}
                   </Text>
                 </View>
               </View>

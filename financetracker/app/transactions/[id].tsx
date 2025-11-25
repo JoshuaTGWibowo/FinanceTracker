@@ -24,7 +24,8 @@ const formatCurrency = (
   new Intl.NumberFormat(undefined, {
     style: "currency",
     currency,
-    maximumFractionDigits: 2,
+    maximumFractionDigits: options?.maximumFractionDigits ?? 2,
+    minimumFractionDigits: Math.min(options?.minimumFractionDigits ?? 0, options?.maximumFractionDigits ?? 2),
     ...options,
   }).format(value);
 
