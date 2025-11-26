@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
 
 import { useAppTheme } from "../../theme";
 import { isAuthenticated } from "../../lib/supabase";
@@ -22,6 +23,7 @@ import {
 
 export default function CrewScreen() {
   const theme = useAppTheme();
+  const router = useRouter();
   const insets = useSafeAreaInsets();
   const styles = useMemo(() => createStyles(theme, insets), [theme, insets]);
 
@@ -240,6 +242,16 @@ export default function CrewScreen() {
               {nextLevelPoints - userPoints} pts to next level
             </Text>
           </View>
+
+          {/* View Crew Button */}
+          <Pressable 
+            style={styles.viewCrewButton}
+            onPress={() => router.push('/crew/your-crew' as any)}
+          >
+            <Ionicons name="people" size={18} color={theme.colors.primary} />
+            <Text style={styles.viewCrewButtonText}>View Crew</Text>
+            <Ionicons name="chevron-forward" size={18} color={theme.colors.primary} />
+          </Pressable>
         </View>
 
         {/* Leaderboard */}
@@ -463,6 +475,28 @@ const createStyles = (
     levelProgressSubtext: {
       fontSize: 12,
       color: theme.colors.textMuted,
+      textAlign: 'center',
+    },
+
+    // View Crew Button
+    viewCrewButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: theme.spacing.sm,
+      paddingVertical: theme.spacing.md,
+      paddingHorizontal: theme.spacing.lg,
+      backgroundColor: theme.colors.primary + '20',
+      borderRadius: theme.radii.md,
+      borderWidth: 1,
+      borderColor: theme.colors.primary + '40',
+      marginTop: theme.spacing.lg,
+    },
+    viewCrewButtonText: {
+      fontSize: 15,
+      fontWeight: '600',
+      color: theme.colors.primary,
+      flex: 1,
       textAlign: 'center',
     },
     
