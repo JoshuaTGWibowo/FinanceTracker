@@ -1074,7 +1074,7 @@ const createStyles = (
       flex: 1,
     },
     header: {
-      paddingHorizontal: theme.spacing.xl,
+      paddingHorizontal: theme.spacing.md,
       paddingVertical: theme.spacing.lg,
       flexDirection: "row",
       alignItems: "center",
@@ -1096,7 +1096,7 @@ const createStyles = (
       fontSize: 22,
     },
     content: {
-      paddingHorizontal: theme.spacing.xl,
+      paddingHorizontal: theme.spacing.md,
       paddingBottom: theme.spacing.xl + insets.bottom,
       paddingTop: theme.spacing.lg,
       gap: theme.spacing.lg,
