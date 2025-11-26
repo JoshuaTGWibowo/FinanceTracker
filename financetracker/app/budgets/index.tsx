@@ -106,7 +106,7 @@ export default function BudgetsScreen() {
       >
         <View style={styles.headerContainer}>
           <Pressable onPress={() => router.back()} style={styles.backButton}>
-            <Ionicons name="arrow-back" size={24} color={theme.colors.text} />
+            <Ionicons name="arrow-back" size={22} color={theme.colors.text} />
           </Pressable>
           <View style={styles.headerText}>
             <Text style={styles.title}>Budget Goals</Text>
@@ -122,9 +122,9 @@ export default function BudgetsScreen() {
           <View style={[theme.components.surface, styles.formCard]}>
             <View style={styles.formHeader}>
               <View style={styles.formIconContainer}>
-                <Ionicons name="add-circle" size={24} color={theme.colors.primary} />
+                <Ionicons name="add-circle" size={20} color={theme.colors.primary} />
               </View>
-              <View>
+              <View style={styles.flex}>
                 <Text style={styles.formTitle}>Create New Budget</Text>
                 <Text style={styles.formSubtitle}>Set a spending target for a category</Text>
               </View>
@@ -190,7 +190,7 @@ export default function BudgetsScreen() {
                         <View style={styles.categoryIconSmall}>
                           <Ionicons
                             name={toIconName(selectedCategory.icon)}
-                            size={16}
+                            size={14}
                             color={theme.colors.text}
                           />
                         </View>
@@ -205,7 +205,7 @@ export default function BudgetsScreen() {
               </View>
 
               <Pressable style={styles.primaryButton} onPress={handleCreateGoal}>
-                <Ionicons name="add" size={20} color={theme.colors.text} />
+                <Ionicons name="add" size={18} color={theme.colors.text} />
                 <Text style={styles.primaryButtonText}>Create budget</Text>
               </Pressable>
             </View>
@@ -213,14 +213,14 @@ export default function BudgetsScreen() {
 
           <View style={[theme.components.surface, styles.goalsCard]}>
             <View style={styles.goalsHeader}>
-              <View>
+              <View style={styles.flex}>
                 <Text style={styles.goalsTitle}>Active Budgets</Text>
                 <Text style={styles.goalsSubtitle}>
                   {budgetGoals.length} {budgetGoals.length === 1 ? "budget" : "budgets"} tracking
                 </Text>
               </View>
               <View style={styles.goalsBadge}>
-                <Ionicons name="stats-chart" size={18} color={theme.colors.primary} />
+                <Ionicons name="stats-chart" size={16} color={theme.colors.primary} />
               </View>
             </View>
 
@@ -234,7 +234,7 @@ export default function BudgetsScreen() {
                         <View style={styles.goalCardIcon}>
                           <Ionicons
                             name={toIconName(category?.icon)}
-                            size={20}
+                            size={18}
                             color={theme.colors.text}
                           />
                         </View>
@@ -242,12 +242,12 @@ export default function BudgetsScreen() {
                           <Text style={styles.goalCardName}>{goal.name}</Text>
                           <View style={styles.goalCardMeta}>
                             <View style={styles.goalMetaBadge}>
-                              <Ionicons name="pricetag" size={12} color={theme.colors.textMuted} />
+                              <Ionicons name="pricetag" size={11} color={theme.colors.textMuted} />
                               <Text style={styles.goalMetaText}>{goal.category}</Text>
                             </View>
                             <Text style={styles.goalMetaDivider}>•</Text>
                             <View style={styles.goalMetaBadge}>
-                              <Ionicons name="calendar" size={12} color={theme.colors.textMuted} />
+                              <Ionicons name="calendar" size={11} color={theme.colors.textMuted} />
                               <Text style={styles.goalMetaText}>{goal.period}ly</Text>
                             </View>
                           </View>
@@ -269,7 +269,7 @@ export default function BudgetsScreen() {
                           }}
                           style={styles.deleteButton}
                         >
-                          <Ionicons name="trash-outline" size={18} color={theme.colors.danger} />
+                          <Ionicons name="trash-outline" size={16} color={theme.colors.danger} />
                         </Pressable>
                       </View>
                       <View style={styles.goalCardTarget}>
@@ -445,10 +445,10 @@ const createStyles = (
       top: 0,
       left: 0,
       right: 0,
-      height: 200,
+      height: 160,
       backgroundColor: `${theme.colors.primary}15`,
-      borderBottomLeftRadius: 32,
-      borderBottomRightRadius: 32,
+      borderBottomLeftRadius: 28,
+      borderBottomRightRadius: 28,
     },
     flex: {
       flex: 1,
@@ -456,10 +456,10 @@ const createStyles = (
     headerContainer: {
       flexDirection: "row",
       alignItems: "center",
-      gap: theme.spacing.md,
+      gap: theme.spacing.sm,
       paddingHorizontal: theme.spacing.md,
       paddingTop: theme.spacing.lg,
-      paddingBottom: theme.spacing.md,
+      paddingBottom: theme.spacing.sm,
     },
     backButton: {
       padding: theme.spacing.xs,
@@ -469,19 +469,19 @@ const createStyles = (
     },
     title: {
       ...theme.typography.title,
-      fontSize: 28,
+      fontSize: 24,
       fontWeight: "700",
     },
     subtitle: {
       ...theme.typography.subtitle,
-      fontSize: 14,
+      fontSize: 13,
       marginTop: 2,
     },
     content: {
       flexGrow: 1,
       paddingHorizontal: theme.spacing.md,
-      paddingBottom: theme.spacing.xl + insets.bottom,
-      gap: theme.spacing.lg,
+      paddingBottom: theme.spacing.lg + insets.bottom,
+      gap: theme.spacing.md,
     },
     formCard: {
       overflow: "hidden",
@@ -489,78 +489,82 @@ const createStyles = (
     formHeader: {
       flexDirection: "row",
       alignItems: "center",
-      gap: theme.spacing.md,
-      paddingBottom: theme.spacing.md,
+      gap: theme.spacing.sm,
+      paddingBottom: theme.spacing.sm,
       borderBottomWidth: 1,
       borderBottomColor: theme.colors.border,
     },
     formIconContainer: {
-      width: 48,
-      height: 48,
-      borderRadius: theme.radii.lg,
+      width: 36,
+      height: 36,
+      borderRadius: theme.radii.md,
       backgroundColor: `${theme.colors.primary}22`,
       alignItems: "center",
       justifyContent: "center",
     },
     formTitle: {
       ...theme.typography.subtitle,
-      fontSize: 18,
+      fontSize: 16,
       fontWeight: "700",
     },
     formSubtitle: {
-      fontSize: 13,
+      fontSize: 12,
       color: theme.colors.textMuted,
       marginTop: 2,
     },
     formBody: {
-      gap: theme.spacing.lg,
-      paddingTop: theme.spacing.md,
+      gap: theme.spacing.md,
+      paddingTop: theme.spacing.sm,
     },
     fieldGroup: {
-      gap: theme.spacing.xs,
+      gap: 6,
     },
     label: {
-      ...theme.typography.subtitle,
-      fontSize: 12,
-      textTransform: "uppercase",
-      letterSpacing: 1.2,
+      ...theme.typography.label,
+      fontSize: 13,
+      fontWeight: "600",
+      color: theme.colors.text,
     },
     input: {
       ...theme.components.input,
-      fontSize: 16,
+      fontSize: 15,
+      paddingVertical: theme.spacing.sm,
+      paddingHorizontal: theme.spacing.md,
     },
     row: {
       flexDirection: "row",
-      gap: theme.spacing.md,
+      gap: theme.spacing.sm,
     },
     amountInputContainer: {
       ...theme.components.input,
       flexDirection: "row",
       alignItems: "center",
-      gap: theme.spacing.sm,
+      gap: 6,
+      paddingVertical: theme.spacing.sm,
+      paddingHorizontal: theme.spacing.md,
     },
     currencySymbol: {
-      fontSize: 16,
+      fontSize: 15,
       fontWeight: "600",
       color: theme.colors.textMuted,
     },
     amountInput: {
       flex: 1,
-      fontSize: 16,
+      fontSize: 15,
       color: theme.colors.text,
       padding: 0,
     },
     periodField: {
-      minWidth: 160,
+      minWidth: 140,
     },
     periodRow: {
       flexDirection: "row",
-      gap: theme.spacing.xs,
+      gap: 6,
     },
     periodChip: {
       flex: 1,
-      paddingHorizontal: theme.spacing.md,
-      paddingVertical: theme.spacing.sm,
+      paddingHorizontal: theme.spacing.sm,
+      paddingVertical: 6,
       borderRadius: theme.radii.pill,
       borderWidth: 1,
       borderColor: theme.colors.border,
@@ -572,7 +576,7 @@ const createStyles = (
       borderColor: theme.colors.primary,
     },
     periodChipText: {
-      fontSize: 13,
+      fontSize: 12,
       fontWeight: "600",
       color: theme.colors.textMuted,
     },
@@ -584,28 +588,30 @@ const createStyles = (
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "space-between",
+      paddingVertical: theme.spacing.sm,
+      paddingHorizontal: theme.spacing.md,
     },
     categorySelectorContent: {
       flexDirection: "row",
       alignItems: "center",
-      gap: theme.spacing.sm,
+      gap: 8,
       flex: 1,
     },
     categoryIconSmall: {
-      width: 32,
-      height: 32,
-      borderRadius: theme.radii.md,
+      width: 28,
+      height: 28,
+      borderRadius: theme.radii.sm,
       backgroundColor: `${theme.colors.primary}22`,
       alignItems: "center",
       justifyContent: "center",
     },
     categorySelectorText: {
-      fontSize: 16,
+      fontSize: 15,
       color: theme.colors.text,
       fontWeight: "500",
     },
     categorySelectorPlaceholder: {
-      fontSize: 16,
+      fontSize: 15,
       color: theme.colors.textMuted,
     },
     primaryButton: {
@@ -623,81 +629,84 @@ const createStyles = (
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "space-between",
-      paddingBottom: theme.spacing.md,
+      paddingBottom: theme.spacing.sm,
       borderBottomWidth: 1,
       borderBottomColor: theme.colors.border,
     },
     goalsTitle: {
       ...theme.typography.subtitle,
-      fontSize: 18,
+      fontSize: 16,
       fontWeight: "700",
     },
     goalsSubtitle: {
-      fontSize: 13,
+      fontSize: 12,
       color: theme.colors.textMuted,
       marginTop: 2,
     },
     goalsBadge: {
-      width: 40,
-      height: 40,
-      borderRadius: theme.radii.lg,
+      width: 34,
+      height: 34,
+      borderRadius: theme.radii.md,
       backgroundColor: `${theme.colors.primary}22`,
       alignItems: "center",
       justifyContent: "center",
     },
     goalsList: {
-      gap: theme.spacing.md,
-      paddingTop: theme.spacing.md,
+      gap: theme.spacing.sm,
+      paddingTop: theme.spacing.sm,
     },
     goalCard: {
-      padding: theme.spacing.md,
-      borderRadius: theme.radii.lg,
+      padding: theme.spacing.sm,
+      borderRadius: theme.radii.md,
       borderWidth: 1,
       borderColor: theme.colors.border,
-      gap: theme.spacing.md,
+      gap: theme.spacing.sm,
     },
     goalCardHeader: {
       flexDirection: "row",
       alignItems: "center",
-      gap: theme.spacing.md,
+      gap: theme.spacing.sm,
     },
     goalCardIcon: {
-      width: 44,
-      height: 44,
-      borderRadius: theme.radii.lg,
+      width: 36,
+      height: 36,
+      borderRadius: theme.radii.md,
       backgroundColor: `${theme.colors.primary}22`,
       alignItems: "center",
       justifyContent: "center",
     },
     goalCardInfo: {
       flex: 1,
-      gap: theme.spacing.xs,
+      gap: 2,
     },
     goalCardName: {
-      fontSize: 16,
+      fontSize: 15,
       fontWeight: "600",
       color: theme.colors.text,
     },
     goalCardMeta: {
       flexDirection: "row",
       alignItems: "center",
-      gap: theme.spacing.xs,
+      gap: 4,
     },
     goalMetaBadge: {
       flexDirection: "row",
       alignItems: "center",
-      gap: 4,
+      gap: 3,
     },
     goalMetaText: {
       fontSize: 12,
       color: theme.colors.textMuted,
     },
     goalMetaDivider: {
-      fontSize: 12,
+      fontSize: 11,
       color: theme.colors.textMuted,
     },
     deleteButton: {
-      padding: theme.spacing.sm,
+      width: 32,
+      height: 32,
+      alignItems: "center",
+      justifyContent: "center",
       borderRadius: theme.radii.md,
       borderWidth: 1,
       borderColor: theme.colors.danger,
@@ -712,20 +721,17 @@ const createStyles = (
     },
     goalCardTargetLabel: {
       fontSize: 12,
-      textTransform: "uppercase",
-      letterSpacing: 1.2,
       color: theme.colors.textMuted,
-      fontWeight: "600",
     },
     goalCardTargetAmount: {
-      fontSize: 18,
-      fontWeight: "700",
+      fontSize: 15,
+      fontWeight: "600",
       color: theme.colors.text,
     },
     emptyState: {
       alignItems: "center",
-      paddingVertical: theme.spacing.xl * 2,
-      gap: theme.spacing.md,
+      paddingVertical: theme.spacing.xl,
+      gap: theme.spacing.sm,
     },
     emptyIconContainer: {
       width: 80,
