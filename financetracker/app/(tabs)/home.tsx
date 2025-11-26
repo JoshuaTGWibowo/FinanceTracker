@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import dayjs from "dayjs";
@@ -11,6 +11,8 @@ import { useAppTheme } from "../../theme";
 import { BudgetGoal, useFinanceStore } from "../../lib/store";
 import { filterTransactionsByAccount, getTransactionDelta, getTransactionVisualState } from "../../lib/transactions";
 import { truncateWords } from "../../lib/text";
+import { syncMetricsToSupabase } from "../../lib/sync-service";
+import { isAuthenticated } from "../../lib/supabase";
 
 const formatCurrency = (
   value: number,
@@ -144,15 +146,42 @@ export default function HomeScreen() {
   const [overviewChart, setOverviewChart] = useState<"bar" | "line">("bar");
   const [topSpendingPeriod, setTopSpendingPeriod] = useState<"week" | "month">("month");
   const [showBalance, setShowBalance] = useState(true);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [isAuth, setIsAuth] = useState(false);
 
   const insets = useSafeAreaInsets();
   const styles = useMemo(() => createStyles(theme, insets), [theme, insets]);
+
+  useEffect(() => {
+    isAuthenticated().then(setIsAuth);
+  }, []);
 
   useEffect(() => {
     if (overviewPeriod === "week" && overviewChart === "line") {
       setOverviewChart("bar");
     }
   }, [overviewChart, overviewPeriod]);
+
+  const handleSyncToSupabase = async () => {
+    if (!isAuth) {
+      Alert.alert(
+        'Not Signed In',
+        'You need to sign in to sync your stats to the leaderboard. Go to the Leaderboard tab to sign in.',
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+
+    setIsSyncing(true);
+    const result = await syncMetricsToSupabase(transactions, budgetGoals);
+    setIsSyncing(false);
+
+    if (result.success) {
+      Alert.alert('Success', 'Your anonymized stats have been synced to the leaderboard!');
+    } else {
+      Alert.alert('Error', result.error || 'Failed to sync stats');
+    }
+  };
 
   const startOfMonth = useMemo(() => dayjs().startOf("month"), []);
   const endOfMonth = useMemo(() => dayjs().endOf("month"), []);
@@ -929,6 +958,16 @@ const createStyles = (
     header: {
       gap: theme.spacing.xs,
     },
+    headerTop: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'flex-start',
+      gap: theme.spacing.md,
+    },
+    headerText: {
+      flex: 1,
+      gap: theme.spacing.xs,
+    },
     hello: {
       ...theme.typography.title,
       fontSize: 24,
@@ -936,6 +975,25 @@ const createStyles = (
     subtitle: {
       ...theme.typography.subtitle,
       fontSize: 14,
+    },
+    syncButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      backgroundColor: theme.colors.primary,
+      borderRadius: 8,
+      minWidth: 70,
+      justifyContent: 'center',
+    },
+    syncButtonDisabled: {
+      opacity: 0.6,
+    },
+    syncButtonText: {
+      fontSize: 13,
+      fontWeight: '600',
+      color: theme.colors.text,
     },
     accountChipRow: {
       flexDirection: "row",
