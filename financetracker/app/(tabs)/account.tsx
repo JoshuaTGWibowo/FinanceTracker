@@ -28,6 +28,7 @@ export default function AccountScreen() {
   const setThemeMode = useFinanceStore((state) => state.setThemeMode);
   const accounts = useFinanceStore((state) => state.accounts);
   const transactions = useFinanceStore((state) => state.transactions);
+  const budgetGoals = useFinanceStore((state) => state.budgetGoals);
   const loadMockData = useFinanceStore((state) => state.loadMockData);
   const clearAllDataAndReload = useFinanceStore((state) => state.clearAllDataAndReload);
 
@@ -240,6 +241,55 @@ export default function AccountScreen() {
                 </View>
               </View>
               <Ionicons name="chevron-forward" size={18} color={theme.colors.textMuted} />
+            </Pressable>
+          </View>
+
+          <View style={[theme.components.surface, styles.sectionCard]}>
+            <Text style={styles.sectionTitle}>Leaderboard & Social</Text>
+            <Text style={styles.sectionSubtitle}>
+              Sync your anonymized stats to compete with others.
+            </Text>
+            <Pressable
+              style={styles.primaryButton}
+              onPress={async () => {
+                const { syncMetricsToSupabase } = require('../../lib/sync-service');
+                const { isAuthenticated } = require('../../lib/supabase');
+                
+                const auth = await isAuthenticated();
+                if (!auth) {
+                  Alert.alert(
+                    'Not Signed In',
+                    'Go to the Leaderboard tab to sign in first.',
+                    [{ text: 'OK' }]
+                  );
+                  return;
+                }
+
+                const result = await syncMetricsToSupabase(transactions, budgetGoals);
+                if (result.success) {
+                  Alert.alert('Success', 'Your stats have been synced to the leaderboard!');
+                } else {
+                  Alert.alert('Error', result.error || 'Failed to sync');
+                }
+              }}
+            >
+              <Text style={styles.primaryButtonText}>Sync to Leaderboard</Text>
+            </Pressable>
+
+            <Pressable
+              style={styles.dangerButton}
+              onPress={async () => {
+                const { supabase } = require('../../lib/supabase');
+                const { error } = await supabase.auth.signOut();
+                
+                if (error) {
+                  Alert.alert('Error', 'Failed to sign out');
+                } else {
+                  Alert.alert('Success', 'Signed out successfully!');
+                }
+              }}
+            >
+              <Text style={styles.dangerButtonText}>Sign Out</Text>
             </Pressable>
           </View>
 
