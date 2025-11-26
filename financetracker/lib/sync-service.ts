@@ -1,4 +1,4 @@
-import { supabase, getCurrentUserId } from './supabase';
+import { supabase, getCurrentUserId, isAuthenticated } from './supabase';
 import type { LeaderboardStats } from './supabase-types';
 import type { Transaction, BudgetGoal } from './types';
 
@@ -205,14 +205,18 @@ export function calculateAnonymizedMetrics(
  * This is the ONLY data sent to the cloud - no actual amounts or sensitive info
  */
 export async function syncMetricsToSupabase(
-  transactions: Transaction[],
-  budgetGoals: BudgetGoal[]
+  transactions?: Transaction[],
+  budgetGoals?: BudgetGoal[]
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const userId = await getCurrentUserId();
     if (!userId) {
       return { success: false, error: 'User not authenticated' };
     }
+
+    // Use provided data or default to empty arrays
+    const txData = transactions || [];
+    const budgetData = budgetGoals || [];
 
     // Calculate metrics for all periods
     const periods: Array<'daily' | 'weekly' | 'monthly' | 'all_time'> = [
@@ -223,7 +227,7 @@ export async function syncMetricsToSupabase(
     ];
 
     for (const period of periods) {
-      const metrics = calculateAnonymizedMetrics(transactions, budgetGoals, period);
+      const metrics = calculateAnonymizedMetrics(txData, budgetData, period);
 
       const statsData: Partial<LeaderboardStats> = {
         user_id: userId,
@@ -258,6 +262,92 @@ export async function syncMetricsToSupabase(
       error: error instanceof Error ? error.message : 'Unknown error',
     };
   }
+}
+
+/**
+ * Auto-sync manager with debouncing and periodic sync
+ */
+let autoSyncTimer: ReturnType<typeof setInterval> | null = null;
+let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+let lastSyncTime = 0;
+const SYNC_INTERVAL = 5 * 60 * 1000; // 5 minutes
+const DEBOUNCE_DELAY = 3000; // 3 seconds
+const MIN_SYNC_INTERVAL = 30 * 1000; // Minimum 30 seconds between syncs
+
+/**
+ * Start automatic periodic syncing
+ */
+export function startAutoSync(
+  getTransactions: () => Transaction[],
+  getBudgetGoals: () => BudgetGoal[]
+): void {
+  // Clear existing timer
+  if (autoSyncTimer) {
+    clearInterval(autoSyncTimer);
+  }
+
+  // Set up periodic sync every 5 minutes
+  autoSyncTimer = setInterval(async () => {
+    const now = Date.now();
+    if (now - lastSyncTime >= MIN_SYNC_INTERVAL) {
+      const isAuth = await isAuthenticated();
+      if (isAuth) {
+        const transactions = getTransactions();
+        const budgetGoals = getBudgetGoals();
+        await syncMetricsToSupabase(transactions, budgetGoals);
+        lastSyncTime = now;
+      }
+    }
+  }, SYNC_INTERVAL);
+
+  console.log('Auto-sync enabled: syncing every 5 minutes');
+}
+
+/**
+ * Stop automatic syncing
+ */
+export function stopAutoSync(): void {
+  if (autoSyncTimer) {
+    clearInterval(autoSyncTimer);
+    autoSyncTimer = null;
+  }
+  if (debounceTimer) {
+    clearTimeout(debounceTimer);
+    debounceTimer = null;
+  }
+  console.log('Auto-sync disabled');
+}
+
+/**
+ * Trigger an immediate sync with debouncing
+ * Called after user actions like adding/editing transactions
+ */
+export async function triggerSync(
+  transactions: Transaction[],
+  budgetGoals: BudgetGoal[]
+): Promise<void> {
+  // Clear existing debounce timer
+  if (debounceTimer) {
+    clearTimeout(debounceTimer);
+  }
+
+  // Debounce: wait 3 seconds before syncing
+  debounceTimer = setTimeout(async () => {
+    const now = Date.now();
+    
+    // Respect minimum sync interval
+    if (now - lastSyncTime < MIN_SYNC_INTERVAL) {
+      console.log('Sync throttled: too soon since last sync');
+      return;
+    }
+
+    const isAuth = await isAuthenticated();
+    if (isAuth) {
+      await syncMetricsToSupabase(transactions, budgetGoals);
+      lastSyncTime = now;
+      console.log('Auto-sync triggered after user action');
+    }
+  }, DEBOUNCE_DELAY);
 }
 
 /**

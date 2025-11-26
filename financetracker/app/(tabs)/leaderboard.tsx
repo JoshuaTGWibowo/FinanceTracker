@@ -1,28 +1,26 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 
 import { useAppTheme } from "../../theme";
-import { fetchLeaderboard, getUserRank } from "../../lib/sync-service";
 import { isAuthenticated } from "../../lib/supabase";
+import { syncMetricsToSupabase, fetchLeaderboard, getUserRank } from "../../lib/sync-service";
+import { useFinanceStore } from "../../lib/store";
 import AuthForm from "../../components/AuthForm";
+import { 
+  mockMissions, 
+  mockAchievements,
+  mockLeaderboardData,
+  calculateLevel, 
+  levelProgress, 
+  pointsForNextLevel,
+  getTimeRemaining,
+  type MockMission,
+  type MockAchievement 
+} from "../../lib/crew-mock-data";
 
-type Period = 'daily' | 'weekly' | 'monthly' | 'all_time';
-
-interface LeaderboardEntry {
-  user_id: string;
-  total_points: number;
-  level: number;
-  streak_days: number;
-  savings_percentage: number | null;
-  profiles: {
-    username: string;
-    display_name: string | null;
-  };
-}
-
-export default function LeaderboardScreen() {
+export default function CrewScreen() {
   const theme = useAppTheme();
   const insets = useSafeAreaInsets();
   const styles = useMemo(() => createStyles(theme, insets), [theme, insets]);
@@ -30,70 +28,145 @@ export default function LeaderboardScreen() {
   const [isAuth, setIsAuth] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [period, setPeriod] = useState<Period>('all_time');
-  const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
+  const [period, setPeriod] = useState<'daily' | 'weekly' | 'monthly' | 'all_time'>('all_time');
+  const [leaderboardData, setLeaderboardData] = useState<any[]>([]);
   const [userRank, setUserRank] = useState<number | null>(null);
+  
+  const transactions = useFinanceStore((state) => state.transactions);
+  const budgetGoals = useFinanceStore((state) => state.budgetGoals);
+  
+  // Mock user stats
+  const [userPoints, setUserPoints] = useState(850);
+  const [userStreak, setUserStreak] = useState(5);
+  const userLevel = calculateLevel(userPoints);
+  const levelPercent = levelProgress(userPoints, userLevel);
+  const nextLevelPoints = pointsForNextLevel(userLevel);
 
   const checkAuth = async () => {
     const auth = await isAuthenticated();
     setIsAuth(auth);
+    if (auth) {
+      await loadLeaderboard();
+    }
+    setIsLoading(false);
     return auth;
   };
 
   const loadLeaderboard = async () => {
-    const auth = await checkAuth();
-    if (!auth) {
-      setIsLoading(false);
-      return;
-    }
-
     const result = await fetchLeaderboard(period);
-    if (result.success && result.data) {
-      setLeaderboard(result.data as LeaderboardEntry[]);
+    if (result.success && result.data && result.data.length > 0) {
+      setLeaderboardData(result.data);
+    } else {
+      // Use mock data if no real data available
+      setLeaderboardData(mockLeaderboardData);
     }
 
     const rankResult = await getUserRank(period);
     if (rankResult.success && rankResult.rank) {
       setUserRank(rankResult.rank);
+    } else {
+      // Mock rank for demo
+      setUserRank(7);
     }
-
-    setIsLoading(false);
   };
 
-  const handleRefresh = async () => {
+  const handleRefresh = useCallback(async () => {
     setIsRefreshing(true);
+    await syncMetricsToSupabase(transactions, budgetGoals);
     await loadLeaderboard();
     setIsRefreshing(false);
-  };
+  }, [transactions, budgetGoals, period]);
 
   useEffect(() => {
-    loadLeaderboard();
+    checkAuth();
+  }, []);
+
+  useEffect(() => {
+    if (isAuth) {
+      loadLeaderboard();
+    }
   }, [period]);
 
-  const renderPeriodButton = (p: Period, label: string) => {
-    const isActive = period === p;
-    return (
-      <Pressable
-        key={p}
-        style={[styles.periodButton, isActive && styles.periodButtonActive]}
-        onPress={() => setPeriod(p)}
-      >
-        <Text style={[styles.periodButtonText, isActive && styles.periodButtonTextActive]}>
-          {label}
+  const renderMission = (mission: MockMission) => (
+    <View key={mission.id} style={styles.missionCard}>
+      <View style={styles.missionHeader}>
+        <View style={[styles.missionIcon, { backgroundColor: theme.colors.primary + '20' }]}>
+          <Ionicons name={mission.icon as any} size={24} color={theme.colors.primary} />
+        </View>
+        <View style={styles.missionHeaderText}>
+          <Text style={styles.missionTitle}>{mission.title}</Text>
+          <Text style={styles.missionTime}>
+            {mission.ends_at ? getTimeRemaining(mission.ends_at) : 'No deadline'}
+          </Text>
+        </View>
+        <View style={styles.missionReward}>
+          <Ionicons name="sparkles" size={16} color={theme.colors.accent} />
+          <Text style={styles.missionRewardText}>+{mission.points_reward}</Text>
+        </View>
+      </View>
+      
+      <Text style={styles.missionDescription}>{mission.description}</Text>
+      
+      <View style={styles.progressContainer}>
+        <View style={styles.progressBar}>
+          <View 
+            style={[
+              styles.progressFill, 
+              { width: `${mission.progress || 0}%`, backgroundColor: theme.colors.success }
+            ]} 
+          />
+        </View>
+        <Text style={styles.progressText}>{mission.progress || 0}%</Text>
+      </View>
+    </View>
+  );
+
+  const renderAchievement = (achievement: MockAchievement) => (
+    <View 
+      key={achievement.id} 
+      style={[
+        styles.achievementCard,
+        !achievement.unlocked && styles.achievementLocked
+      ]}
+    >
+      <Text style={styles.achievementIcon}>{achievement.icon}</Text>
+      <View style={styles.achievementContent}>
+        <Text style={[styles.achievementTitle, !achievement.unlocked && styles.textMuted]}>
+          {achievement.title}
         </Text>
-      </Pressable>
-    );
-  };
+        <Text style={[styles.achievementDescription, !achievement.unlocked && styles.textMuted]}>
+          {achievement.description}
+        </Text>
+        <Text style={styles.achievementPoints}>+{achievement.points_value} pts</Text>
+      </View>
+      {achievement.unlocked && (
+        <Ionicons name="checkmark-circle" size={24} color={theme.colors.success} />
+      )}
+      {!achievement.unlocked && (
+        <Ionicons name="lock-closed" size={24} color={theme.colors.textMuted} />
+      )}
+    </View>
+  );
 
   if (!isAuth) {
     return (
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.header}>
-          <Text style={styles.title}>Leaderboard</Text>
-          <Text style={styles.subtitle}>Sign in to compete and view rankings</Text>
+          <Text style={styles.title}>Crew</Text>
+          <Text style={styles.subtitle}>Sign in to join missions and compete</Text>
         </View>
         <View style={[theme.components.surface, styles.authContainer]}>
-          <AuthForm onSuccess={() => loadLeaderboard()} />
+          <AuthForm onSuccess={() => checkAuth()} />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.centerContent}>
+          <ActivityIndicator size="large" color={theme.colors.primary} />
         </View>
       </SafeAreaView>
     );
@@ -101,56 +174,164 @@ export default function LeaderboardScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Leaderboard</Text>
-        <Text style={styles.subtitle}>
-          {userRank ? `Your rank: #${userRank}` : 'Compete with others'}
-        </Text>
-      </View>
-
-      <View style={styles.periodSelector}>
-        {renderPeriodButton('daily', 'Day')}
-        {renderPeriodButton('weekly', 'Week')}
-        {renderPeriodButton('monthly', 'Month')}
-        {renderPeriodButton('all_time', 'All Time')}
-      </View>
-
-      {isLoading ? (
-        <View style={styles.centerContent}>
-          <ActivityIndicator size="large" color={theme.colors.primary} />
+      <ScrollView 
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={handleRefresh}
+            tintColor={theme.colors.primary}
+            colors={[theme.colors.primary]}
+          />
+        }
+      >
+        {/* Header */}
+        <View style={styles.header}>
+          <Text style={styles.title}>Crew</Text>
+          <Text style={styles.subtitle}>Complete missions and earn rewards</Text>
         </View>
-      ) : leaderboard.length === 0 ? (
-        <View style={styles.centerContent}>
-          <Text style={styles.emptyText}>No leaderboard data yet</Text>
-          <Text style={styles.emptySubtext}>Be the first to sync your stats!</Text>
+
+        {/* Player Card */}
+        <View style={[theme.components.card, styles.playerCard]}>
+          <View style={styles.playerHeader}>
+            <View style={styles.avatarWrapper}>
+              <View style={styles.avatar}>
+                <Ionicons name="person" size={32} color={theme.colors.primary} />
+              </View>
+              <View style={[styles.levelBadge, { backgroundColor: theme.colors.success }]}>
+                <Text style={styles.levelBadgeText}>{userLevel}</Text>
+              </View>
+            </View>
+            
+            <View style={styles.playerInfo}>
+              <Text style={styles.playerName}>Josh77</Text>
+              <View style={styles.statsRow}>
+                <View style={styles.statItem}>
+                  <Ionicons name="flame" size={16} color="#FF6B35" />
+                  <Text style={styles.statText}>{userStreak} days</Text>
+                </View>
+                <View style={styles.statItem}>
+                  <Ionicons name="sparkles" size={16} color={theme.colors.accent} />
+                  <Text style={styles.statText}>{userPoints} pts</Text>
+                </View>
+              </View>
+            </View>
+          </View>
+
+          {/* Level Progress */}
+          <View style={styles.levelProgress}>
+            <View style={styles.levelProgressHeader}>
+              <Text style={styles.levelProgressText}>Level {userLevel}</Text>
+              <Text style={styles.levelProgressText}>Level {userLevel + 1}</Text>
+            </View>
+            <View style={styles.levelProgressBar}>
+              <View 
+                style={[
+                  styles.levelProgressFill, 
+                  { 
+                    width: `${levelPercent}%`,
+                    backgroundColor: theme.colors.primary 
+                  }
+                ]} 
+              />
+            </View>
+            <Text style={styles.levelProgressSubtext}>
+              {nextLevelPoints - userPoints} pts to next level
+            </Text>
+          </View>
         </View>
-      ) : (
-        <FlatList
-          data={leaderboard}
-          keyExtractor={(item) => item.user_id}
-          contentContainerStyle={styles.listContent}
-          ItemSeparatorComponent={() => <View style={{ height: theme.spacing.lg }} />}
-          refreshing={isRefreshing}
-          onRefresh={handleRefresh}
-          renderItem={({ item, index }) => (
-            <View style={[theme.components.surface, styles.card]}>
+
+        {/* Leaderboard */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Ionicons name="podium" size={24} color={theme.colors.accent} />
+            <Text style={styles.sectionTitle}>Leaderboard</Text>
+          </View>
+          
+          {userRank && (
+            <View style={[theme.components.surface, styles.rankCard]}>
+              <Text style={styles.rankLabel}>Your Rank</Text>
               <View style={styles.rankBadge}>
-                <Text style={styles.rankText}>{index + 1}</Text>
+                <Text style={styles.rankNumber}>#{userRank}</Text>
               </View>
-              <View style={styles.leaderInfo}>
-                <Text style={styles.leaderName}>
-                  {item.profiles?.display_name || item.profiles?.username || 'Anonymous'}
-                </Text>
-                <Text style={styles.leaderMeta}>
-                  Level {item.level} • {item.total_points} pts
-                  {item.streak_days > 0 ? ` • ${item.streak_days}d streak` : ''}
-                </Text>
-              </View>
-              <Ionicons name="sparkles" size={18} color={theme.colors.accent} />
             </View>
           )}
-        />
-      )}
+
+          {/* Period Filter */}
+          <View style={styles.periodSelector}>
+            {(['daily', 'weekly', 'monthly', 'all_time'] as const).map((p) => {
+              const isActive = period === p;
+              const label = p === 'all_time' ? 'All Time' : p.charAt(0).toUpperCase() + p.slice(1);
+              return (
+                <Pressable
+                  key={p}
+                  style={[styles.periodButton, isActive && styles.periodButtonActive]}
+                  onPress={() => setPeriod(p)}
+                >
+                  <Text style={[styles.periodButtonText, isActive && styles.periodButtonTextActive]}>
+                    {label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+
+          {leaderboardData.length === 0 ? (
+            <View style={styles.emptyLeaderboard}>
+              <Ionicons name="people-outline" size={48} color={theme.colors.textMuted} />
+              <Text style={styles.emptyText}>No rankings yet</Text>
+              <Text style={styles.emptySubtext}>Be the first to sync your stats!</Text>
+            </View>
+          ) : (
+            leaderboardData.slice(0, 10).map((entry, index) => (
+              <View key={entry.user_id} style={[theme.components.surface, styles.leaderboardCard]}>
+                <View style={[
+                  styles.leaderboardRank,
+                  index === 0 && { backgroundColor: '#FFD700' },
+                  index === 1 && { backgroundColor: '#C0C0C0' },
+                  index === 2 && { backgroundColor: '#CD7F32' },
+                ]}>
+                  <Text style={[
+                    styles.leaderboardRankText,
+                    index < 3 && { color: '#000' }
+                  ]}>
+                    {index + 1}
+                  </Text>
+                </View>
+                <View style={styles.leaderboardInfo}>
+                  <Text style={styles.leaderboardName}>
+                    {entry.profiles?.display_name || entry.profiles?.username || 'Anonymous'}
+                  </Text>
+                  <Text style={styles.leaderboardStats}>
+                    Level {entry.level} • {entry.total_points} pts
+                    {entry.streak_days > 0 ? ` • ${entry.streak_days}d streak` : ''}
+                  </Text>
+                </View>
+                <Ionicons name="sparkles" size={18} color={theme.colors.accent} />
+              </View>
+            ))
+          )}
+        </View>
+
+        {/* Active Missions */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Ionicons name="rocket" size={24} color={theme.colors.primary} />
+            <Text style={styles.sectionTitle}>Active Missions</Text>
+          </View>
+          {mockMissions.map(renderMission)}
+        </View>
+
+        {/* Achievements */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Ionicons name="trophy" size={24} color={theme.colors.accent} />
+            <Text style={styles.sectionTitle}>Achievements</Text>
+          </View>
+          {mockAchievements.map(renderAchievement)}
+        </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -163,9 +344,11 @@ const createStyles = (
     safeArea: {
       flex: 1,
       backgroundColor: theme.colors.background,
+    },
+    scrollContent: {
       paddingTop: theme.spacing.xl,
       paddingHorizontal: theme.spacing.md,
-      paddingBottom: theme.spacing.xl + insets.bottom,
+      paddingBottom: theme.spacing.xxl * 3 + insets.bottom,
     },
     header: {
       gap: theme.spacing.sm,
@@ -177,42 +360,270 @@ const createStyles = (
     subtitle: {
       ...theme.typography.subtitle,
     },
-    listContent: {
-      paddingBottom: theme.spacing.xxl * 1.5 + insets.bottom,
+    authContainer: {
+      padding: theme.spacing.xl,
+      marginTop: theme.spacing.lg,
+    },
+    centerContent: {
+      flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    
+    // Player Card
+    playerCard: {
+      marginBottom: theme.spacing.xl,
+    },
+    playerHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
       gap: theme.spacing.lg,
+      marginBottom: theme.spacing.lg,
     },
-    card: {
-      flexDirection: "row",
-      alignItems: "center",
-      paddingHorizontal: theme.spacing.xl,
-      paddingVertical: theme.spacing.lg,
-      gap: theme.spacing.lg,
+    avatarWrapper: {
+      position: 'relative',
     },
-    rankBadge: {
-      width: 46,
-      height: 46,
-      borderRadius: 23,
-      backgroundColor: theme.colors.primary,
-      alignItems: "center",
-      justifyContent: "center",
+    avatar: {
+      width: 64,
+      height: 64,
+      borderRadius: 32,
+      backgroundColor: theme.colors.primary + '20',
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderWidth: 3,
+      borderColor: theme.colors.primary,
     },
-    rankText: {
-      fontSize: 18,
-      fontWeight: "700",
+    levelBadge: {
+      position: 'absolute',
+      bottom: -4,
+      right: -4,
+      width: 28,
+      height: 28,
+      borderRadius: 14,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderWidth: 3,
+      borderColor: theme.colors.surface,
+    },
+    levelBadgeText: {
+      fontSize: 12,
+      fontWeight: '700',
       color: theme.colors.text,
     },
-    leaderInfo: {
-      gap: 4,
+    playerInfo: {
       flex: 1,
+      gap: theme.spacing.sm,
     },
-    leaderName: {
-      ...theme.typography.body,
-      fontSize: 18,
-      fontWeight: "600",
+    playerName: {
+      fontSize: 20,
+      fontWeight: '700',
+      color: theme.colors.text,
     },
-    leaderMeta: {
-      ...theme.typography.subtitle,
+    statsRow: {
+      flexDirection: 'row',
+      gap: theme.spacing.lg,
+    },
+    statItem: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+    },
+    statText: {
       fontSize: 14,
+      fontWeight: '600',
+      color: theme.colors.textMuted,
+    },
+
+    
+    // Level Progress
+    levelProgress: {
+      gap: theme.spacing.sm,
+    },
+    levelProgressHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+    },
+    levelProgressText: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: theme.colors.textMuted,
+      textTransform: 'uppercase',
+      letterSpacing: 0.5,
+    },
+    levelProgressBar: {
+      height: 8,
+      backgroundColor: theme.colors.surface,
+      borderRadius: 4,
+      overflow: 'hidden',
+    },
+    levelProgressFill: {
+      height: '100%',
+      borderRadius: 4,
+    },
+    levelProgressSubtext: {
+      fontSize: 12,
+      color: theme.colors.textMuted,
+      textAlign: 'center',
+    },
+    
+    // Sections
+    section: {
+      marginBottom: theme.spacing.xl,
+    },
+    sectionHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: theme.spacing.sm,
+      marginBottom: theme.spacing.lg,
+    },
+    sectionTitle: {
+      fontSize: 18,
+      fontWeight: '700',
+      color: theme.colors.text,
+    },
+    
+    // Mission Cards
+    missionCard: {
+      backgroundColor: theme.colors.surfaceElevated,
+      borderRadius: theme.radii.md,
+      padding: theme.spacing.lg,
+      marginBottom: theme.spacing.md,
+      gap: theme.spacing.md,
+    },
+    missionHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: theme.spacing.md,
+    },
+    missionIcon: {
+      width: 48,
+      height: 48,
+      borderRadius: 24,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    missionHeaderText: {
+      flex: 1,
+      gap: 2,
+    },
+    missionTitle: {
+      fontSize: 16,
+      fontWeight: '600',
+      color: theme.colors.text,
+    },
+    missionTime: {
+      fontSize: 12,
+      color: theme.colors.accent,
+      fontWeight: '600',
+    },
+    missionReward: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      backgroundColor: theme.colors.accent + '20',
+      paddingHorizontal: theme.spacing.sm,
+      paddingVertical: 4,
+      borderRadius: 12,
+    },
+    missionRewardText: {
+      fontSize: 14,
+      fontWeight: '700',
+      color: theme.colors.accent,
+    },
+    missionDescription: {
+      fontSize: 14,
+      color: theme.colors.textMuted,
+      lineHeight: 20,
+    },
+    progressContainer: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: theme.spacing.md,
+    },
+    progressBar: {
+      flex: 1,
+      height: 8,
+      backgroundColor: theme.colors.surface,
+      borderRadius: 4,
+      overflow: 'hidden',
+    },
+    progressFill: {
+      height: '100%',
+      borderRadius: 4,
+    },
+    progressText: {
+      fontSize: 14,
+      fontWeight: '700',
+      color: theme.colors.text,
+      minWidth: 40,
+      textAlign: 'right',
+    },
+    
+    // Achievement Cards
+    achievementCard: {
+      backgroundColor: theme.colors.surfaceElevated,
+      borderRadius: theme.radii.md,
+      padding: theme.spacing.lg,
+      marginBottom: theme.spacing.md,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: theme.spacing.md,
+    },
+    achievementLocked: {
+      opacity: 0.6,
+    },
+    achievementIcon: {
+      fontSize: 32,
+    },
+    achievementContent: {
+      flex: 1,
+      gap: 2,
+    },
+    achievementTitle: {
+      fontSize: 16,
+      fontWeight: '600',
+      color: theme.colors.text,
+    },
+    achievementDescription: {
+      fontSize: 13,
+      color: theme.colors.textMuted,
+      lineHeight: 18,
+    },
+    achievementPoints: {
+      fontSize: 12,
+      fontWeight: '700',
+      color: theme.colors.accent,
+      marginTop: 2,
+    },
+    textMuted: {
+      opacity: 0.7,
+    },
+
+    // Leaderboard
+    rankCard: {
+      padding: theme.spacing.lg,
+      marginBottom: theme.spacing.md,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+    },
+    rankLabel: {
+      fontSize: 14,
+      fontWeight: '600',
+      color: theme.colors.textMuted,
+      textTransform: 'uppercase',
+      letterSpacing: 0.5,
+    },
+    rankBadge: {
+      paddingHorizontal: theme.spacing.lg,
+      paddingVertical: theme.spacing.sm,
+      backgroundColor: theme.colors.primary,
+      borderRadius: theme.radii.pill,
+    },
+    rankNumber: {
+      fontSize: 18,
+      fontWeight: '700',
+      color: theme.colors.text,
     },
     periodSelector: {
       flexDirection: 'row',
@@ -234,30 +645,58 @@ const createStyles = (
       borderColor: theme.colors.primary,
     },
     periodButtonText: {
-      fontSize: 14,
+      fontSize: 13,
       fontWeight: '600',
       color: theme.colors.textMuted,
     },
     periodButtonTextActive: {
       color: theme.colors.text,
     },
-    authContainer: {
-      padding: theme.spacing.xl,
-      marginTop: theme.spacing.lg,
-    },
-    centerContent: {
-      flex: 1,
-      justifyContent: 'center',
+    emptyLeaderboard: {
       alignItems: 'center',
+      padding: theme.spacing.xxl,
       gap: theme.spacing.sm,
     },
     emptyText: {
-      ...theme.typography.body,
-      fontSize: 18,
+      fontSize: 16,
       fontWeight: '600',
+      color: theme.colors.text,
     },
     emptySubtext: {
-      ...theme.typography.subtitle,
       fontSize: 14,
+      color: theme.colors.textMuted,
+    },
+    leaderboardCard: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      padding: theme.spacing.lg,
+      marginBottom: theme.spacing.md,
+      gap: theme.spacing.lg,
+    },
+    leaderboardRank: {
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      backgroundColor: theme.colors.primary,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    leaderboardRankText: {
+      fontSize: 16,
+      fontWeight: '700',
+      color: theme.colors.text,
+    },
+    leaderboardInfo: {
+      flex: 1,
+      gap: 4,
+    },
+    leaderboardName: {
+      fontSize: 16,
+      fontWeight: '600',
+      color: theme.colors.text,
+    },
+    leaderboardStats: {
+      fontSize: 13,
+      color: theme.colors.textMuted,
     },
   });

@@ -30,6 +30,7 @@ import {
   saveTransaction,
 } from "./storage/sqlite";
 import { generateAllMockData } from "./mockData";
+import { triggerSync } from "./sync-service";
 
 export interface FinanceState {
   profile: Profile;
@@ -345,8 +346,12 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
       const nextTransactions = [payload, ...state.transactions];
       return applyAccountBalanceUpdate(state, nextTransactions);
     });
+
+    // Trigger auto-sync after adding transaction
+    const state = get();
+    triggerSync(state.transactions, state.budgetGoals);
   },
-  updateTransaction: (id, updates) =>
+  updateTransaction: async (id, updates) => {
     set((state) => {
       const nextTransactions = state.transactions.map((transaction) => {
         if (transaction.id !== id) {
@@ -410,13 +415,22 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
       });
 
       return applyAccountBalanceUpdate(state, nextTransactions);
-    }),
+    });
+
+    // Trigger auto-sync after updating transaction
+    const state = get();
+    triggerSync(state.transactions, state.budgetGoals);
+  },
   removeTransaction: async (id) => {
     await deleteTransaction(id);
     set((state) => {
       const nextTransactions = state.transactions.filter((transaction) => transaction.id !== id);
       return applyAccountBalanceUpdate(state, nextTransactions);
     });
+
+    // Trigger auto-sync after removing transaction
+    const state = get();
+    triggerSync(state.transactions, state.budgetGoals);
   },
   duplicateTransaction: async (id) => {
     const existing = get().transactions.find((transaction) => transaction.id === id);

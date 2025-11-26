@@ -247,34 +247,8 @@ export default function AccountScreen() {
           <View style={[theme.components.surface, styles.sectionCard]}>
             <Text style={styles.sectionTitle}>Leaderboard & Social</Text>
             <Text style={styles.sectionSubtitle}>
-              Sync your anonymized stats to compete with others.
+              Your stats sync automatically. Pull down on the Crew tab to refresh.
             </Text>
-            <Pressable
-              style={styles.primaryButton}
-              onPress={async () => {
-                const { syncMetricsToSupabase } = require('../../lib/sync-service');
-                const { isAuthenticated } = require('../../lib/supabase');
-                
-                const auth = await isAuthenticated();
-                if (!auth) {
-                  Alert.alert(
-                    'Not Signed In',
-                    'Go to the Leaderboard tab to sign in first.',
-                    [{ text: 'OK' }]
-                  );
-                  return;
-                }
-
-                const result = await syncMetricsToSupabase(transactions, budgetGoals);
-                if (result.success) {
-                  Alert.alert('Success', 'Your stats have been synced to the leaderboard!');
-                } else {
-                  Alert.alert('Error', result.error || 'Failed to sync');
-                }
-              }}
-            >
-              <Text style={styles.primaryButtonText}>Sync to Leaderboard</Text>
-            </Pressable>
 
             <Pressable
               style={styles.dangerButton}

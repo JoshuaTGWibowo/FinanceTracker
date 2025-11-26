@@ -120,14 +120,14 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="leaderboard"
         options={{
-          title: "Leaderboard",
+          title: "Crew",
           tabBarIcon: ({ color, size, focused }) => (
             <AnimatedTabIcon
               color={color}
               size={size}
               focused={focused}
-              activeName="podium"
-              inactiveName="podium-outline"
+              activeName="people"
+              inactiveName="people-outline"
             />
           ),
         }}
