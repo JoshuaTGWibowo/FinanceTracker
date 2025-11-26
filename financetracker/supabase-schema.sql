@@ -293,9 +293,25 @@ BEGIN
   INSERT INTO public.profiles (id, username, display_name)
   VALUES (
     NEW.id,
-    COALESCE(NEW.raw_user_meta_data->>'username', 'user_' || substr(NEW.id::text, 1, 8)),
-    COALESCE(NEW.raw_user_meta_data->>'display_name', NULL)
-  );
+    COALESCE(
+      NEW.raw_user_meta_data->>'username',
+      NEW.raw_user_meta_data->>'display_name', 
+      NEW.raw_user_meta_data->>'name',
+      NEW.raw_user_meta_data->>'full_name',
+      'user_' || substr(NEW.id::text, 1, 8)
+    ),
+    COALESCE(
+      NEW.raw_user_meta_data->>'display_name',
+      NEW.raw_user_meta_data->>'name',
+      NEW.raw_user_meta_data->>'full_name',
+      NULL
+    )
+  )
+  ON CONFLICT (id) DO UPDATE SET
+    display_name = COALESCE(
+      EXCLUDED.display_name,
+      public.profiles.display_name
+    );
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;

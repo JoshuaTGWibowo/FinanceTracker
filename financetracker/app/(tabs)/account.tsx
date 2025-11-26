@@ -275,6 +275,22 @@ export default function AccountScreen() {
             >
               <Text style={styles.primaryButtonText}>Sync to Leaderboard</Text>
             </Pressable>
+
+            <Pressable
+              style={styles.dangerButton}
+              onPress={async () => {
+                const { supabase } = require('../../lib/supabase');
+                const { error } = await supabase.auth.signOut();
+                
+                if (error) {
+                  Alert.alert('Error', 'Failed to sign out');
+                } else {
+                  Alert.alert('Success', 'Signed out successfully!');
+                }
+              }}
+            >
+              <Text style={styles.dangerButtonText}>Sign Out</Text>
+            </Pressable>
           </View>
 
           <View style={[theme.components.surface, styles.sectionCard]}>
