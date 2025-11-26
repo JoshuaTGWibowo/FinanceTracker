@@ -38,6 +38,8 @@ export interface FinanceState {
   transactions: Transaction[];
   recurringTransactions: RecurringTransaction[];
   budgetGoals: BudgetGoal[];
+  selectedAccountId: string | null;
+  setSelectedAccountId: (id: string | null) => void;
   isHydrated: boolean;
   isHydrating: boolean;
   categoryFormDraft: {
@@ -266,6 +268,8 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
   transactions: [],
   recurringTransactions: [],
   budgetGoals: [],
+  selectedAccountId: null,
+  setSelectedAccountId: (id) => set({ selectedAccountId: id }),
   isHydrated: false,
   isHydrating: false,
   categoryFormDraft: null,

@@ -18,7 +18,6 @@ import { useAppTheme } from "../../theme";
 import { ThemeMode, useFinanceStore } from "../../lib/store";
 
 const currencies = ["USD", "EUR", "GBP", "CAD", "AUD", "JPY"];
-const goalPeriods = ["month", "week"] as const;
 
 export default function AccountScreen() {
   const theme = useAppTheme();
@@ -27,10 +26,6 @@ export default function AccountScreen() {
   const updateProfile = useFinanceStore((state) => state.updateProfile);
   const themeMode = useFinanceStore((state) => state.preferences.themeMode);
   const setThemeMode = useFinanceStore((state) => state.setThemeMode);
-  const categories = useFinanceStore((state) => state.preferences.categories);
-  const budgetGoals = useFinanceStore((state) => state.budgetGoals);
-  const addBudgetGoal = useFinanceStore((state) => state.addBudgetGoal);
-  const removeBudgetGoal = useFinanceStore((state) => state.removeBudgetGoal);
   const accounts = useFinanceStore((state) => state.accounts);
   const transactions = useFinanceStore((state) => state.transactions);
   const loadMockData = useFinanceStore((state) => state.loadMockData);
@@ -38,10 +33,6 @@ export default function AccountScreen() {
 
   const [name, setName] = useState(profile.name);
   const [currency, setCurrency] = useState(profile.currency);
-  const [goalName, setGoalName] = useState("");
-  const [goalTarget, setGoalTarget] = useState("");
-  const [goalPeriod, setGoalPeriod] = useState<(typeof goalPeriods)[number]>("month");
-  const [goalCategory, setGoalCategory] = useState<string | null>(null);
   const [isLoadingMockData, setIsLoadingMockData] = useState(false);
 
   const insets = useSafeAreaInsets();
@@ -67,28 +58,7 @@ export default function AccountScreen() {
     Alert.alert("Saved", "Profile updated successfully.");
   };
 
-  const handleCreateGoal = async () => {
-    if (!goalName.trim()) {
-      Alert.alert("Heads up", "Give your goal a descriptive name.");
-      return;
-    }
 
-    const targetValue = Number(goalTarget);
-    if (!goalTarget.trim() || Number.isNaN(targetValue) || targetValue <= 0) {
-      Alert.alert("Heads up", "Target amount must be a positive number.");
-      return;
-    }
-
-    await addBudgetGoal({
-      name: goalName.trim(),
-      target: targetValue,
-      period: goalPeriod,
-      category: goalCategory || null,
-    });
-
-    setGoalName("");
-    setGoalTarget("");
-  };
 
   const handleLoadMockData = () => {
     Alert.alert(
@@ -259,6 +229,18 @@ export default function AccountScreen() {
               </View>
               <Ionicons name="chevron-forward" size={18} color={theme.colors.textMuted} />
             </Pressable>
+            <Pressable style={styles.linkRow} onPress={() => router.push("/budgets/" as any)}>
+              <View style={styles.linkRowContent}>
+                <View style={styles.linkIcon}>
+                  <Ionicons name="stats-chart-outline" size={18} color={theme.colors.primary} />
+                </View>
+                <View style={styles.flex}>
+                  <Text style={styles.linkTitle}>Budgets</Text>
+                  <Text style={styles.linkSubtitle}>Set spending limits for your categories.</Text>
+                </View>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={theme.colors.textMuted} />
+            </Pressable>
           </View>
 
           <View style={[theme.components.surface, styles.sectionCard]}>
@@ -301,113 +283,7 @@ export default function AccountScreen() {
             </View>
           </View>
 
-          <View style={[theme.components.surface, styles.sectionCard]}>
-            <Text style={styles.sectionTitle}>Budget goals</Text>
-            <View style={styles.fieldGroup}>
-              <Text style={styles.label}>Goal name</Text>
-              <TextInput
-                value={goalName}
-                onChangeText={setGoalName}
-                placeholder="Save $500 this month"
-                placeholderTextColor={theme.colors.textMuted}
-                style={styles.input}
-              />
-            </View>
-            <View style={styles.row}>
-              <View style={[styles.fieldGroup, styles.flex]}>
-                <Text style={styles.label}>Target amount</Text>
-                <TextInput
-                  value={goalTarget}
-                  onChangeText={setGoalTarget}
-                  keyboardType="numeric"
-                  placeholder="500"
-                  placeholderTextColor={theme.colors.textMuted}
-                  style={styles.input}
-                />
-              </View>
-              <View style={[styles.fieldGroup, styles.periodField]}>
-                <Text style={styles.label}>Period</Text>
-                <View style={styles.themeRow}>
-                  {goalPeriods.map((period) => {
-                    const active = goalPeriod === period;
-                    return (
-                      <Pressable
-                        key={period}
-                        style={[styles.themeChip, active && styles.themeChipActive]}
-                        onPress={() => setGoalPeriod(period)}
-                      >
-                        <Text style={[styles.themeChipText, active && styles.themeChipTextActive]}>
-                          {period}
-                        </Text>
-                      </Pressable>
-                    );
-                  })}
-                </View>
-              </View>
-            </View>
-            <View style={styles.fieldGroup}>
-              <Text style={styles.label}>Track category (optional)</Text>
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.chipsRow}
-              >
-                <Pressable
-                  key="all"
-                  onPress={() => setGoalCategory(null)}
-                  style={[styles.currencyChip, goalCategory === null && styles.currencyChipActive]}
-                >
-                  <Text style={[styles.currencyChipText, goalCategory === null && styles.currencyChipTextActive]}>
-                    Savings goal
-                  </Text>
-                </Pressable>
-                {categories.map((category) => {
-                  const active = goalCategory === category.name;
-                  return (
-                    <Pressable
-                      key={category.id}
-                      onPress={() => setGoalCategory(category.name)}
-                      style={[styles.currencyChip, active && styles.currencyChipActive]}
-                    >
-                      <Text
-                        style={[styles.currencyChipText, active && styles.currencyChipTextActive]}
-                      >
-                        {category.name}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </ScrollView>
-            </View>
-            <Pressable style={styles.primaryButton} onPress={handleCreateGoal}>
-              <Text style={styles.primaryButtonText}>Create goal</Text>
-            </Pressable>
 
-            <View style={styles.goalList}>
-              {budgetGoals.length ? (
-                budgetGoals.map((goal) => (
-                  <View key={goal.id} style={styles.goalRow}>
-                    <View style={styles.goalCopy}>
-                      <Text style={styles.goalName}>{goal.name}</Text>
-                      <Text style={styles.goalMeta}>
-                        Target: {goal.target.toLocaleString()} • Period: {goal.period}
-                        {goal.category ? ` • Category: ${goal.category}` : ""}
-                      </Text>
-                    </View>
-                    <Pressable
-                      onPress={() => void removeBudgetGoal(goal.id)}
-                      style={styles.deleteButton}
-                      accessibilityRole="button"
-                    >
-                      <Ionicons name="trash" size={16} color={theme.colors.danger} />
-                    </Pressable>
-                  </View>
-                ))
-              ) : (
-                <Text style={styles.emptyStateText}>No goals yet. Create one to stay motivated.</Text>
-              )}
-            </View>
-          </View>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -429,7 +305,7 @@ const createStyles = (
     content: {
       flexGrow: 1,
       paddingTop: theme.spacing.xl,
-      paddingHorizontal: theme.spacing.xl,
+      paddingHorizontal: theme.spacing.md,
       paddingBottom: theme.spacing.xl + insets.bottom,
       gap: theme.spacing.xl,
     },
@@ -576,7 +452,7 @@ const createStyles = (
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "space-between",
-      paddingVertical: theme.spacing.md,
+      paddingVertical: theme.spacing.xs,
       gap: theme.spacing.md,
     },
     linkRowContent: {

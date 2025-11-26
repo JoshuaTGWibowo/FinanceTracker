@@ -167,7 +167,8 @@ export default function TransactionsScreen() {
   const [endDate, setEndDate] = useState<Dayjs | null>(null);
   const [showStartPicker, setShowStartPicker] = useState(false);
   const [showEndPicker, setShowEndPicker] = useState(false);
-  const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
+  const selectedAccountId = useFinanceStore((state) => state.selectedAccountId);
+  const setSelectedAccountId = useFinanceStore((state) => state.setSelectedAccountId);
   const [recurringExpanded, setRecurringExpanded] = useState(false);
 
   useEffect(() => {
@@ -755,20 +756,8 @@ export default function TransactionsScreen() {
               onPress={() => setSelectedAccountId(null)}
               style={[styles.accountChip, !selectedAccountId && styles.accountChipActive]}
             >
-              <Text
-                style={[
-                  styles.accountChipTitle,
-                  !selectedAccountId && styles.accountChipTitleActive,
-                ]}
-              >
-                All accounts
-              </Text>
-              <Text
-                style={[
-                  styles.accountChipBalance,
-                  !selectedAccountId && styles.accountChipBalanceActive,
-                ]}
-              >
+              <Text style={styles.accountChipTitle}>All accounts</Text>
+              <Text style={styles.accountChipBalance}>
                 {formatCurrency(allAccountsBalance, baseCurrency)}
               </Text>
             </Pressable>
@@ -784,14 +773,8 @@ export default function TransactionsScreen() {
                       account.isArchived && styles.accountChipArchived,
                     ]}
                   >
-                    <Text
-                      style={[styles.accountChipTitle, active && styles.accountChipTitleActive]}
-                    >
-                      {account.name}
-                    </Text>
-                    <Text
-                      style={[styles.accountChipBalance, active && styles.accountChipBalanceActive]}
-                    >
+                    <Text style={styles.accountChipTitle}>{account.name}</Text>
+                    <Text style={styles.accountChipBalance}>
                       {formatCurrency(account.balance, account.currency || baseCurrency)}
                     </Text>
                   </Pressable>
@@ -1306,7 +1289,7 @@ const createStyles = (theme: any, insets: any) =>
       paddingBottom: 100,
     },
     header: {
-      paddingHorizontal: 16,
+      paddingHorizontal: 12,
       paddingTop: 16,
     },
     
@@ -1515,24 +1498,20 @@ const createStyles = (theme: any, insets: any) =>
     },
     accountChipRow: {
       flexDirection: "row",
-      flexWrap: "wrap",
-      gap: 8,
-      paddingVertical: 8,
-      marginBottom: 16,
+      gap: theme.spacing.sm,
+      marginBottom: theme.spacing.xl,
     },
     accountChip: {
-      paddingHorizontal: 16,
-      paddingVertical: 12,
-      borderRadius: 999,
+      paddingHorizontal: theme.spacing.md,
+      paddingVertical: theme.spacing.sm,
+      borderRadius: theme.radii.md,
+      backgroundColor: theme.colors.surface,
       borderWidth: 1,
       borderColor: theme.colors.border,
-      backgroundColor: theme.colors.surface,
-      minWidth: 140,
-      flexShrink: 1,
     },
     accountChipActive: {
       borderColor: theme.colors.primary,
-      backgroundColor: theme.colors.primary,
+      backgroundColor: `${theme.colors.primary}22`,
     },
     accountChipArchived: {
       opacity: 0.6,
@@ -1542,15 +1521,9 @@ const createStyles = (theme: any, insets: any) =>
       fontWeight: "600",
       color: theme.colors.text,
     },
-    accountChipTitleActive: {
-      color: theme.colors.background,
-    },
     accountChipBalance: {
       fontSize: 12,
       color: theme.colors.textMuted,
-    },
-    accountChipBalanceActive: {
-      color: `${theme.colors.background}CC`,
     },
     
     // Recurring Section
@@ -1659,7 +1632,7 @@ const createStyles = (theme: any, insets: any) =>
     }),
     dayCard: {
       backgroundColor: theme.colors.surface,
-      marginHorizontal: 16,
+      marginHorizontal: 12,
       borderRadius: 12,
       overflow: "hidden",
     },
