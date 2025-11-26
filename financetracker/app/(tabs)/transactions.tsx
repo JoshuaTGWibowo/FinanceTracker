@@ -123,10 +123,11 @@ export default function TransactionsScreen() {
     [visibleAccounts],
   );
   
-  // Default to current month (last item in array)
+  // Default to current month
   const [selectedPeriod, setSelectedPeriod] = useState(() => {
-    const currentMonth = periodOptions[periodOptions.length - 1];
-    return currentMonth?.key ?? "";
+    const currentMonthKey = dayjs().startOf("month").format("YYYY-MM");
+    const currentMonth = periodOptions.find(p => p.key === currentMonthKey);
+    return currentMonth?.key ?? periodOptions[periodOptions.length - 1]?.key ?? "";
   });
   
   // Auto-scroll to current month on mount
@@ -591,6 +592,12 @@ export default function TransactionsScreen() {
       return;
     }
 
+    // Don't allow report for future period
+    const currentPeriod = periodOptions.find((p) => p.key === periodKey);
+    if (currentPeriod?.isFuture) {
+      return;
+    }
+
     const params: Record<string, string> = { period: periodKey };
     if (selectedAccountId) {
       params.accountId = selectedAccountId;
@@ -601,6 +608,13 @@ export default function TransactionsScreen() {
       params,
     });
   }, [periodOptions, router, selectedAccountId, selectedPeriod]);
+
+  const isReportDisabled = useMemo(() => {
+    const defaultPeriod = periodOptions[periodOptions.length - 1];
+    const periodKey = selectedPeriod || defaultPeriod?.key;
+    const currentPeriod = periodOptions.find((p) => p.key === periodKey);
+    return currentPeriod?.isFuture || false;
+  }, [periodOptions, selectedPeriod]);
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -657,9 +671,19 @@ export default function TransactionsScreen() {
                 </View>
               </View>
 
-              <Pressable style={styles.reportButton} onPress={handleOpenReport}>
-                <Text style={styles.reportButtonText}>View report for this period</Text>
-                <Ionicons name="chevron-forward" size={16} color={theme.colors.primary} />
+              <Pressable 
+                style={[styles.reportButton, isReportDisabled && styles.reportButtonDisabled]} 
+                onPress={handleOpenReport}
+                disabled={isReportDisabled}
+              >
+                <Text style={[styles.reportButtonText, isReportDisabled && styles.reportButtonTextDisabled]}>
+                  {isReportDisabled ? "Report not available for future" : "View report for this period"}
+                </Text>
+                <Ionicons 
+                  name="chevron-forward" 
+                  size={16} 
+                  color={isReportDisabled ? theme.colors.textMuted : theme.colors.primary} 
+                />
               </Pressable>
             </View>
 
@@ -1388,6 +1412,14 @@ const createStyles = (theme: any, insets: any) =>
       fontSize: 13,
       fontWeight: "600",
       color: theme.colors.primary,
+    },
+    reportButtonDisabled: {
+      backgroundColor: theme.colors.surface,
+      borderColor: theme.colors.border,
+      opacity: 0.6,
+    },
+    reportButtonTextDisabled: {
+      color: theme.colors.textMuted,
     },
 
     // Period Selector

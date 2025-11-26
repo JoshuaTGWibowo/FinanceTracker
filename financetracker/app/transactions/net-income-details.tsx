@@ -495,7 +495,7 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>) =>
       color: theme.colors.text,
     },
     content: {
-      paddingHorizontal: theme.spacing.xl,
+      paddingHorizontal: theme.spacing.md,
       paddingBottom: theme.spacing.xl * 2,
       gap: theme.spacing.lg,
     },
