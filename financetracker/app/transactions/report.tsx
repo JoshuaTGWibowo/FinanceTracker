@@ -101,6 +101,7 @@ export default function TransactionsReportModal() {
   const { period: periodParam, accountId } = useLocalSearchParams<{ period?: string; accountId?: string }>();
   const transactions = useFinanceStore((state) => state.transactions);
   const accounts = useFinanceStore((state) => state.accounts);
+  const budgetGoals = useFinanceStore((state) => state.budgetGoals);
   const currency = useFinanceStore((state) => state.profile.currency) || "USD";
 
   const baseCurrency = currency || "USD";
@@ -249,6 +250,57 @@ export default function TransactionsReportModal() {
   const netPositive = report.netChange >= 0;
   const accountLabel = selectedAccountId ? accountName : "All accounts";
 
+  const budgetProgress = useMemo(() => {
+    if (budgetGoals.length === 0) return [];
+
+    const periodType = selectedPeriod.label.includes("week") ? "week" : "month";
+
+    // Get transactions within the selected period
+    const allowedAccountIds = selectedAccountId ? null : new Set(visibleAccountIds);
+    const scopedTransactions = filterTransactionsByAccount(transactions, selectedAccountId).filter((transaction) => {
+      if (!allowedAccountIds || allowedAccountIds.size === 0) {
+        return true;
+      }
+      const fromAllowed = transaction.accountId ? allowedAccountIds.has(transaction.accountId) : false;
+      const toAllowed = transaction.toAccountId ? allowedAccountIds.has(transaction.toAccountId) : false;
+      return fromAllowed || toAllowed;
+    });
+    const withinRange = scopedTransactions.filter((transaction) => {
+      const date = dayjs(transaction.date);
+      return !date.isBefore(start) && !date.isAfter(end);
+    });
+    const reportable = withinRange.filter((transaction) => !transaction.excludeFromReports);
+
+    return budgetGoals
+      .filter((goal) => goal.period === periodType)
+      .map((goal) => {
+        const spent = reportable
+          .filter((transaction) => transaction.type === "expense" && transaction.category === goal.category)
+          .reduce((acc, transaction) => acc + transaction.amount, 0);
+
+        const percentage = Math.min(100, Math.round((spent / goal.target) * 100));
+        
+        let statusColor = theme.colors.primary;
+        if (percentage < 70) {
+          statusColor = theme.colors.primary;
+        } else if (percentage >= 70 && percentage < 90) {
+          statusColor = "#F59E0B";
+        } else {
+          statusColor = "#EF4444";
+        }
+
+        return {
+          id: goal.id,
+          name: goal.name,
+          category: goal.category,
+          spent,
+          target: goal.target,
+          percentage,
+          statusColor,
+        };
+      });
+  }, [budgetGoals, selectedPeriod.label, theme.colors.primary, selectedAccountId, visibleAccountIds, transactions, start, end]);
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.backgroundAccent} pointerEvents="none">
@@ -355,6 +407,48 @@ export default function TransactionsReportModal() {
             </View>
           </View>
         </View>
+
+        {budgetProgress.length > 0 && (
+          <View style={styles.budgetCard}>
+            <View style={styles.budgetHeader}>
+              <Text style={styles.budgetTitle}>Budget goals</Text>
+              <Text style={styles.budgetSubtitle}>Performance for this period</Text>
+            </View>
+            <View style={styles.budgetList}>
+              {budgetProgress.map((budget) => (
+                <View key={budget.id} style={styles.budgetRow}>
+                  <View style={styles.budgetInfo}>
+                    <Text style={styles.budgetName}>{budget.name}</Text>
+                    <Text style={styles.budgetMeta}>
+                      {formatCurrency(budget.spent, currency)} of {formatCurrency(budget.target, currency)}
+                    </Text>
+                  </View>
+                  <View style={styles.budgetMeterContainer}>
+                    <View style={styles.budgetMeter}>
+                      <View
+                        style={[
+                          styles.budgetMeterFill,
+                          {
+                            width: `${budget.percentage}%`,
+                            backgroundColor: budget.statusColor,
+                          },
+                        ]}
+                      />
+                    </View>
+                    <Text
+                      style={[
+                        styles.budgetPercentage,
+                        budget.percentage >= 90 && { color: "#EF4444" },
+                      ]}
+                    >
+                      {budget.percentage}%
+                    </Text>
+                  </View>
+                </View>
+              ))}
+            </View>
+          </View>
+        )}
 
         <View style={styles.categoryCard}>
           <View style={styles.categoryHeader}>
@@ -595,7 +689,7 @@ const createStyles = (theme: Theme) =>
       width: 36,
     },
     content: {
-      paddingHorizontal: theme.spacing.xl,
+      paddingHorizontal: theme.spacing.md,
       paddingTop: theme.spacing.lg,
       paddingBottom: theme.spacing.xl + 16,
       gap: theme.spacing.lg,
@@ -729,6 +823,65 @@ const createStyles = (theme: Theme) =>
       padding: theme.spacing.md,
       borderRadius: theme.radii.md,
       backgroundColor: theme.colors.surfaceElevated,
+    },
+    budgetCard: {
+      backgroundColor: theme.colors.surface,
+      borderRadius: theme.radii.lg,
+      padding: theme.spacing.lg,
+      gap: theme.spacing.md,
+    },
+    budgetHeader: {
+      gap: 4,
+    },
+    budgetTitle: {
+      fontSize: 18,
+      fontWeight: "700",
+      color: theme.colors.text,
+    },
+    budgetSubtitle: {
+      fontSize: 13,
+      color: theme.colors.textMuted,
+    },
+    budgetList: {
+      gap: theme.spacing.md,
+    },
+    budgetRow: {
+      gap: theme.spacing.sm,
+    },
+    budgetInfo: {
+      gap: 4,
+    },
+    budgetName: {
+      fontSize: 15,
+      fontWeight: "600",
+      color: theme.colors.text,
+    },
+    budgetMeta: {
+      fontSize: 13,
+      color: theme.colors.textMuted,
+    },
+    budgetMeterContainer: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: theme.spacing.sm,
+    },
+    budgetMeter: {
+      flex: 1,
+      height: 8,
+      borderRadius: theme.radii.pill,
+      backgroundColor: theme.colors.border,
+      overflow: "hidden",
+    },
+    budgetMeterFill: {
+      height: "100%",
+      borderRadius: theme.radii.pill,
+    },
+    budgetPercentage: {
+      fontSize: 13,
+      fontWeight: "600",
+      color: theme.colors.text,
+      minWidth: 42,
+      textAlign: "right",
     },
     netLabel: {
       fontSize: 12,

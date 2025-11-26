@@ -775,6 +775,19 @@ export default function HomeScreen() {
                 const progressPercent = Math.round(progress.percentage * 100);
                 const goalComplete = progressPercent >= 100;
 
+                let barColor = theme.colors.primary;
+                if (progress.direction === "save") {
+                  barColor = theme.colors.success;
+                } else {
+                  if (progressPercent < 70) {
+                    barColor = theme.colors.primary;
+                  } else if (progressPercent >= 70 && progressPercent < 90) {
+                    barColor = "#F59E0B";
+                  } else {
+                    barColor = "#EF4444";
+                  }
+                }
+
                 return (
                   <View key={goal.id} style={styles.goalRow}>
                     <View style={styles.goalCopy}>
@@ -789,10 +802,7 @@ export default function HomeScreen() {
                           styles.goalMeterFill,
                           {
                             width: `${Math.min(100, progressPercent)}%`,
-                            backgroundColor:
-                              progress.direction === "save"
-                                ? theme.colors.success
-                                : theme.colors.primary,
+                            backgroundColor: barColor,
                           },
                         ]}
                       />
