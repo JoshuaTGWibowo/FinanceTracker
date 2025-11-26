@@ -753,12 +753,12 @@ export default function HomeScreen() {
           </View>
         )}
 
-        {budgetGoals.length > 0 && (
-          <View style={[theme.components.surface, styles.goalsCard]}>
-            <View style={styles.sectionHeaderRow}>
-              <Text style={styles.sectionTitle}>Budget goals</Text>
-              <Text style={styles.sectionCaption}>Stay on track</Text>
-            </View>
+        <View style={[theme.components.surface, styles.goalsCard]}>
+          <View style={styles.sectionHeaderRow}>
+            <Text style={styles.sectionTitle}>Budget goals</Text>
+            <Text style={styles.sectionCaption}>Stay on track</Text>
+          </View>
+          {budgetGoals.length > 0 ? (
             <ScrollView
               contentContainerStyle={styles.goalList}
               style={budgetGoals.length > 5 ? { maxHeight: 420 } : undefined}
@@ -809,8 +809,23 @@ export default function HomeScreen() {
                 );
               })}
             </ScrollView>
-          </View>
-        )}
+          ) : (
+            <View style={styles.emptyBudgetState}>
+              <View style={styles.emptyBudgetIcon}>
+                <Ionicons name="analytics-outline" size={32} color={theme.colors.textMuted} />
+              </View>
+              <Text style={styles.emptyBudgetTitle}>No budget goals yet</Text>
+              <Text style={styles.emptyBudgetText}>Create a budget to track spending by category</Text>
+              <Pressable
+                style={styles.emptyBudgetButton}
+                onPress={() => router.push("/budgets")}
+              >
+                <Ionicons name="add-circle" size={18} color="#fff" />
+                <Text style={styles.emptyBudgetButtonText}>Create Budget</Text>
+              </Pressable>
+            </View>
+          )}
+        </View>
 
         <View style={[theme.components.surface, styles.recentCard]}>
           <View style={styles.sectionHeaderRow}>
@@ -1243,10 +1258,10 @@ const createStyles = (
       gap: theme.spacing.md,
     },
     goalList: {
-      gap: theme.spacing.md,
+      gap: theme.spacing.xs,
     },
     goalRow: {
-      gap: theme.spacing.sm,
+      gap: theme.spacing.xs,
     },
     goalCopy: {
       gap: 4,
@@ -1274,6 +1289,46 @@ const createStyles = (
       ...theme.typography.subtitle,
       fontSize: 12,
       alignSelf: "flex-end",
+    },
+    emptyBudgetState: {
+      alignItems: "center",
+      paddingVertical: theme.spacing.xl,
+      gap: theme.spacing.sm,
+    },
+    emptyBudgetIcon: {
+      width: 64,
+      height: 64,
+      borderRadius: theme.radii.pill,
+      backgroundColor: `${theme.colors.textMuted}10`,
+      alignItems: "center",
+      justifyContent: "center",
+      marginBottom: theme.spacing.xs,
+    },
+    emptyBudgetTitle: {
+      fontSize: 16,
+      fontWeight: "600",
+      color: theme.colors.text,
+    },
+    emptyBudgetText: {
+      fontSize: 13,
+      color: theme.colors.textMuted,
+      textAlign: "center",
+      paddingHorizontal: theme.spacing.xl,
+    },
+    emptyBudgetButton: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: theme.spacing.xs,
+      backgroundColor: theme.colors.primary,
+      paddingHorizontal: theme.spacing.lg,
+      paddingVertical: theme.spacing.sm,
+      borderRadius: theme.radii.pill,
+      marginTop: theme.spacing.sm,
+    },
+    emptyBudgetButtonText: {
+      fontSize: 15,
+      fontWeight: "600",
+      color: "#fff",
     },
     recentCard: {
       gap: theme.spacing.md,
