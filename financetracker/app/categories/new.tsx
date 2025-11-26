@@ -83,41 +83,30 @@ export default function NewCategoryScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea} edges={["top", "left", "right"]}>
-      <View style={styles.header}>
-        <Pressable
-          onPress={() => router.back()}
-          hitSlop={10}
-          style={styles.backButton}
-          accessibilityRole="button"
-        >
-          <Ionicons name="chevron-back" size={22} color={theme.colors.text} />
+      <View style={styles.headerContainer}>
+        <Pressable onPress={() => router.back()} style={styles.backButton}>
+          <Ionicons name="arrow-back" size={22} color={theme.colors.text} />
         </Pressable>
-        <Text style={styles.headerTitle}>New category</Text>
-        <View style={{ width: 32 }} />
+        <View style={styles.headerText}>
+          <Text style={styles.title}>New Category</Text>
+          <Text style={styles.subtitle}>Create a new spending category</Text>
+        </View>
       </View>
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <View style={styles.card}>
-          <View style={styles.cardHeader}>
-            <View style={styles.badge}>
-              <Ionicons name="sparkles" size={14} color={theme.colors.primary} />
-              <Text style={styles.badgeText}>Details</Text>
-            </View>
-            <Text style={styles.cardTitle}>Give your category a voice.</Text>
-          </View>
-
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Name</Text>
+        <View style={[theme.components.surface, styles.formSection]}>
+          <View style={styles.fieldGroup}>
+            <Text style={styles.label}>Category Name</Text>
             <TextInput
               value={name}
               onChangeText={(text) => setDraft({ name: text })}
-              placeholder="e.g. Coffee, Gifts, Tips"
+              placeholder="e.g., Coffee, Gifts, Groceries"
               placeholderTextColor={theme.colors.textMuted}
               style={styles.input}
             />
           </View>
 
-          <View style={styles.inputGroup}>
+          <View style={styles.fieldGroup}>
             <Text style={styles.label}>Type</Text>
             <View style={styles.tabRow}>
               {CATEGORY_TABS.map((tab) => {
@@ -136,67 +125,55 @@ export default function NewCategoryScreen() {
           </View>
         </View>
 
-        <View style={styles.card}>
-          <View style={styles.cardHeader}>
-            <View style={styles.badgeAlt}>
-              <Ionicons name="color-palette" size={14} color={theme.colors.text} />
-              <Text style={styles.badgeAltText}>Appearance & Relationships</Text>
-            </View>
-            <Text style={styles.cardTitle}>Choose an icon and where it belongs.</Text>
-          </View>
-
+        <View style={[theme.components.surface, styles.formSection]}>
           <Pressable
             style={styles.selectorRow}
             onPress={() => router.push("/categories/select-icon")}
           >
-            <View style={styles.selectorLeft}>
-              <View style={styles.selectorIcon}>
-                <Ionicons name={icon} size={18} color={theme.colors.text} />
-              </View>
-              <View>
-                <Text style={styles.selectorTitle}>Icon</Text>
-                <Text style={styles.selectorSubtitle}>Pick something memorable</Text>
-              </View>
+            <View style={styles.selectorIcon}>
+              <Ionicons name={icon} size={20} color={theme.colors.text} />
+            </View>
+            <View style={styles.flex}>
+              <Text style={styles.selectorTitle}>Icon</Text>
+              <Text style={styles.selectorSubtitle}>Choose an icon</Text>
             </View>
             <Ionicons name="chevron-forward" size={18} color={theme.colors.textMuted} />
           </Pressable>
+
+          <View style={styles.divider} />
 
           <Pressable
             style={styles.selectorRow}
             onPress={() => router.push("/categories/select-parent")}
           >
-            <View style={styles.selectorLeft}>
-              <View style={[styles.selectorIcon, styles.selectorIconAlt]}>
-                <Ionicons name="git-branch" size={16} color={theme.colors.primary} />
-              </View>
-              <View>
-                <Text style={styles.selectorTitle}>Parent category</Text>
-                <Text style={styles.selectorSubtitle}>
-                  {parentName ? parentName : "None"}
-                </Text>
-              </View>
+            <View style={[styles.selectorIcon, styles.selectorIconAlt]}>
+              <Ionicons name="git-branch" size={18} color={theme.colors.primary} />
+            </View>
+            <View style={styles.flex}>
+              <Text style={styles.selectorTitle}>Parent Category</Text>
+              <Text style={styles.selectorSubtitle}>
+                {parentName || "None (top-level)"}
+              </Text>
             </View>
             <Ionicons name="chevron-forward" size={18} color={theme.colors.textMuted} />
           </Pressable>
-
-          <View style={styles.helperBox}>
-            <Ionicons name="information-circle" size={16} color={theme.colors.textMuted} />
-            <Text style={styles.helperText}>
-              Tip: Start from the tab matching the category type (Expense, Income, or Debt/Loan) before
-              adding a new one.
-            </Text>
-          </View>
         </View>
 
-        <View style={styles.cardMuted}>
-          <Ionicons name="wallet" size={16} color={theme.colors.textMuted} />
+        <View style={styles.helperCard}>
+          <Ionicons name="information-circle" size={18} color={theme.colors.textMuted} />
           <Text style={styles.helperText}>
-            New categories are active in all of your current wallets by default.
+            New categories are active in all wallets by default
           </Text>
         </View>
       </ScrollView>
 
       <View style={styles.footer}>
+        <Pressable
+          style={styles.secondaryButton}
+          onPress={() => router.back()}
+        >
+          <Text style={styles.secondaryButtonText}>Cancel</Text>
+        </Pressable>
         <Pressable
           style={[styles.saveButton, isSaveDisabled && styles.saveButtonDisabled]}
           disabled={isSaveDisabled}
@@ -215,107 +192,52 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>) =>
       flex: 1,
       backgroundColor: theme.colors.background,
     },
-    header: {
-      flexDirection: "row",
-      alignItems: "center",
-      justifyContent: "space-between",
-      paddingHorizontal: theme.spacing.lg,
-      paddingTop: theme.spacing.lg,
+    headerContainer: {
+      paddingHorizontal: theme.spacing.md,
+      paddingTop: theme.spacing.md,
       paddingBottom: theme.spacing.md,
+      gap: theme.spacing.sm,
     },
     backButton: {
-      width: 32,
-      height: 32,
-      borderRadius: theme.radii.full,
+      width: 36,
+      height: 36,
+      borderRadius: theme.radii.md,
       alignItems: "center",
       justifyContent: "center",
       backgroundColor: theme.colors.surface,
     },
-    headerTitle: {
-      ...theme.typography.title,
-      fontSize: 18,
+    headerText: {
+      gap: 4,
+    },
+    title: {
+      fontSize: 24,
+      fontWeight: "700",
+      color: theme.colors.text,
+    },
+    subtitle: {
+      fontSize: 14,
+      color: theme.colors.textMuted,
     },
     content: {
-      paddingHorizontal: theme.spacing.lg,
+      paddingHorizontal: theme.spacing.md,
       paddingBottom: theme.spacing.xl,
       gap: theme.spacing.md,
     },
-    card: {
-      backgroundColor: theme.colors.surface,
-      borderRadius: theme.radii.xl,
-      padding: theme.spacing.lg,
-      gap: theme.spacing.md,
-      shadowColor: theme.colors.background,
-      shadowOpacity: 0.08,
-      shadowOffset: { width: 0, height: 6 },
-      shadowRadius: 10,
-      elevation: 3,
-    },
-    cardMuted: {
-      flexDirection: "row",
-      gap: theme.spacing.sm,
-      alignItems: "center",
-      backgroundColor: theme.colors.surfaceAlt,
-      borderRadius: theme.radii.lg,
+    formSection: {
       padding: theme.spacing.md,
+      gap: theme.spacing.lg,
     },
-    cardHeader: {
-      gap: theme.spacing.xs,
-    },
-    cardTitle: {
-      ...theme.typography.subtitle,
-      fontSize: 16,
-    },
-    badge: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: theme.spacing.xs,
-      alignSelf: "flex-start",
-      backgroundColor: `${theme.colors.primary}18`,
-      paddingHorizontal: theme.spacing.sm,
-      paddingVertical: theme.spacing.xs,
-      borderRadius: theme.radii.pill,
-    },
-    badgeText: {
-      color: theme.colors.primary,
-      fontWeight: "700",
-      letterSpacing: 0.4,
-    },
-    badgeAlt: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: theme.spacing.xs,
-      alignSelf: "flex-start",
-      backgroundColor: `${theme.colors.surfaceAlt}`,
-      paddingHorizontal: theme.spacing.sm,
-      paddingVertical: theme.spacing.xs,
-      borderRadius: theme.radii.pill,
-      borderWidth: 1,
-      borderColor: `${theme.colors.border}AA`,
-    },
-    badgeAltText: {
-      color: theme.colors.text,
-      fontWeight: "700",
-      letterSpacing: 0.4,
-    },
-    inputGroup: {
-      gap: theme.spacing.xs,
+    fieldGroup: {
+      gap: theme.spacing.sm,
     },
     label: {
-      ...theme.typography.subtitle,
-      fontSize: 12,
-      textTransform: "uppercase",
-      letterSpacing: 0.6,
-      color: theme.colors.textMuted,
+      fontSize: 13,
+      fontWeight: "600",
+      color: theme.colors.text,
     },
     input: {
-      borderWidth: 1,
-      borderColor: theme.colors.border,
-      borderRadius: theme.radii.lg,
-      paddingHorizontal: theme.spacing.md,
-      paddingVertical: theme.spacing.sm,
-      color: theme.colors.text,
-      backgroundColor: theme.colors.surfaceAlt,
+      ...theme.components.input,
+      fontSize: 15,
     },
     tabRow: {
       flexDirection: "row",
@@ -324,90 +246,109 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>) =>
     tabChip: {
       flex: 1,
       paddingVertical: theme.spacing.sm,
-      borderRadius: theme.radii.pill,
-      alignItems: "center",
-      borderWidth: 1,
+      paddingHorizontal: theme.spacing.md,
+      borderRadius: theme.radii.md,
+      backgroundColor: theme.colors.background,
+      borderWidth: 1.5,
       borderColor: theme.colors.border,
+      alignItems: "center",
     },
     tabChipActive: {
-      backgroundColor: `${theme.colors.primary}22`,
+      backgroundColor: theme.colors.primary,
       borderColor: theme.colors.primary,
     },
     tabChipText: {
+      fontSize: 14,
       fontWeight: "600",
       color: theme.colors.text,
     },
     tabChipTextActive: {
-      color: theme.colors.primary,
+      color: "#fff",
     },
     selectorRow: {
       flexDirection: "row",
       alignItems: "center",
-      justifyContent: "space-between",
-      paddingVertical: theme.spacing.sm,
       gap: theme.spacing.md,
-    },
-    selectorLeft: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: theme.spacing.md,
-      flex: 1,
     },
     selectorIcon: {
-      width: 42,
-      height: 42,
-      borderRadius: theme.radii.full,
-      backgroundColor: theme.colors.surfaceAlt,
+      width: 36,
+      height: 36,
+      borderRadius: theme.radii.md,
+      backgroundColor: theme.colors.background,
       alignItems: "center",
       justifyContent: "center",
-      borderWidth: 1,
-      borderColor: `${theme.colors.border}AA`,
     },
     selectorIconAlt: {
       backgroundColor: `${theme.colors.primary}15`,
     },
+    flex: {
+      flex: 1,
+    },
     selectorTitle: {
-      ...theme.typography.subtitle,
-      fontSize: 14,
+      fontSize: 15,
+      fontWeight: "600",
+      color: theme.colors.text,
     },
     selectorSubtitle: {
+      fontSize: 13,
       color: theme.colors.textMuted,
-      fontSize: 12,
       marginTop: 2,
     },
-    helperBox: {
+    divider: {
+      height: 1,
+      backgroundColor: theme.colors.border,
+      marginVertical: theme.spacing.xs,
+    },
+    helperCard: {
       flexDirection: "row",
       gap: theme.spacing.sm,
-      backgroundColor: theme.colors.surfaceAlt,
-      borderRadius: theme.radii.lg,
+      backgroundColor: theme.colors.surface,
+      borderRadius: theme.radii.md,
       padding: theme.spacing.md,
-      borderWidth: 1,
-      borderColor: `${theme.colors.border}AA`,
+      alignItems: "flex-start",
     },
     helperText: {
-      color: theme.colors.textMuted,
       flex: 1,
       fontSize: 13,
       lineHeight: 18,
+      color: theme.colors.textMuted,
     },
     footer: {
-      padding: theme.spacing.lg,
+      flexDirection: "row",
+      paddingHorizontal: theme.spacing.md,
+      paddingVertical: theme.spacing.md,
+      backgroundColor: theme.colors.surface,
       borderTopWidth: 1,
       borderTopColor: theme.colors.border,
-      backgroundColor: theme.colors.surface,
+      gap: theme.spacing.sm,
     },
-    saveButton: {
-      ...theme.components.buttonPrimary,
+    secondaryButton: {
+      flex: 1,
+      backgroundColor: theme.colors.background,
+      borderRadius: theme.radii.pill,
+      paddingVertical: theme.spacing.md,
       alignItems: "center",
       justifyContent: "center",
+      borderWidth: 1.5,
+      borderColor: theme.colors.border,
+    },
+    secondaryButtonText: {
+      fontSize: 15,
+      fontWeight: "600",
+      color: theme.colors.text,
+    },
+    saveButton: {
+      flex: 1,
+      ...theme.components.buttonPrimary,
+      paddingHorizontal: theme.spacing.xl,
       paddingVertical: theme.spacing.md,
-      borderRadius: theme.radii.full,
     },
     saveButtonDisabled: {
-      opacity: 0.6,
+      opacity: 0.5,
     },
     saveButtonText: {
-      ...theme.components.buttonPrimaryText,
-      fontSize: 16,
+      fontSize: 15,
+      fontWeight: "600",
+      color: "#fff",
     },
   });
