@@ -7,6 +7,7 @@ import { Link, useRouter } from "expo-router";
 
 import { DonutChart } from "../../components/DonutChart";
 import { SpendingBarChart, SpendingLineChart } from "../../components/SpendingCharts";
+import { MonthlyCalendar } from "../../components/MonthlyCalendar";
 import { useAppTheme } from "../../theme";
 import { BudgetGoal, useFinanceStore } from "../../lib/store";
 import { filterTransactionsByAccount, getTransactionDelta, getTransactionVisualState } from "../../lib/transactions";
@@ -652,6 +653,13 @@ export default function HomeScreen() {
           </View>
         </View>
 
+        {/* Monthly Calendar */}
+        <MonthlyCalendar
+          transactions={scopedTransactions}
+          selectedAccountId={selectedAccountId}
+          currency={baseCurrency}
+        />
+
         <View style={[theme.components.surface, styles.topSpendingCard]}>
           <View style={styles.sectionHeaderRow}>
             <View>
@@ -1177,7 +1185,7 @@ const createStyles = (
     trendCaption: {
       ...theme.typography.subtitle,
       fontSize: 13,
-      marginTop: 2,
+      marginTop:4 ,
       textAlign: "right",
     },
     chartSwitch: {

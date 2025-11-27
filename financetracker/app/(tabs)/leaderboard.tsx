@@ -9,6 +9,7 @@ import { isAuthenticated } from "../../lib/supabase";
 import { syncMetricsToSupabase, fetchLeaderboard, getUserRank } from "../../lib/sync-service";
 import { useFinanceStore } from "../../lib/store";
 import AuthForm from "../../components/AuthForm";
+import { SkeletonLoader, SkeletonCard, SkeletonListItem } from "../../components/SkeletonLoader";
 import { 
   mockMissions, 
   mockAchievements,
@@ -33,6 +34,7 @@ export default function CrewScreen() {
   const [period, setPeriod] = useState<'daily' | 'weekly' | 'monthly' | 'all_time'>('all_time');
   const [leaderboardData, setLeaderboardData] = useState<any[]>([]);
   const [userRank, setUserRank] = useState<number | null>(null);
+  const [missionFilter, setMissionFilter] = useState<'all' | 'active' | 'completed'>('active');
   
   const transactions = useFinanceStore((state) => state.transactions);
   const budgetGoals = useFinanceStore((state) => state.budgetGoals);
@@ -43,6 +45,12 @@ export default function CrewScreen() {
   const userLevel = calculateLevel(userPoints);
   const levelPercent = levelProgress(userPoints, userLevel);
   const nextLevelPoints = pointsForNextLevel(userLevel);
+
+  const filteredMissions = useMemo(() => {
+    if (missionFilter === 'all') return mockMissions;
+    if (missionFilter === 'completed') return mockMissions.filter(m => (m.progress || 0) >= 100);
+    return mockMissions.filter(m => (m.progress || 0) < 100);
+  }, [missionFilter]);
 
   const checkAuth = async () => {
     const auth = await isAuthenticated();
@@ -89,11 +97,11 @@ export default function CrewScreen() {
     }
   }, [period]);
 
-  const renderMission = (mission: MockMission) => (
-    <View key={mission.id} style={styles.missionCard}>
+  const renderMission = (mission: MockMission, index: number, array: MockMission[]) => (
+    <View key={mission.id} style={[styles.missionCard, index === array.length - 1 && styles.lastItem]}>
       <View style={styles.missionHeader}>
         <View style={[styles.missionIcon, { backgroundColor: theme.colors.primary + '20' }]}>
-          <Ionicons name={mission.icon as any} size={24} color={theme.colors.primary} />
+          <Ionicons name={mission.icon as any} size={20} color={theme.colors.primary} />
         </View>
         <View style={styles.missionHeaderText}>
           <Text style={styles.missionTitle}>{mission.title}</Text>
@@ -102,7 +110,7 @@ export default function CrewScreen() {
           </Text>
         </View>
         <View style={styles.missionReward}>
-          <Ionicons name="sparkles" size={16} color={theme.colors.accent} />
+          <Ionicons name="sparkles" size={14} color={theme.colors.accent} />
           <Text style={styles.missionRewardText}>+{mission.points_reward}</Text>
         </View>
       </View>
@@ -123,32 +131,58 @@ export default function CrewScreen() {
     </View>
   );
 
-  const renderAchievement = (achievement: MockAchievement) => (
-    <View 
-      key={achievement.id} 
-      style={[
-        styles.achievementCard,
-        !achievement.unlocked && styles.achievementLocked
-      ]}
-    >
-      <Text style={styles.achievementIcon}>{achievement.icon}</Text>
-      <View style={styles.achievementContent}>
-        <Text style={[styles.achievementTitle, !achievement.unlocked && styles.textMuted]}>
-          {achievement.title}
-        </Text>
-        <Text style={[styles.achievementDescription, !achievement.unlocked && styles.textMuted]}>
-          {achievement.description}
-        </Text>
-        <Text style={styles.achievementPoints}>+{achievement.points_value} pts</Text>
+  const renderAchievement = (achievement: MockAchievement, index: number, array: MockAchievement[]) => {
+    // Mock progress for locked achievements (in real app, this would come from backend)
+    const mockProgress = !achievement.unlocked ? {
+      current: achievement.id === '3' ? 7 : achievement.id === '4' ? 45 : achievement.id === '5' ? 2 : 15,
+      total: achievement.id === '3' ? 10 : achievement.id === '4' ? 100 : achievement.id === '5' ? 5 : 30,
+    } : null;
+
+    const progressPercent = mockProgress ? (mockProgress.current / mockProgress.total) * 100 : 0;
+
+    return (
+      <View 
+        key={achievement.id} 
+        style={[
+          styles.achievementCard,
+          !achievement.unlocked && styles.achievementLocked,
+          index === array.length - 1 && styles.lastItem
+        ]}
+      >
+        <Text style={styles.achievementIcon}>{achievement.icon}</Text>
+        <View style={styles.achievementContent}>
+          <Text style={[styles.achievementTitle, !achievement.unlocked && styles.textMuted]}>
+            {achievement.title}
+          </Text>
+          <Text style={[styles.achievementDescription, !achievement.unlocked && styles.textMuted]}>
+            {achievement.description}
+          </Text>
+          {!achievement.unlocked && mockProgress && (
+            <View style={styles.achievementProgressContainer}>
+              <View style={styles.achievementProgressBar}>
+                <View 
+                  style={[
+                    styles.achievementProgressFill,
+                    { width: `${progressPercent}%`, backgroundColor: theme.colors.primary }
+                  ]} 
+                />
+              </View>
+              <Text style={styles.achievementProgressText}>
+                {mockProgress.current}/{mockProgress.total}
+              </Text>
+            </View>
+          )}
+          <Text style={styles.achievementPoints}>+{achievement.points_value} pts</Text>
+        </View>
+        {achievement.unlocked && (
+          <Ionicons name="checkmark-circle" size={20} color={theme.colors.success} />
+        )}
+        {!achievement.unlocked && (
+          <Ionicons name="lock-closed" size={20} color={theme.colors.textMuted} />
+        )}
       </View>
-      {achievement.unlocked && (
-        <Ionicons name="checkmark-circle" size={24} color={theme.colors.success} />
-      )}
-      {!achievement.unlocked && (
-        <Ionicons name="lock-closed" size={24} color={theme.colors.textMuted} />
-      )}
-    </View>
-  );
+    );
+  };
 
   if (!isAuth) {
     return (
@@ -167,9 +201,38 @@ export default function CrewScreen() {
   if (isLoading) {
     return (
       <SafeAreaView style={styles.safeArea}>
-        <View style={styles.centerContent}>
-          <ActivityIndicator size="large" color={theme.colors.primary} />
-        </View>
+        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+          <View style={styles.header}>
+            <Text style={styles.title}>Crew</Text>
+            <Text style={styles.subtitle}>Loading...</Text>
+          </View>
+          
+          {/* Player Card Skeleton */}
+          <View style={[theme.components.card, styles.playerCard]}>
+            <View style={styles.playerHeader}>
+              <SkeletonLoader width={64} height={64} borderRadius={32} />
+              <View style={styles.playerInfo}>
+                <SkeletonLoader height={20} width="60%" style={{ marginBottom: 8 }} />
+                <SkeletonLoader height={14} width="40%" />
+              </View>
+            </View>
+            <SkeletonLoader height={8} style={{ marginVertical: 12 }} />
+            <SkeletonLoader height={40} style={{ marginTop: 12 }} />
+          </View>
+          
+          {/* Leaderboard Skeleton */}
+          <SkeletonCard style={{ marginBottom: 16 }} />
+          
+          {/* Missions Skeleton */}
+          <View style={[theme.components.card, styles.sectionCard]}>
+            <View style={styles.sectionHeader}>
+              <SkeletonLoader width={100} height={20} />
+            </View>
+            {[1, 2, 3].map((i) => (
+              <SkeletonListItem key={i} style={{ paddingHorizontal: 16 }} />
+            ))}
+          </View>
+        </ScrollView>
       </SafeAreaView>
     );
   }
@@ -255,9 +318,9 @@ export default function CrewScreen() {
         </View>
 
         {/* Leaderboard */}
-        <View style={styles.section}>
+        <View style={[theme.components.card, styles.sectionCard]}>
           <View style={styles.sectionHeader}>
-            <Ionicons name="podium" size={24} color={theme.colors.accent} />
+            <Ionicons name="podium" size={20} color={theme.colors.accent} />
             <Text style={styles.sectionTitle}>Leaderboard</Text>
           </View>
           
@@ -296,8 +359,8 @@ export default function CrewScreen() {
               <Text style={styles.emptySubtext}>Be the first to sync your stats!</Text>
             </View>
           ) : (
-            leaderboardData.slice(0, 10).map((entry, index) => (
-              <View key={entry.user_id} style={[theme.components.surface, styles.leaderboardCard]}>
+            leaderboardData.slice(0, 10).map((entry, index, array) => (
+              <View key={entry.user_id} style={[theme.components.surface, styles.leaderboardCard, index === array.length - 1 && styles.lastItem]}>
                 <View style={[
                   styles.leaderboardRank,
                   index === 0 && { backgroundColor: '#FFD700' },
@@ -320,25 +383,63 @@ export default function CrewScreen() {
                     {entry.streak_days > 0 ? ` • ${entry.streak_days}d streak` : ''}
                   </Text>
                 </View>
-                <Ionicons name="sparkles" size={18} color={theme.colors.accent} />
+                <Ionicons name="sparkles" size={16} color={theme.colors.accent} />
               </View>
             ))
           )}
         </View>
 
         {/* Active Missions */}
-        <View style={styles.section}>
+        <View style={[theme.components.card, styles.sectionCard]}>
           <View style={styles.sectionHeader}>
-            <Ionicons name="rocket" size={24} color={theme.colors.primary} />
-            <Text style={styles.sectionTitle}>Active Missions</Text>
+            <Ionicons name="rocket" size={20} color={theme.colors.primary} />
+            <Text style={styles.sectionTitle}>Missions</Text>
           </View>
-          {mockMissions.map(renderMission)}
+
+          {/* Mission Filter */}
+          <View style={styles.missionFilter}>
+            {(['active', 'completed', 'all'] as const).map((filter) => {
+              const isActive = missionFilter === filter;
+              const label = filter.charAt(0).toUpperCase() + filter.slice(1);
+              return (
+                <Pressable
+                  key={filter}
+                  style={[styles.filterButton, isActive && styles.filterButtonActive]}
+                  onPress={() => setMissionFilter(filter)}
+                >
+                  <Text style={[styles.filterButtonText, isActive && styles.filterButtonTextActive]}>
+                    {label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+
+          {filteredMissions.length === 0 ? (
+            <View style={styles.emptyMissions}>
+              <Ionicons 
+                name={missionFilter === 'completed' ? "trophy-outline" : "checkmark-circle"} 
+                size={48} 
+                color={missionFilter === 'completed' ? theme.colors.textMuted : theme.colors.success} 
+              />
+              <Text style={styles.emptyText}>
+                {missionFilter === 'completed' 
+                  ? 'No completed missions yet' 
+                  : 'All missions completed!'}
+              </Text>
+              {missionFilter === 'completed' && (
+                <Text style={styles.emptySubtext}>Complete active missions to see them here</Text>
+              )}
+            </View>
+          ) : (
+            filteredMissions.map(renderMission)
+          )}
         </View>
 
         {/* Achievements */}
-        <View style={styles.section}>
+        <View style={[theme.components.card, styles.sectionCard]}>
           <View style={styles.sectionHeader}>
-            <Ionicons name="trophy" size={24} color={theme.colors.accent} />
+            <Ionicons name="trophy" size={20} color={theme.colors.accent} />
             <Text style={styles.sectionTitle}>Achievements</Text>
           </View>
           {mockAchievements.map(renderAchievement)}
@@ -502,37 +603,81 @@ const createStyles = (
     
     // Sections
     section: {
-      marginBottom: theme.spacing.xl,
+      marginBottom: theme.spacing.lg,
+    },
+    sectionCard: {
+      marginBottom: theme.spacing.lg,
+      padding: 0,
+      overflow: 'hidden',
     },
     sectionHeader: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: theme.spacing.sm,
-      marginBottom: theme.spacing.lg,
+      marginBottom: theme.spacing.md,
+      paddingHorizontal: theme.spacing.lg,
+      paddingTop: theme.spacing.lg,
     },
     sectionTitle: {
-      fontSize: 18,
+      fontSize: 16,
       fontWeight: '700',
       color: theme.colors.text,
     },
     
+    // Mission Filter
+    missionFilter: {
+      flexDirection: 'row',
+      gap: theme.spacing.sm,
+      paddingHorizontal: theme.spacing.lg,
+      marginBottom: theme.spacing.md,
+    },
+    filterButton: {
+      flex: 1,
+      paddingVertical: 8,
+      paddingHorizontal: theme.spacing.sm,
+      borderRadius: 8,
+      backgroundColor: theme.colors.surface,
+      alignItems: 'center',
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+    },
+    filterButtonActive: {
+      backgroundColor: theme.colors.primary,
+      borderColor: theme.colors.primary,
+    },
+    filterButtonText: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: theme.colors.textMuted,
+    },
+    filterButtonTextActive: {
+      color: theme.colors.text,
+    },
+    emptyMissions: {
+      alignItems: 'center',
+      padding: theme.spacing.xl,
+      paddingHorizontal: theme.spacing.lg,
+      gap: theme.spacing.sm,
+    },
+    
     // Mission Cards
     missionCard: {
-      backgroundColor: theme.colors.surfaceElevated,
-      borderRadius: theme.radii.md,
-      padding: theme.spacing.lg,
-      marginBottom: theme.spacing.md,
-      gap: theme.spacing.md,
+      backgroundColor: 'transparent',
+      borderBottomWidth: 1,
+      borderBottomColor: theme.colors.border,
+      padding: theme.spacing.md,
+      paddingHorizontal: theme.spacing.lg,
+      gap: theme.spacing.sm,
     },
     missionHeader: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: theme.spacing.md,
+      gap: theme.spacing.sm,
     },
     missionIcon: {
-      width: 48,
-      height: 48,
-      borderRadius: 24,
+      width: 36,
+      height: 36,
+      borderRadius: 18,
       alignItems: 'center',
       justifyContent: 'center',
     },
@@ -541,133 +686,164 @@ const createStyles = (
       gap: 2,
     },
     missionTitle: {
-      fontSize: 16,
+      fontSize: 14,
       fontWeight: '600',
       color: theme.colors.text,
     },
     missionTime: {
-      fontSize: 12,
+      fontSize: 11,
       color: theme.colors.accent,
       fontWeight: '600',
     },
     missionReward: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 4,
+      gap: 3,
       backgroundColor: theme.colors.accent + '20',
       paddingHorizontal: theme.spacing.sm,
-      paddingVertical: 4,
-      borderRadius: 12,
+      paddingVertical: 3,
+      borderRadius: 10,
     },
     missionRewardText: {
-      fontSize: 14,
+      fontSize: 12,
       fontWeight: '700',
       color: theme.colors.accent,
     },
     missionDescription: {
-      fontSize: 14,
+      fontSize: 13,
       color: theme.colors.textMuted,
-      lineHeight: 20,
+      lineHeight: 18,
     },
     progressContainer: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: theme.spacing.md,
+      gap: theme.spacing.sm,
     },
     progressBar: {
       flex: 1,
-      height: 8,
+      height: 6,
       backgroundColor: theme.colors.surface,
-      borderRadius: 4,
+      borderRadius: 3,
       overflow: 'hidden',
     },
     progressFill: {
       height: '100%',
-      borderRadius: 4,
+      borderRadius: 3,
     },
     progressText: {
-      fontSize: 14,
+      fontSize: 12,
       fontWeight: '700',
       color: theme.colors.text,
-      minWidth: 40,
+      minWidth: 35,
       textAlign: 'right',
     },
     
     // Achievement Cards
     achievementCard: {
-      backgroundColor: theme.colors.surfaceElevated,
-      borderRadius: theme.radii.md,
-      padding: theme.spacing.lg,
-      marginBottom: theme.spacing.md,
+      backgroundColor: 'transparent',
+      borderBottomWidth: 1,
+      borderBottomColor: theme.colors.border,
+      padding: theme.spacing.md,
+      paddingHorizontal: theme.spacing.lg,
       flexDirection: 'row',
       alignItems: 'center',
-      gap: theme.spacing.md,
+      gap: theme.spacing.sm,
     },
     achievementLocked: {
       opacity: 0.6,
     },
     achievementIcon: {
-      fontSize: 32,
+      fontSize: 28,
     },
     achievementContent: {
       flex: 1,
       gap: 2,
     },
     achievementTitle: {
-      fontSize: 16,
+      fontSize: 14,
       fontWeight: '600',
       color: theme.colors.text,
     },
     achievementDescription: {
-      fontSize: 13,
+      fontSize: 12,
       color: theme.colors.textMuted,
-      lineHeight: 18,
+      lineHeight: 16,
     },
     achievementPoints: {
-      fontSize: 12,
+      fontSize: 11,
       fontWeight: '700',
       color: theme.colors.accent,
       marginTop: 2,
     },
+    achievementProgressContainer: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: theme.spacing.sm,
+      marginTop: 6,
+    },
+    achievementProgressBar: {
+      flex: 1,
+      height: 4,
+      backgroundColor: theme.colors.surface,
+      borderRadius: 2,
+      overflow: 'hidden',
+    },
+    achievementProgressFill: {
+      height: '100%',
+      borderRadius: 2,
+    },
+    achievementProgressText: {
+      fontSize: 10,
+      fontWeight: '600',
+      color: theme.colors.textMuted,
+      minWidth: 35,
+    },
     textMuted: {
       opacity: 0.7,
+    },
+    lastItem: {
+      borderBottomWidth: 0,
+      paddingBottom: theme.spacing.lg,
     },
 
     // Leaderboard
     rankCard: {
-      padding: theme.spacing.lg,
-      marginBottom: theme.spacing.md,
+      padding: theme.spacing.md,
+      paddingHorizontal: theme.spacing.lg,
+      marginBottom: theme.spacing.sm,
+      marginHorizontal: theme.spacing.lg,
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
     },
     rankLabel: {
-      fontSize: 14,
+      fontSize: 12,
       fontWeight: '600',
       color: theme.colors.textMuted,
       textTransform: 'uppercase',
       letterSpacing: 0.5,
     },
     rankBadge: {
-      paddingHorizontal: theme.spacing.lg,
-      paddingVertical: theme.spacing.sm,
+      paddingHorizontal: theme.spacing.md,
+      paddingVertical: 6,
       backgroundColor: theme.colors.primary,
       borderRadius: theme.radii.pill,
     },
     rankNumber: {
-      fontSize: 18,
+      fontSize: 16,
       fontWeight: '700',
       color: theme.colors.text,
     },
     periodSelector: {
       flexDirection: 'row',
       gap: theme.spacing.sm,
-      marginBottom: theme.spacing.lg,
+      marginBottom: theme.spacing.md,
+      paddingHorizontal: theme.spacing.lg,
     },
     periodButton: {
       flex: 1,
-      paddingVertical: theme.spacing.sm,
-      paddingHorizontal: theme.spacing.md,
+      paddingVertical: 8,
+      paddingHorizontal: theme.spacing.sm,
       borderRadius: 8,
       backgroundColor: theme.colors.surface,
       alignItems: 'center',
@@ -679,7 +855,7 @@ const createStyles = (
       borderColor: theme.colors.primary,
     },
     periodButtonText: {
-      fontSize: 13,
+      fontSize: 12,
       fontWeight: '600',
       color: theme.colors.textMuted,
     },
@@ -688,49 +864,52 @@ const createStyles = (
     },
     emptyLeaderboard: {
       alignItems: 'center',
-      padding: theme.spacing.xxl,
+      padding: theme.spacing.xl,
+      paddingHorizontal: theme.spacing.lg,
       gap: theme.spacing.sm,
     },
     emptyText: {
-      fontSize: 16,
+      fontSize: 15,
       fontWeight: '600',
       color: theme.colors.text,
     },
     emptySubtext: {
-      fontSize: 14,
+      fontSize: 13,
       color: theme.colors.textMuted,
     },
     leaderboardCard: {
       flexDirection: 'row',
       alignItems: 'center',
-      padding: theme.spacing.lg,
-      marginBottom: theme.spacing.md,
-      gap: theme.spacing.lg,
+      padding: theme.spacing.md,
+      paddingHorizontal: theme.spacing.lg,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.colors.border,
+      gap: theme.spacing.md,
     },
     leaderboardRank: {
-      width: 40,
-      height: 40,
-      borderRadius: 20,
+      width: 32,
+      height: 32,
+      borderRadius: 16,
       backgroundColor: theme.colors.primary,
       alignItems: 'center',
       justifyContent: 'center',
     },
     leaderboardRankText: {
-      fontSize: 16,
+      fontSize: 14,
       fontWeight: '700',
       color: theme.colors.text,
     },
     leaderboardInfo: {
       flex: 1,
-      gap: 4,
+      gap: 3,
     },
     leaderboardName: {
-      fontSize: 16,
+      fontSize: 14,
       fontWeight: '600',
       color: theme.colors.text,
     },
     leaderboardStats: {
-      fontSize: 13,
+      fontSize: 12,
       color: theme.colors.textMuted,
     },
   });
