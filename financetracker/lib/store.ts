@@ -101,7 +101,7 @@ export interface FinanceState {
       initialBalance?: number;
       excludeFromTotal?: boolean;
     },
-  ) => Promise<void>;
+  ) => Promise<string | undefined>;
   updateAccount: (
     id: string,
     updates: Partial<
@@ -643,7 +643,7 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
     const state = get();
     const value = name.trim();
     if (!value) {
-      return;
+      return undefined;
     }
 
     const normalizedCurrency = (currency || state.profile.currency || "USD").trim().toUpperCase();
@@ -683,6 +683,8 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
         nextTransactions,
       );
     });
+
+    return nextAccount.id;
   },
   updateAccount: async (id, updates) => {
     const existing = get().accounts.find((account) => account.id === id);

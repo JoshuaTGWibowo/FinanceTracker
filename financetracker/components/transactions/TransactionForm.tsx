@@ -19,6 +19,8 @@ import dayjs from "dayjs";
 import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { useRouter } from "expo-router";
+
 import { useAppTheme } from "../../theme";
 import {
   Category,
@@ -211,12 +213,14 @@ export function TransactionForm({
   enableRecurringOption = false,
   onSubmitRecurring,
 }: TransactionFormProps) {
+  const router = useRouter();
   const theme = useAppTheme();
   const insets = useSafeAreaInsets();
   const styles = useMemo(() => createStyles(theme, insets), [theme, insets]);
   const currency = useFinanceStore((state) => state.profile.currency);
   const accounts = useFinanceStore((state) => state.accounts);
   const categories = useFinanceStore((state) => state.preferences.categories);
+  const addCategory = useFinanceStore((state) => state.addCategory);
   const availableCategories = categories.length ? categories : DEFAULT_CATEGORIES;
   const activeAccounts = useMemo(() => accounts.filter((account) => !account.isArchived), [accounts]);
 
@@ -478,6 +482,11 @@ export function TransactionForm({
     },
     [groupingFormatter, separators],
   );
+
+  const handleOpenCreateCategory = () => {
+    const categoryType = transactionType === "income" ? "income" : "expense";
+    router.push(`/categories/new?type=${categoryType}`);
+  };
 
   const handleSubmit = async () => {
     const parsedAmount = parseAmountInput(amount);
@@ -952,6 +961,18 @@ export function TransactionForm({
                 </Pressable>
               ) : null}
             </View>
+
+            <Pressable
+              style={styles.addCategoryButton}
+              onPress={handleOpenCreateCategory}
+              accessibilityRole="button"
+            >
+              <View style={styles.addCategoryIcon}>
+                <Ionicons name="add-circle" size={20} color={theme.colors.primary} />
+              </View>
+              <Text style={styles.addCategoryText}>Add New Category</Text>
+              <Ionicons name="chevron-forward" size={18} color={theme.colors.textMuted} />
+            </Pressable>
 
             <View style={styles.categoryGroupGrid}>
               {groupedCategories.length === 0 ? (
@@ -1608,6 +1629,33 @@ const createStyles = (
     },
     childName: {
       fontSize: 14,
+      fontWeight: "700",
+      color: theme.colors.text,
+    },
+    addCategoryButton: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: theme.spacing.md,
+      backgroundColor: theme.colors.surface,
+      borderRadius: theme.radii.xl,
+      padding: theme.spacing.lg,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      shadowColor: theme.colors.primary,
+      shadowOpacity: 0.08,
+      shadowOffset: { width: 0, height: 4 },
+    },
+    addCategoryIcon: {
+      width: 44,
+      height: 44,
+      borderRadius: theme.radii.lg,
+      backgroundColor: `${theme.colors.primary}15`,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    addCategoryText: {
+      flex: 1,
+      fontSize: 16,
       fontWeight: "700",
       color: theme.colors.text,
     },
