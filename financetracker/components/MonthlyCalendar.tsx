@@ -242,7 +242,7 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>) =>
       flexWrap: 'wrap',
       alignSelf: 'center',
       width: '100%',
-      marginBottom: -45,
+      marginBottom: -20,
     },
     dayCell: {
       width: `${100 / 7}%`,
