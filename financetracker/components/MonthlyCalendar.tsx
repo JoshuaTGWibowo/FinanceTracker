@@ -100,7 +100,7 @@ export function MonthlyCalendar({ transactions, selectedAccountId, currency }: M
   };
 
   const formatCurrency = (value: number) => {
-    if (value === 0) return '0';
+    if (value === 0) return '-';
     const abs = Math.abs(value);
     if (abs >= 1000) {
       return `${value > 0 ? '+' : '-'}${(abs / 1000).toFixed(1)}k`;
@@ -166,11 +166,11 @@ export function MonthlyCalendar({ transactions, selectedAccountId, currency }: M
               >
                 {day.date.date()}
               </Text>
-              {isCurrentMonth && !day.isFuture && day.net !== 0 && (
+              {isCurrentMonth && !day.isFuture && (
                 <Text
                   style={[
                     styles.netAmount,
-                    { color: getNetColor(day.net, day.isFuture) },
+                    { color: day.net === 0 ? theme.colors.text : getNetColor(day.net, day.isFuture) },
                   ]}
                 >
                   {formatCurrency(day.net)}
