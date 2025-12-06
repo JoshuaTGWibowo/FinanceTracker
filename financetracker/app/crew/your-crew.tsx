@@ -1,43 +1,40 @@
-import { useMemo, useState } from "react";
-import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { useMemo, useState, useEffect } from "react";
+import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View, ActivityIndicator } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 
 import { useAppTheme } from "../../theme";
+import {
+  createCrew,
+  joinCrewWithCode,
+  getUserCrew,
+  getCrewMembers,
+  leaveCrew,
+  removeMemberFromCrew,
+  disbandCrew,
+} from "../../lib/crew-service";
 
-type CrewState = 'none' | 'member' | 'owner';
-
-// Mock crew data
-const mockCrewData = {
-  id: '1',
-  name: 'Finance Warriors',
-  description: 'We save together, we win together! 💪',
-  inviteCode: 'FW2K9X',
-  memberCount: 5,
-  maxMembers: 10,
-  owner: {
-    id: 'owner-1',
-    username: 'Josh77',
-    displayName: 'Josh77',
-  },
-  members: [
-    { id: '1', username: 'Josh77', displayName: 'Josh77', points: 850, level: 9, isOwner: true },
-    { id: '2', username: 'FinanceNinja', displayName: 'Finance Ninja', points: 2450, level: 15, isOwner: false },
-    { id: '3', username: 'BudgetMaster', displayName: 'Budget Master', points: 1820, level: 13, isOwner: false },
-    { id: '4', username: 'SavingsKing', displayName: 'Savings King', points: 1560, level: 12, isOwner: false },
-    { id: '5', username: 'MoneyWise', displayName: 'Money Wise', points: 1340, level: 11, isOwner: false },
-  ],
+type CrewData = {
+  id: string;
+  name: string;
+  description: string | null;
+  inviteCode: string;
+  maxMembers: number;
+  ownerId: string;
+  ownerUsername: string;
+  memberCount: number;
+  userRole: 'owner' | 'admin' | 'member';
 };
 
-// Helper function to generate a random 6-character crew code
-const generateCrewCode = (): string => {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // Exclude similar chars (I, O, 0, 1)
-  let code = '';
-  for (let i = 0; i < 6; i++) {
-    code += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return code;
+type CrewMemberData = {
+  userId: string;
+  username: string;
+  displayName: string | null;
+  role: 'owner' | 'admin' | 'member';
+  totalPoints: number;
+  level: number;
+  joinedAt: string;
 };
 
 export default function YourCrewScreen() {
@@ -46,21 +43,42 @@ export default function YourCrewScreen() {
   const insets = useSafeAreaInsets();
   const styles = useMemo(() => createStyles(theme, insets), [theme, insets]);
 
-  // For demo purposes, toggle between states
-  const [crewState, setCrewState] = useState<CrewState>('none'); // Change to 'member' or 'owner' to see other states
+  // State
+  const [isLoading, setIsLoading] = useState(true);
   const [showJoinModal, setShowJoinModal] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [crewName, setCrewName] = useState('');
   const [crewDescription, setCrewDescription] = useState('');
   const [crewCode, setCrewCode] = useState('');
   const [maxMembers, setMaxMembers] = useState(10);
-  const [generatedCode, setGeneratedCode] = useState('');
+  const [crewData, setCrewData] = useState<CrewData | null>(null);
+  const [crewMembers, setCrewMembers] = useState<CrewMemberData[]>([]);
+  const [isProcessing, setIsProcessing] = useState(false);
+
+  // Load crew data on mount
+  useEffect(() => {
+    loadCrewData();
+  }, []);
+
+  const loadCrewData = async () => {
+    setIsLoading(true);
+    const result = await getUserCrew();
+    if (result.success && result.crew) {
+      setCrewData(result.crew);
+      // Load members
+      const membersResult = await getCrewMembers(result.crew.id);
+      if (membersResult.success && membersResult.members) {
+        setCrewMembers(membersResult.members);
+      }
+    }
+    setIsLoading(false);
+  };
 
   const handleBack = () => {
     router.back();
   };
 
-  const handleJoinCrew = () => {
+  const handleJoinCrew = async () => {
     if (!crewCode.trim()) {
       Alert.alert('Error', 'Please enter a crew code');
       return;
@@ -70,40 +88,63 @@ export default function YourCrewScreen() {
       Alert.alert('Error', 'Crew code must be 6 characters');
       return;
     }
-    // TODO: Implement actual join logic with Supabase
-    Alert.alert('Join Crew', `Joining crew with code: ${formattedCode}\nThis will be implemented with backend integration.`);
+
+    setIsProcessing(true);
+    const result = await joinCrewWithCode(formattedCode);
+    setIsProcessing(false);
+
+    if (result.success) {
+      setShowJoinModal(false);
+      setCrewCode('');
+      Alert.alert('Success! 🎉', 'You have joined the crew!', [
+        { text: 'OK', onPress: () => loadCrewData() }
+      ]);
+    } else {
+      Alert.alert('Error', result.error || 'Failed to join crew');
+    }
   };
 
-  const handleCreateCrew = () => {
+  const handleCreateCrew = async () => {
     if (!crewName.trim()) {
       Alert.alert('Error', 'Please enter a crew name');
       return;
     }
-    const newCode = generateCrewCode();
-    setGeneratedCode(newCode);
-    // TODO: Implement actual create logic with Supabase
-    
-    // Close modal and show crew management page
-    setShowCreateModal(false);
-    setCrewState('owner');
-    
-    // Show success message with invite code
-    setTimeout(() => {
-      Alert.alert(
-        'Crew Created! 🎉',
-        `Your crew "${crewName}" has been created!\n\nInvite Code: ${newCode}\n\nShare this code with friends so they can join your crew.`,
-        [
-          { 
-            text: 'Copy Code', 
-            onPress: () => {
-              // TODO: Add clipboard copy functionality
-              Alert.alert('Copied!', `Code ${newCode} copied to clipboard`);
-            }
-          },
-          { text: 'OK' }
-        ]
-      );
-    }, 300);
+
+    setIsProcessing(true);
+    const result = await createCrew({
+      name: crewName.trim(),
+      description: crewDescription.trim() || undefined,
+      maxMembers,
+    });
+    setIsProcessing(false);
+
+    if (result.success && result.crew) {
+      // Close modal and reload data
+      setShowCreateModal(false);
+      setCrewName('');
+      setCrewDescription('');
+      await loadCrewData();
+      
+      // Show success message with invite code
+      setTimeout(() => {
+        Alert.alert(
+          'Crew Created! 🎉',
+          `Your crew "${result.crew!.name}" has been created!\n\nInvite Code: ${result.crew!.invite_code}\n\nShare this code with friends so they can join your crew.`,
+          [
+            { 
+              text: 'Copy Code', 
+              onPress: () => {
+                // TODO: Add clipboard copy functionality
+                Alert.alert('Copied!', `Code ${result.crew!.invite_code} copied to clipboard`);
+              }
+            },
+            { text: 'OK' }
+          ]
+        );
+      }, 300);
+    } else {
+      Alert.alert('Error', result.error || 'Failed to create crew');
+    }
   };
 
   const handleLeaveCrew = () => {
@@ -112,7 +153,24 @@ export default function YourCrewScreen() {
       'Are you sure you want to leave this crew?',
       [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Leave', style: 'destructive', onPress: () => setCrewState('none') },
+        { 
+          text: 'Leave', 
+          style: 'destructive', 
+          onPress: async () => {
+            if (!crewData) return;
+            setIsProcessing(true);
+            const result = await leaveCrew(crewData.id);
+            setIsProcessing(false);
+            
+            if (result.success) {
+              Alert.alert('Success', 'You have left the crew', [
+                { text: 'OK', onPress: () => loadCrewData() }
+              ]);
+            } else {
+              Alert.alert('Error', result.error || 'Failed to leave crew');
+            }
+          }
+        },
       ]
     );
   };
@@ -123,21 +181,38 @@ export default function YourCrewScreen() {
       'Are you sure you want to remove this member from the crew?',
       [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Remove', style: 'destructive', onPress: () => {} },
+        { 
+          text: 'Remove', 
+          style: 'destructive', 
+          onPress: async () => {
+            if (!crewData) return;
+            setIsProcessing(true);
+            const result = await removeMemberFromCrew(crewData.id, memberId);
+            setIsProcessing(false);
+            
+            if (result.success) {
+              Alert.alert('Success', 'Member removed from crew');
+              loadCrewData();
+            } else {
+              Alert.alert('Error', result.error || 'Failed to remove member');
+            }
+          }
+        },
       ]
     );
   };
 
   const handleInviteMembers = () => {
+    if (!crewData) return;
     Alert.alert(
       'Invite Members',
-      `Share your crew code with friends:\n\n${mockCrewData.inviteCode}\n\nThey can join by entering this code in the "Join a Crew" screen.`,
+      `Share your crew code with friends:\n\n${crewData.inviteCode}\n\nThey can join by entering this code in the "Join a Crew" screen.`,
       [
         { 
           text: 'Copy Code', 
           onPress: () => {
             // TODO: Add clipboard copy functionality
-            Alert.alert('Copied!', `Code ${mockCrewData.inviteCode} copied to clipboard`);
+            Alert.alert('Copied!', `Code ${crewData.inviteCode} copied to clipboard`);
           }
         },
         { text: 'OK', style: 'cancel' }
@@ -145,8 +220,26 @@ export default function YourCrewScreen() {
     );
   };
 
+  // Loading state
+  if (isLoading) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.headerBar}>
+          <Pressable style={styles.backButton} onPress={handleBack}>
+            <Ionicons name="chevron-back" size={24} color={theme.colors.text} />
+          </Pressable>
+          <Text style={styles.headerTitle}>Your Crew</Text>
+          <View style={{ width: 40 }} />
+        </View>
+        <View style={[styles.scrollContent, { justifyContent: 'center', alignItems: 'center' }]}>
+          <ActivityIndicator size="large" color={theme.colors.primary} />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   // No Crew State
-  if (crewState === 'none' && !showJoinModal && !showCreateModal) {
+  if (!crewData && !showJoinModal && !showCreateModal) {
     return (
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.headerBar}>
@@ -326,6 +419,10 @@ export default function YourCrewScreen() {
   }
 
   // Member or Owner State - Show Crew Details
+  if (!crewData) return null;
+
+  const isOwner = crewData.userRole === 'owner';
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.headerBar}>
@@ -333,12 +430,12 @@ export default function YourCrewScreen() {
           <Ionicons name="chevron-back" size={24} color={theme.colors.text} />
         </Pressable>
         <Text style={styles.headerTitle}>Your Crew</Text>
-        {crewState === 'owner' && (
+        {isOwner && (
           <Pressable style={styles.headerAction} onPress={handleInviteMembers}>
             <Ionicons name="person-add" size={22} color={theme.colors.primary} />
           </Pressable>
         )}
-        {crewState === 'member' && <View style={{ width: 40 }} />}
+        {!isOwner && <View style={{ width: 40 }} />}
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
@@ -349,13 +446,13 @@ export default function YourCrewScreen() {
               <Ionicons name="shield" size={48} color={theme.colors.primary} />
             </View>
             <View style={styles.crewHeaderInfo}>
-              <Text style={styles.crewName}>{mockCrewData.name}</Text>
-              <Text style={styles.crewDescription}>{mockCrewData.description}</Text>
+              <Text style={styles.crewName}>{crewData.name}</Text>
+              <Text style={styles.crewDescription}>{crewData.description || 'No description'}</Text>
               <View style={styles.crewStats}>
                 <View style={styles.crewStat}>
                   <Ionicons name="people" size={16} color={theme.colors.accent} />
                   <Text style={styles.crewStatText}>
-                    {mockCrewData.memberCount}/{mockCrewData.maxMembers} members
+                    {crewData.memberCount}/{crewData.maxMembers} members
                   </Text>
                 </View>
               </View>
@@ -369,10 +466,10 @@ export default function YourCrewScreen() {
               <Text style={styles.inviteCodeLabel}>Crew Invite Code</Text>
             </View>
             <View style={styles.inviteCodeBox}>
-              <Text style={styles.inviteCodeText}>{mockCrewData.inviteCode}</Text>
+              <Text style={styles.inviteCodeText}>{crewData.inviteCode}</Text>
               <Pressable 
                 style={styles.copyCodeButton}
-                onPress={() => Alert.alert('Copied!', `Code ${mockCrewData.inviteCode} copied to clipboard`)}
+                onPress={() => Alert.alert('Copied!', `Code ${crewData.inviteCode} copied to clipboard`)}
               >
                 <Ionicons name="copy-outline" size={20} color={theme.colors.primary} />
               </Pressable>
@@ -387,15 +484,15 @@ export default function YourCrewScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Members</Text>
           
-          {mockCrewData.members.map((member) => (
-            <View key={member.id} style={[theme.components.surface, styles.memberCard]}>
+          {crewMembers.map((member) => (
+            <View key={member.userId} style={[theme.components.surface, styles.memberCard]}>
               <View style={styles.memberAvatar}>
                 <Ionicons name="person" size={24} color={theme.colors.primary} />
               </View>
               <View style={styles.memberInfo}>
                 <View style={styles.memberNameRow}>
-                  <Text style={styles.memberName}>{member.displayName}</Text>
-                  {member.isOwner && (
+                  <Text style={styles.memberName}>{member.displayName || member.username}</Text>
+                  {member.role === 'owner' && (
                     <View style={styles.ownerBadge}>
                       <Ionicons name="star" size={12} color="#FFD700" />
                       <Text style={styles.ownerBadgeText}>Owner</Text>
@@ -403,13 +500,13 @@ export default function YourCrewScreen() {
                   )}
                 </View>
                 <Text style={styles.memberStats}>
-                  Level {member.level} • {member.points} pts
+                  Level {member.level} • {member.totalPoints} pts
                 </Text>
               </View>
-              {crewState === 'owner' && !member.isOwner && (
+              {isOwner && member.role !== 'owner' && (
                 <Pressable
                   style={styles.removeMemberButton}
-                  onPress={() => handleRemoveMember(member.id)}
+                  onPress={() => handleRemoveMember(member.userId)}
                 >
                   <Ionicons name="close-circle" size={24} color={theme.colors.danger} />
                 </Pressable>
@@ -419,7 +516,7 @@ export default function YourCrewScreen() {
         </View>
 
         {/* Leave/Manage Crew */}
-        {crewState === 'member' && (
+        {!isOwner && (
           <Pressable
             style={styles.leaveCrewButton}
             onPress={handleLeaveCrew}
@@ -429,7 +526,7 @@ export default function YourCrewScreen() {
           </Pressable>
         )}
 
-        {crewState === 'owner' && (
+        {isOwner && (
           <View style={styles.ownerActions}>
             <Text style={styles.ownerActionsTitle}>Crew Management</Text>
             <Pressable style={styles.ownerActionButton}>
@@ -437,9 +534,37 @@ export default function YourCrewScreen() {
               <Text style={styles.ownerActionButtonText}>Crew Settings</Text>
               <Ionicons name="chevron-forward" size={18} color={theme.colors.textMuted} />
             </Pressable>
-            <Pressable style={[styles.ownerActionButton, styles.dangerAction]}>
+            <Pressable 
+              style={[styles.ownerActionButton, styles.dangerAction]}
+              onPress={() => {
+                Alert.alert(
+                  'Disband Crew',
+                  'Are you sure you want to disband this crew? This action cannot be undone.',
+                  [
+                    { text: 'Cancel', style: 'cancel' },
+                    { 
+                      text: 'Disband', 
+                      style: 'destructive', 
+                      onPress: async () => {
+                        setIsProcessing(true);
+                        const result = await disbandCrew(crewData.id);
+                        setIsProcessing(false);
+                        
+                        if (result.success) {
+                          Alert.alert('Success', 'Crew has been disbanded', [
+                            { text: 'OK', onPress: () => loadCrewData() }
+                          ]);
+                        } else {
+                          Alert.alert('Error', result.error || 'Failed to disband crew');
+                        }
+                      }
+                    },
+                  ]
+                );
+              }}
+            >
               <Ionicons name="trash-outline" size={20} color={theme.colors.danger} />
-              <Text style={[styles.ownerActionButtonText, styles.dangerActionText]}>Delete Crew</Text>
+              <Text style={[styles.ownerActionButtonText, styles.dangerActionText]}>Disband Crew</Text>
               <Ionicons name="chevron-forward" size={18} color={theme.colors.danger} />
             </Pressable>
           </View>

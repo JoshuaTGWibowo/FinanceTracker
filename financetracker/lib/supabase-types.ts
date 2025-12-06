@@ -92,6 +92,7 @@ export interface Database {
           name: string
           description: string | null
           owner_id: string
+          invite_code: string
           max_members: number
           is_public: boolean
           created_at: string
@@ -102,6 +103,7 @@ export interface Database {
           name: string
           description?: string | null
           owner_id: string
+          invite_code: string
           max_members?: number
           is_public?: boolean
           created_at?: string
