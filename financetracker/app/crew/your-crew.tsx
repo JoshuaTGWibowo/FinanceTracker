@@ -13,6 +13,7 @@ const mockCrewData = {
   id: '1',
   name: 'Finance Warriors',
   description: 'We save together, we win together! 💪',
+  inviteCode: 'FW2K9X',
   memberCount: 5,
   maxMembers: 10,
   owner: {
@@ -29,12 +30,15 @@ const mockCrewData = {
   ],
 };
 
-const mockAvailableCrews = [
-  { id: '1', name: 'Finance Warriors', description: 'We save together, we win together! 💪', memberCount: 5, maxMembers: 10 },
-  { id: '2', name: 'Budget Squad', description: 'Mastering money management as a team', memberCount: 8, maxMembers: 10 },
-  { id: '3', name: 'Savings Legends', description: 'Legendary savers unite!', memberCount: 3, maxMembers: 8 },
-  { id: '4', name: 'Wealth Builders', description: 'Building wealth one transaction at a time', memberCount: 6, maxMembers: 12 },
-];
+// Helper function to generate a random 6-character crew code
+const generateCrewCode = (): string => {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // Exclude similar chars (I, O, 0, 1)
+  let code = '';
+  for (let i = 0; i < 6; i++) {
+    code += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return code;
+};
 
 export default function YourCrewScreen() {
   const theme = useAppTheme();
@@ -48,13 +52,26 @@ export default function YourCrewScreen() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [crewName, setCrewName] = useState('');
   const [crewDescription, setCrewDescription] = useState('');
+  const [crewCode, setCrewCode] = useState('');
+  const [maxMembers, setMaxMembers] = useState(10);
+  const [generatedCode, setGeneratedCode] = useState('');
 
   const handleBack = () => {
     router.back();
   };
 
-  const handleJoinCrew = (crewId: string) => {
-    Alert.alert('Join Crew', 'Join functionality will be implemented soon!');
+  const handleJoinCrew = () => {
+    if (!crewCode.trim()) {
+      Alert.alert('Error', 'Please enter a crew code');
+      return;
+    }
+    const formattedCode = crewCode.trim().toUpperCase();
+    if (formattedCode.length !== 6) {
+      Alert.alert('Error', 'Crew code must be 6 characters');
+      return;
+    }
+    // TODO: Implement actual join logic with Supabase
+    Alert.alert('Join Crew', `Joining crew with code: ${formattedCode}\nThis will be implemented with backend integration.`);
   };
 
   const handleCreateCrew = () => {
@@ -62,7 +79,31 @@ export default function YourCrewScreen() {
       Alert.alert('Error', 'Please enter a crew name');
       return;
     }
-    Alert.alert('Create Crew', 'Create functionality will be implemented soon!');
+    const newCode = generateCrewCode();
+    setGeneratedCode(newCode);
+    // TODO: Implement actual create logic with Supabase
+    
+    // Close modal and show crew management page
+    setShowCreateModal(false);
+    setCrewState('owner');
+    
+    // Show success message with invite code
+    setTimeout(() => {
+      Alert.alert(
+        'Crew Created! 🎉',
+        `Your crew "${crewName}" has been created!\n\nInvite Code: ${newCode}\n\nShare this code with friends so they can join your crew.`,
+        [
+          { 
+            text: 'Copy Code', 
+            onPress: () => {
+              // TODO: Add clipboard copy functionality
+              Alert.alert('Copied!', `Code ${newCode} copied to clipboard`);
+            }
+          },
+          { text: 'OK' }
+        ]
+      );
+    }, 300);
   };
 
   const handleLeaveCrew = () => {
@@ -88,7 +129,20 @@ export default function YourCrewScreen() {
   };
 
   const handleInviteMembers = () => {
-    Alert.alert('Invite Members', 'Invite functionality will be implemented soon!');
+    Alert.alert(
+      'Invite Members',
+      `Share your crew code with friends:\n\n${mockCrewData.inviteCode}\n\nThey can join by entering this code in the "Join a Crew" screen.`,
+      [
+        { 
+          text: 'Copy Code', 
+          onPress: () => {
+            // TODO: Add clipboard copy functionality
+            Alert.alert('Copied!', `Code ${mockCrewData.inviteCode} copied to clipboard`);
+          }
+        },
+        { text: 'OK', style: 'cancel' }
+      ]
+    );
   };
 
   // No Crew State
@@ -149,30 +203,47 @@ export default function YourCrewScreen() {
         </View>
 
         <ScrollView contentContainerStyle={styles.scrollContent}>
-          <Text style={styles.sectionTitle}>Available Crews</Text>
-          
-          {mockAvailableCrews.map((crew) => (
-            <View key={crew.id} style={[theme.components.surface, styles.crewCard]}>
-              <View style={styles.crewCardHeader}>
-                <View style={styles.crewIconWrapper}>
-                  <Ionicons name="shield" size={32} color={theme.colors.primary} />
-                </View>
-                <View style={styles.crewCardInfo}>
-                  <Text style={styles.crewCardName}>{crew.name}</Text>
-                  <Text style={styles.crewCardDescription}>{crew.description}</Text>
-                  <Text style={styles.crewCardMembers}>
-                    {crew.memberCount}/{crew.maxMembers} members
-                  </Text>
-                </View>
-              </View>
-              <Pressable
-                style={styles.joinButton}
-                onPress={() => handleJoinCrew(crew.id)}
-              >
-                <Text style={styles.joinButtonText}>Join</Text>
-              </Pressable>
+          <View style={styles.joinHeroCard}>
+            <View style={styles.joinIconWrapper}>
+              <Ionicons name="key" size={48} color={theme.colors.primary} />
             </View>
-          ))}
+            <Text style={styles.joinHeroTitle}>Enter Crew Code</Text>
+            <Text style={styles.joinHeroSubtitle}>
+              Ask your crew owner for the 6-character invite code to join their crew
+            </Text>
+          </View>
+
+          <View style={[theme.components.surface, styles.joinForm]}>
+            <View style={styles.formField}>
+              <Text style={styles.formLabel}>Crew Code</Text>
+              <TextInput
+                value={crewCode}
+                onChangeText={(text) => setCrewCode(text.toUpperCase())}
+                placeholder="Enter 6-character code"
+                placeholderTextColor={theme.colors.textMuted}
+                style={[styles.formInput, styles.codeInput]}
+                maxLength={6}
+                autoCapitalize="characters"
+                autoCorrect={false}
+              />
+              <Text style={styles.formHint}>Example: FW2K9X</Text>
+            </View>
+
+            <Pressable
+              style={[theme.components.buttonPrimary, styles.joinSubmitButton]}
+              onPress={handleJoinCrew}
+            >
+              <Ionicons name="enter" size={20} color={theme.colors.text} />
+              <Text style={styles.joinSubmitButtonText}>Join Crew</Text>
+            </Pressable>
+          </View>
+
+          <View style={styles.joinInfo}>
+            <Ionicons name="information-circle-outline" size={20} color={theme.colors.textMuted} />
+            <Text style={styles.joinInfoText}>
+              Don't have a code? Ask a friend to create a crew and share their invite code with you.
+            </Text>
+          </View>
         </ScrollView>
       </SafeAreaView>
     );
@@ -224,9 +295,10 @@ export default function YourCrewScreen() {
                 {[5, 10, 15, 20].map((count) => (
                   <Pressable
                     key={count}
-                    style={[styles.maxMemberOption, count === 10 && styles.maxMemberOptionActive]}
+                    style={[styles.maxMemberOption, count === maxMembers && styles.maxMemberOptionActive]}
+                    onPress={() => setMaxMembers(count)}
                   >
-                    <Text style={[styles.maxMemberOptionText, count === 10 && styles.maxMemberOptionTextActive]}>
+                    <Text style={[styles.maxMemberOptionText, count === maxMembers && styles.maxMemberOptionTextActive]}>
                       {count}
                     </Text>
                   </Pressable>
@@ -288,6 +360,26 @@ export default function YourCrewScreen() {
                 </View>
               </View>
             </View>
+          </View>
+
+          {/* Invite Code Section */}
+          <View style={styles.inviteCodeSection}>
+            <View style={styles.inviteCodeHeader}>
+              <Ionicons name="key" size={18} color={theme.colors.textMuted} />
+              <Text style={styles.inviteCodeLabel}>Crew Invite Code</Text>
+            </View>
+            <View style={styles.inviteCodeBox}>
+              <Text style={styles.inviteCodeText}>{mockCrewData.inviteCode}</Text>
+              <Pressable 
+                style={styles.copyCodeButton}
+                onPress={() => Alert.alert('Copied!', `Code ${mockCrewData.inviteCode} copied to clipboard`)}
+              >
+                <Ionicons name="copy-outline" size={20} color={theme.colors.primary} />
+              </Pressable>
+            </View>
+            <Text style={styles.inviteCodeHint}>
+              Share this code with friends to invite them to your crew
+            </Text>
           </View>
         </View>
 
@@ -454,6 +546,79 @@ const createStyles = (
       color: theme.colors.text,
     },
 
+    // Join Crew Modal
+    joinHeroCard: {
+      alignItems: 'center',
+      padding: theme.spacing.xxl,
+      gap: theme.spacing.md,
+    },
+    joinIconWrapper: {
+      width: 100,
+      height: 100,
+      borderRadius: 50,
+      backgroundColor: theme.colors.primary + '20',
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginBottom: theme.spacing.md,
+    },
+    joinHeroTitle: {
+      fontSize: 24,
+      fontWeight: '700',
+      color: theme.colors.text,
+      textAlign: 'center',
+    },
+    joinHeroSubtitle: {
+      fontSize: 15,
+      color: theme.colors.textMuted,
+      textAlign: 'center',
+      lineHeight: 22,
+      paddingHorizontal: theme.spacing.lg,
+    },
+    joinForm: {
+      padding: theme.spacing.xl,
+      gap: theme.spacing.xl,
+      marginTop: theme.spacing.lg,
+    },
+    codeInput: {
+      fontSize: 20,
+      fontWeight: '700',
+      letterSpacing: 2,
+      textAlign: 'center',
+      fontFamily: 'monospace',
+    },
+    formHint: {
+      fontSize: 12,
+      color: theme.colors.textMuted,
+      textAlign: 'center',
+      marginTop: 4,
+    },
+    joinSubmitButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: theme.spacing.sm,
+      paddingVertical: theme.spacing.lg,
+    },
+    joinSubmitButtonText: {
+      fontSize: 16,
+      fontWeight: '600',
+      color: theme.colors.text,
+    },
+    joinInfo: {
+      flexDirection: 'row',
+      gap: theme.spacing.sm,
+      padding: theme.spacing.lg,
+      backgroundColor: theme.colors.surfaceElevated,
+      borderRadius: theme.radii.md,
+      marginTop: theme.spacing.lg,
+    },
+    joinInfoText: {
+      flex: 1,
+      fontSize: 13,
+      color: theme.colors.textMuted,
+      lineHeight: 18,
+    },
+
     // Crew Cards (Join List)
     sectionTitle: {
       fontSize: 18,
@@ -598,6 +763,7 @@ const createStyles = (
     crewHeaderTop: {
       flexDirection: 'row',
       gap: theme.spacing.lg,
+      marginBottom: theme.spacing.xl,
     },
     crewShield: {
       width: 80,
@@ -635,6 +801,56 @@ const createStyles = (
       fontSize: 13,
       fontWeight: '600',
       color: theme.colors.accent,
+    },
+
+    // Invite Code Display
+    inviteCodeSection: {
+      marginTop: theme.spacing.xl,
+      padding: theme.spacing.lg,
+      backgroundColor: theme.colors.surfaceElevated,
+      borderRadius: theme.radii.md,
+      gap: theme.spacing.md,
+    },
+    inviteCodeHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: theme.spacing.sm,
+    },
+    inviteCodeLabel: {
+      fontSize: 13,
+      fontWeight: '600',
+      color: theme.colors.textMuted,
+      textTransform: 'uppercase',
+      letterSpacing: 0.5,
+    },
+    inviteCodeBox: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      backgroundColor: theme.colors.surface,
+      borderRadius: theme.radii.md,
+      borderWidth: 2,
+      borderColor: theme.colors.primary + '40',
+      paddingHorizontal: theme.spacing.lg,
+      paddingVertical: theme.spacing.md,
+    },
+    inviteCodeText: {
+      fontSize: 24,
+      fontWeight: '700',
+      color: theme.colors.text,
+      letterSpacing: 3,
+      fontFamily: 'monospace',
+    },
+    copyCodeButton: {
+      padding: theme.spacing.sm,
+      borderRadius: theme.radii.sm,
+      backgroundColor: theme.colors.primary + '20',
+    },
+    inviteCodeHint: {
+      fontSize: 12,
+      color: theme.colors.textMuted,
+      textAlign: 'center',
+      lineHeight: 16,
     },
 
     // Members List
