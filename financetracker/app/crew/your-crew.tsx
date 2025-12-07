@@ -3,6 +3,7 @@ import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View, Activi
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
+import * as Clipboard from 'expo-clipboard';
 
 import { useAppTheme } from "../../theme";
 import {
@@ -13,6 +14,7 @@ import {
   leaveCrew,
   removeMemberFromCrew,
   disbandCrew,
+  updateCrew,
 } from "../../lib/crew-service";
 
 type CrewData = {
@@ -25,6 +27,7 @@ type CrewData = {
   ownerUsername: string;
   memberCount: number;
   userRole: 'owner' | 'admin' | 'member';
+  logo: string | null;
 };
 
 type CrewMemberData = {
@@ -47,8 +50,10 @@ export default function YourCrewScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [showJoinModal, setShowJoinModal] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
   const [crewName, setCrewName] = useState('');
   const [crewDescription, setCrewDescription] = useState('');
+  const [crewLogo, setCrewLogo] = useState('🛡️');
   const [crewCode, setCrewCode] = useState('');
   const [maxMembers, setMaxMembers] = useState(10);
   const [crewData, setCrewData] = useState<CrewData | null>(null);
@@ -133,8 +138,8 @@ export default function YourCrewScreen() {
           [
             { 
               text: 'Copy Code', 
-              onPress: () => {
-                // TODO: Add clipboard copy functionality
+              onPress: async () => {
+                await Clipboard.setStringAsync(result.crew!.invite_code);
                 Alert.alert('Copied!', `Code ${result.crew!.invite_code} copied to clipboard`);
               }
             },
@@ -210,14 +215,47 @@ export default function YourCrewScreen() {
       [
         { 
           text: 'Copy Code', 
-          onPress: () => {
-            // TODO: Add clipboard copy functionality
+          onPress: async () => {
+            await Clipboard.setStringAsync(crewData.inviteCode);
             Alert.alert('Copied!', `Code ${crewData.inviteCode} copied to clipboard`);
           }
         },
         { text: 'OK', style: 'cancel' }
       ]
     );
+  };
+
+  const handleEditCrew = () => {
+    if (!crewData) return;
+    // Pre-fill current values
+    setCrewName(crewData.name);
+    setCrewDescription(crewData.description || '');
+    setCrewLogo(crewData.logo || '🛡️');
+    setShowEditModal(true);
+  };
+
+  const handleSaveCrewEdits = async () => {
+    if (!crewData) return;
+    if (!crewName.trim()) {
+      Alert.alert('Error', 'Please enter a crew name');
+      return;
+    }
+
+    setIsProcessing(true);
+    const result = await updateCrew(crewData.id, {
+      name: crewName.trim(),
+      description: crewDescription.trim() || undefined,
+      logo: crewLogo,
+    });
+    setIsProcessing(false);
+
+    if (result.success) {
+      setShowEditModal(false);
+      Alert.alert('Success', 'Crew updated successfully!');
+      await loadCrewData();
+    } else {
+      Alert.alert('Error', result.error || 'Failed to update crew');
+    }
   };
 
   // Loading state
@@ -418,6 +456,83 @@ export default function YourCrewScreen() {
     );
   }
 
+  // Edit Crew Modal
+  if (showEditModal) {
+    const emojiOptions = ['🛡️', '⚔️', '👑', '🏆', '🔥', '⭐', '💎', '🎯', '🚀', '💪', '🦁', '🐉', '🌟', '⚡', '🎮', '🎲'];
+    
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.headerBar}>
+          <Pressable style={styles.backButton} onPress={() => setShowEditModal(false)}>
+            <Ionicons name="chevron-back" size={24} color={theme.colors.text} />
+          </Pressable>
+          <Text style={styles.headerTitle}>Edit Crew</Text>
+          <View style={{ width: 40 }} />
+        </View>
+
+        <ScrollView contentContainerStyle={styles.scrollContent}>
+          <View style={[theme.components.surface, styles.createForm]}>
+            <View style={styles.formField}>
+              <Text style={styles.formLabel}>Crew Logo</Text>
+              <View style={styles.emojiSelector}>
+                {emojiOptions.map((emoji) => (
+                  <Pressable
+                    key={emoji}
+                    style={[styles.emojiOption, crewLogo === emoji && styles.emojiOptionActive]}
+                    onPress={() => setCrewLogo(emoji)}
+                  >
+                    <Text style={styles.emojiText}>{emoji}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            </View>
+
+            <View style={styles.formField}>
+              <Text style={styles.formLabel}>Crew Name</Text>
+              <TextInput
+                value={crewName}
+                onChangeText={setCrewName}
+                placeholder="Enter crew name"
+                placeholderTextColor={theme.colors.textMuted}
+                style={styles.formInput}
+                maxLength={30}
+              />
+            </View>
+
+            <View style={styles.formField}>
+              <Text style={styles.formLabel}>Description</Text>
+              <TextInput
+                value={crewDescription}
+                onChangeText={setCrewDescription}
+                placeholder="What's your crew about?"
+                placeholderTextColor={theme.colors.textMuted}
+                style={[styles.formInput, styles.formTextArea]}
+                multiline
+                numberOfLines={3}
+                maxLength={100}
+              />
+            </View>
+
+            <Pressable
+              style={[theme.components.buttonPrimary, styles.createButton]}
+              onPress={handleSaveCrewEdits}
+              disabled={isProcessing}
+            >
+              {isProcessing ? (
+                <ActivityIndicator color={theme.colors.text} />
+              ) : (
+                <>
+                  <Ionicons name="checkmark" size={20} color={theme.colors.text} />
+                  <Text style={styles.createButtonText}>Save Changes</Text>
+                </>
+              )}
+            </Pressable>
+          </View>
+        </ScrollView>
+      </SafeAreaView>
+    );
+  }
+
   // Member or Owner State - Show Crew Details
   if (!crewData) return null;
 
@@ -443,7 +558,7 @@ export default function YourCrewScreen() {
         <View style={[theme.components.card, styles.crewHeader]}>
           <View style={styles.crewHeaderTop}>
             <View style={styles.crewShield}>
-              <Ionicons name="shield" size={48} color={theme.colors.primary} />
+              <Text style={styles.crewLogo}>{crewData.logo || '🛡️'}</Text>
             </View>
             <View style={styles.crewHeaderInfo}>
               <Text style={styles.crewName}>{crewData.name}</Text>
@@ -457,6 +572,11 @@ export default function YourCrewScreen() {
                 </View>
               </View>
             </View>
+            {isOwner && (
+              <Pressable style={styles.editCrewButton} onPress={handleEditCrew}>
+                <Ionicons name="create-outline" size={20} color={theme.colors.primary} />
+              </Pressable>
+            )}
           </View>
 
           {/* Invite Code Section */}
@@ -469,7 +589,10 @@ export default function YourCrewScreen() {
               <Text style={styles.inviteCodeText}>{crewData.inviteCode}</Text>
               <Pressable 
                 style={styles.copyCodeButton}
-                onPress={() => Alert.alert('Copied!', `Code ${crewData.inviteCode} copied to clipboard`)}
+                onPress={async () => {
+                  await Clipboard.setStringAsync(crewData.inviteCode);
+                  Alert.alert('Copied!', `Code ${crewData.inviteCode} copied to clipboard`);
+                }}
               >
                 <Ionicons name="copy-outline" size={20} color={theme.colors.primary} />
               </Pressable>
@@ -1081,5 +1204,44 @@ const createStyles = (
     },
     dangerActionText: {
       color: theme.colors.danger,
+    },
+
+    // Emoji Selector
+    emojiSelector: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: theme.spacing.sm,
+    },
+    emojiOption: {
+      width: 56,
+      height: 56,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderRadius: theme.radii.md,
+      backgroundColor: theme.colors.surface,
+      borderWidth: 2,
+      borderColor: theme.colors.border,
+    },
+    emojiOptionActive: {
+      backgroundColor: theme.colors.primary + '20',
+      borderColor: theme.colors.primary,
+    },
+    emojiText: {
+      fontSize: 32,
+    },
+
+    // Crew Logo
+    crewLogo: {
+      fontSize: 48,
+    },
+
+    // Edit Button
+    editCrewButton: {
+      width: 40,
+      height: 40,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: theme.colors.primary + '20',
+      borderRadius: theme.radii.md,
     },
   });

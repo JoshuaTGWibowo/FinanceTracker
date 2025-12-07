@@ -139,6 +139,7 @@ export const getUserCrew = async (): Promise<{
     name: string;
     description: string | null;
     inviteCode: string;
+    logo: string | null;
     maxMembers: number;
     ownerId: string;
     ownerUsername: string;
@@ -168,6 +169,7 @@ export const getUserCrew = async (): Promise<{
         name: crewData.crew_name,
         description: crewData.crew_description,
         inviteCode: crewData.invite_code,
+        logo: crewData.logo,
         maxMembers: crewData.max_members,
         ownerId: crewData.owner_id,
         ownerUsername: crewData.owner_username,
@@ -315,6 +317,62 @@ export const removeMemberFromCrew = async (
     return { success: true };
   } catch (error) {
     console.error('Error in removeMemberFromCrew:', error);
+    return { success: false, error: String(error) };
+  }
+};
+
+// Update crew details (owner only)
+export const updateCrew = async (
+  crewId: string,
+  updates: {
+    name?: string;
+    description?: string;
+    logo?: string; // URL or emoji
+  }
+): Promise<{ success: boolean; error?: string }> => {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    
+    if (!user) {
+      return { success: false, error: 'Not authenticated' };
+    }
+
+    // Check if user is the owner
+    const { data: crew } = await supabase
+      .from('crews')
+      .select('owner_id')
+      .eq('id', crewId)
+      .single();
+
+    if (!crew || crew.owner_id !== user.id) {
+      return { success: false, error: 'Only the crew owner can update the crew' };
+    }
+
+    // Build update object
+    const updateData: any = {};
+    if (updates.name !== undefined) updateData.name = updates.name;
+    if (updates.description !== undefined) updateData.description = updates.description;
+    if (updates.logo !== undefined) updateData.logo = updates.logo;
+    
+    if (Object.keys(updateData).length === 0) {
+      return { success: false, error: 'No updates provided' };
+    }
+
+    updateData.updated_at = new Date().toISOString();
+
+    const { error } = await supabase
+      .from('crews')
+      .update(updateData)
+      .eq('id', crewId);
+
+    if (error) {
+      console.error('Error updating crew:', error);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true };
+  } catch (error) {
+    console.error('Error in updateCrew:', error);
     return { success: false, error: String(error) };
   }
 };
