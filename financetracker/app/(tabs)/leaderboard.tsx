@@ -35,6 +35,7 @@ export default function CrewScreen() {
   const [leaderboardData, setLeaderboardData] = useState<any[]>([]);
   const [userRank, setUserRank] = useState<number | null>(null);
   const [missionFilter, setMissionFilter] = useState<'all' | 'active' | 'completed'>('active');
+  const [missionPeriod, setMissionPeriod] = useState<'daily' | 'weekly' | 'monthly'>('daily');
   
   const transactions = useFinanceStore((state) => state.transactions);
   const budgetGoals = useFinanceStore((state) => state.budgetGoals);
@@ -47,10 +48,14 @@ export default function CrewScreen() {
   const nextLevelPoints = pointsForNextLevel(userLevel);
 
   const filteredMissions = useMemo(() => {
-    if (missionFilter === 'all') return mockMissions;
-    if (missionFilter === 'completed') return mockMissions.filter(m => (m.progress || 0) >= 100);
-    return mockMissions.filter(m => (m.progress || 0) < 100);
-  }, [missionFilter]);
+    // First filter by period
+    let missions = mockMissions.filter(m => m.period === missionPeriod);
+    
+    // Then filter by completion status
+    if (missionFilter === 'all') return missions;
+    if (missionFilter === 'completed') return missions.filter(m => (m.progress || 0) >= 100);
+    return missions.filter(m => (m.progress || 0) < 100);
+  }, [missionFilter, missionPeriod]);
 
   const checkAuth = async () => {
     const auth = await isAuthenticated();
@@ -64,19 +69,19 @@ export default function CrewScreen() {
 
   const loadLeaderboard = async () => {
     const result = await fetchLeaderboard(period);
-    if (result.success && result.data && result.data.length > 0) {
+    if (result.success && result.data) {
       setLeaderboardData(result.data);
     } else {
-      // Use mock data if no real data available
-      setLeaderboardData(mockLeaderboardData);
+      // Empty leaderboard if not in a crew or error
+      setLeaderboardData([]);
     }
 
     const rankResult = await getUserRank(period);
     if (rankResult.success && rankResult.rank) {
       setUserRank(rankResult.rank);
     } else {
-      // Mock rank for demo
-      setUserRank(7);
+      // No rank if not in crew
+      setUserRank(null);
     }
   };
 
@@ -355,8 +360,16 @@ export default function CrewScreen() {
           {leaderboardData.length === 0 ? (
             <View style={styles.emptyLeaderboard}>
               <Ionicons name="people-outline" size={48} color={theme.colors.textMuted} />
-              <Text style={styles.emptyText}>No rankings yet</Text>
-              <Text style={styles.emptySubtext}>Be the first to sync your stats!</Text>
+              <Text style={styles.emptyText}>Join a crew to see rankings</Text>
+              <Text style={styles.emptySubtext}>Create or join a crew to compete with friends!</Text>
+              <Pressable 
+                style={[styles.viewCrewButton, { marginTop: 16 }]}
+                onPress={() => router.push('/crew/your-crew' as any)}
+              >
+                <Ionicons name="people" size={18} color={theme.colors.primary} />
+                <Text style={styles.viewCrewButtonText}>Go to Crew</Text>
+                <Ionicons name="chevron-forward" size={18} color={theme.colors.primary} />
+              </Pressable>
             </View>
           ) : (
             leaderboardData.slice(0, 10).map((entry, index, array) => (
@@ -396,7 +409,7 @@ export default function CrewScreen() {
             <Text style={styles.sectionTitle}>Missions</Text>
           </View>
 
-          {/* Mission Filter */}
+          {/* Mission Status Filter */}
           <View style={styles.missionFilter}>
             {(['active', 'completed', 'all'] as const).map((filter) => {
               const isActive = missionFilter === filter;
@@ -406,6 +419,25 @@ export default function CrewScreen() {
                   key={filter}
                   style={[styles.filterButton, isActive && styles.filterButtonActive]}
                   onPress={() => setMissionFilter(filter)}
+                >
+                  <Text style={[styles.filterButtonText, isActive && styles.filterButtonTextActive]}>
+                    {label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+
+          {/* Mission Period Selector */}
+          <View style={[styles.missionFilter, { marginTop: 0 }]}>
+            {(['daily', 'weekly', 'monthly'] as const).map((period) => {
+              const isActive = missionPeriod === period;
+              const label = period.charAt(0).toUpperCase() + period.slice(1);
+              return (
+                <Pressable
+                  key={period}
+                  style={[styles.filterButton, isActive && styles.filterButtonActive]}
+                  onPress={() => setMissionPeriod(period)}
                 >
                   <Text style={[styles.filterButtonText, isActive && styles.filterButtonTextActive]}>
                     {label}

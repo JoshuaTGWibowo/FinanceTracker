@@ -351,13 +351,51 @@ export async function triggerSync(
 }
 
 /**
- * Fetch leaderboard data from Supabase
+ * Fetch leaderboard data from Supabase (crew members only)
  */
 export async function fetchLeaderboard(
   period: 'daily' | 'weekly' | 'monthly' | 'all_time',
   limit = 100
 ): Promise<{ success: boolean; data?: any[]; error?: string }> {
   try {
+    const userId = await getCurrentUserId();
+    if (!userId) {
+      return { success: false, error: 'User not authenticated' };
+    }
+
+    // First, get the user's crew
+    const { data: crewData, error: crewError } = await supabase.rpc('get_user_crew');
+    
+    if (crewError) {
+      console.error('Error getting user crew:', crewError);
+      return { success: false, error: 'Not in a crew' };
+    }
+
+    if (!crewData || crewData.length === 0) {
+      // User not in a crew, return empty leaderboard
+      return { success: true, data: [] };
+    }
+
+    const crewId = crewData[0].crew_id;
+
+    // Get all crew members
+    const { data: members, error: membersError } = await supabase.rpc('get_crew_members', {
+      p_crew_id: crewId,
+    });
+
+    if (membersError) {
+      console.error('Error getting crew members:', membersError);
+      return { success: false, error: membersError.message };
+    }
+
+    if (!members || members.length === 0) {
+      return { success: true, data: [] };
+    }
+
+    // Get user IDs from crew members
+    const crewMemberIds = members.map((m: any) => m.user_id);
+
+    // Fetch leaderboard stats for crew members only
     const { data, error } = await supabase
       .from('leaderboard_stats')
       .select(`
@@ -369,6 +407,7 @@ export async function fetchLeaderboard(
         )
       `)
       .eq('period', period)
+      .in('user_id', crewMemberIds)
       .order('total_points', { ascending: false })
       .limit(limit);
 
@@ -387,7 +426,7 @@ export async function fetchLeaderboard(
 }
 
 /**
- * Get user's current rank in leaderboard
+ * Get user's current rank in leaderboard (within crew only)
  */
 export async function getUserRank(
   period: 'daily' | 'weekly' | 'monthly' | 'all_time'
@@ -397,6 +436,27 @@ export async function getUserRank(
     if (!userId) {
       return { success: false, error: 'User not authenticated' };
     }
+
+    // Get the user's crew
+    const { data: crewData, error: crewError } = await supabase.rpc('get_user_crew');
+    
+    if (crewError || !crewData || crewData.length === 0) {
+      return { success: false, error: 'Not in a crew' };
+    }
+
+    const crewId = crewData[0].crew_id;
+
+    // Get all crew members
+    const { data: members, error: membersError } = await supabase.rpc('get_crew_members', {
+      p_crew_id: crewId,
+    });
+
+    if (membersError || !members || members.length === 0) {
+      return { success: false, error: 'Could not fetch crew members' };
+    }
+
+    // Get user IDs from crew members
+    const crewMemberIds = members.map((m: any) => m.user_id);
 
     // Get user's points
     const { data: userStats, error: userError } = await supabase
@@ -410,18 +470,19 @@ export async function getUserRank(
       return { success: false, error: 'User stats not found' };
     }
 
-    // Count how many users have more points
+    // Count how many CREW MEMBERS have more points
     const { count, error: countError } = await supabase
       .from('leaderboard_stats')
       .select('*', { count: 'exact', head: true })
       .eq('period', period)
+      .in('user_id', crewMemberIds)
       .gt('total_points', userStats.total_points);
 
     if (countError) {
       return { success: false, error: countError.message };
     }
 
-    // Rank is count of users with more points + 1
+    // Rank is count of crew members with more points + 1
     const rank = (count || 0) + 1;
 
     return { success: true, rank };
