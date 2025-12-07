@@ -11,7 +11,8 @@ import { useFinanceStore } from "../../lib/store";
 import AuthForm from "../../components/AuthForm";
 import { SkeletonLoader, SkeletonCard, SkeletonListItem } from "../../components/SkeletonLoader";
 import { 
-  mockMissions, 
+  mockMissions,
+  mockCrewMissions,
   mockAchievements,
   mockLeaderboardData,
   calculateLevel, 
@@ -36,6 +37,9 @@ export default function CrewScreen() {
   const [userRank, setUserRank] = useState<number | null>(null);
   const [missionFilter, setMissionFilter] = useState<'all' | 'active' | 'completed'>('active');
   const [missionPeriod, setMissionPeriod] = useState<'daily' | 'weekly' | 'monthly'>('daily');
+  const [crewMissionFilter, setCrewMissionFilter] = useState<'all' | 'active' | 'completed'>('active');
+  const [crewMissionPeriod, setCrewMissionPeriod] = useState<'daily' | 'weekly' | 'monthly'>('daily');
+  const [isInCrew, setIsInCrew] = useState(false);
   
   const transactions = useFinanceStore((state) => state.transactions);
   const budgetGoals = useFinanceStore((state) => state.budgetGoals);
@@ -57,6 +61,16 @@ export default function CrewScreen() {
     return missions.filter(m => (m.progress || 0) < 100);
   }, [missionFilter, missionPeriod]);
 
+  const filteredCrewMissions = useMemo(() => {
+    // First filter by period
+    let missions = mockCrewMissions.filter(m => m.period === crewMissionPeriod);
+    
+    // Then filter by completion status
+    if (crewMissionFilter === 'all') return missions;
+    if (crewMissionFilter === 'completed') return missions.filter(m => (m.progress || 0) >= 100);
+    return missions.filter(m => (m.progress || 0) < 100);
+  }, [crewMissionFilter, crewMissionPeriod]);
+
   const checkAuth = async () => {
     const auth = await isAuthenticated();
     setIsAuth(auth);
@@ -71,9 +85,11 @@ export default function CrewScreen() {
     const result = await fetchLeaderboard(period);
     if (result.success && result.data) {
       setLeaderboardData(result.data);
+      setIsInCrew(result.data.length > 0); // User is in crew if there's leaderboard data
     } else {
       // Empty leaderboard if not in a crew or error
       setLeaderboardData([]);
+      setIsInCrew(false);
     }
 
     const rankResult = await getUserRank(period);
@@ -467,6 +483,74 @@ export default function CrewScreen() {
             filteredMissions.map(renderMission)
           )}
         </View>
+
+        {/* Crew Missions - Only show if user is in a crew */}
+        {isInCrew && (
+          <View style={[theme.components.card, styles.sectionCard]}>
+            <View style={styles.sectionHeader}>
+              <Ionicons name="people" size={20} color={theme.colors.primary} />
+              <Text style={styles.sectionTitle}>Crew Missions</Text>
+            </View>
+
+            {/* Mission Status Filter */}
+            <View style={styles.missionFilter}>
+              {(['active', 'completed', 'all'] as const).map((filter) => {
+                const isActive = crewMissionFilter === filter;
+                const label = filter.charAt(0).toUpperCase() + filter.slice(1);
+                return (
+                  <Pressable
+                    key={filter}
+                    style={[styles.filterButton, isActive && styles.filterButtonActive]}
+                    onPress={() => setCrewMissionFilter(filter)}
+                  >
+                    <Text style={[styles.filterButtonText, isActive && styles.filterButtonTextActive]}>
+                      {label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+
+            {/* Mission Period Selector */}
+            <View style={[styles.missionFilter, { marginTop: 8 }]}>
+              {(['daily', 'weekly', 'monthly'] as const).map((period) => {
+                const isActive = crewMissionPeriod === period;
+                const label = period.charAt(0).toUpperCase() + period.slice(1);
+                return (
+                  <Pressable
+                    key={period}
+                    style={[styles.filterButton, isActive && styles.filterButtonActive]}
+                    onPress={() => setCrewMissionPeriod(period)}
+                  >
+                    <Text style={[styles.filterButtonText, isActive && styles.filterButtonTextActive]}>
+                      {label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+
+            {filteredCrewMissions.length === 0 ? (
+              <View style={styles.emptyMissions}>
+                <Ionicons 
+                  name={crewMissionFilter === 'completed' ? "trophy-outline" : "people-outline"} 
+                  size={48} 
+                  color={crewMissionFilter === 'completed' ? theme.colors.textMuted : theme.colors.primary} 
+                />
+                <Text style={styles.emptyText}>
+                  {crewMissionFilter === 'completed' 
+                    ? 'No completed crew missions yet' 
+                    : 'All crew missions completed!'}
+                </Text>
+                {crewMissionFilter === 'completed' && (
+                  <Text style={styles.emptySubtext}>Complete active crew missions to see them here</Text>
+                )}
+              </View>
+            ) : (
+              filteredCrewMissions.map(renderMission)
+            )}
+          </View>
+        )}
 
         {/* Achievements */}
         <View style={[theme.components.card, styles.sectionCard]}>
