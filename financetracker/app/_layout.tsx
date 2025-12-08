@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { AppState } from "react-native";
@@ -6,6 +6,8 @@ import { AppState } from "react-native";
 import { useAppTheme } from "../theme";
 import { useFinanceStore } from "../lib/store";
 import { startAutoSync, stopAutoSync } from "../lib/sync-service";
+import { LevelUpModal } from "../components/LevelUpModal";
+import { updateDailyStreak } from "../lib/points-service";
 
 export default function RootLayout() {
   const theme = useAppTheme();
@@ -16,9 +18,24 @@ export default function RootLayout() {
   const budgetGoals = useFinanceStore((state) => state.budgetGoals);
   const statusBarStyle = themeMode === "light" ? "dark" : "light";
 
+  // Level-up modal state
+  const [levelUpVisible, setLevelUpVisible] = useState(false);
+  const [levelUpData, setLevelUpData] = useState({ level: 1, points: 0, reason: '' });
+
   useEffect(() => {
     hydrateFromDatabase();
   }, [hydrateFromDatabase]);
+
+  // Update daily streak on app launch
+  useEffect(() => {
+    if (!isHydrated) return;
+    
+    updateDailyStreak().then((result) => {
+      if (result.success && result.pointsAwarded && result.pointsAwarded > 0) {
+        console.log(`[Streak] 🔥 ${result.streakDays} day streak! +${result.pointsAwarded} pts`);
+      }
+    }).catch(err => console.error('[Streak] Error:', err));
+  }, [isHydrated]);
 
   // Start auto-sync when app loads
   useEffect(() => {
@@ -158,6 +175,14 @@ export default function RootLayout() {
           }}
         />
       </Stack>
+      
+      <LevelUpModal
+        visible={levelUpVisible}
+        level={levelUpData.level}
+        pointsAwarded={levelUpData.points}
+        reason={levelUpData.reason}
+        onClose={() => setLevelUpVisible(false)}
+      />
     </>
   );
 }

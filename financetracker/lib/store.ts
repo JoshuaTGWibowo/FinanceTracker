@@ -33,6 +33,8 @@ import {
 } from "./storage/sqlite";
 import { generateAllMockData } from "./mockData";
 import { triggerSync } from "./sync-service";
+import { awardTransactionPoints, updateDailyStreak } from "./points-service";
+import { checkAllBudgets } from "./budget-tracking";
 
 export interface FinanceState {
   profile: Profile;
@@ -138,18 +140,18 @@ const recalculateAccountBalances = (
   }));
   const extras: Account[] = [];
 
-  const ensureAccount = (accountId?: string | null) => {
+  const ensureAccount = (accountId?: string | null): Account | undefined => {
     if (!accountId) {
       return undefined;
     }
 
-    let account = base.find((item) => item.id === accountId);
+    let account: Account | undefined = base.find((item) => item.id === accountId);
     if (!account) {
       account = extras.find((item) => item.id === accountId);
     }
 
     if (!account) {
-      account = {
+      const newAccount: Account = {
         id: accountId,
         name: "Legacy account",
         type: "cash",
@@ -160,7 +162,8 @@ const recalculateAccountBalances = (
         isArchived: true,
         createdAt: new Date().toISOString(),
       };
-      extras.push(account);
+      extras.push(newAccount);
+      return newAccount;
     }
 
     return account;
@@ -353,8 +356,29 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
       return applyAccountBalanceUpdate(state, nextTransactions);
     });
 
-    // Trigger auto-sync after adding transaction
+    // Award points for logging transaction
+    awardTransactionPoints(payload).then((result) => {
+      if (result.success && result.pointsAwarded) {
+        console.log(`[Points] +${result.pointsAwarded} pts for transaction`);
+        if (result.leveledUp) {
+          console.log('[Points] 🎉 Level up!');
+          // TODO: Trigger level-up modal via event emitter or global state
+        }
+      }
+    }).catch(err => console.error('[Points] Error awarding points:', err));
+
+    // Update daily streak
+    updateDailyStreak().catch(err => console.error('[Points] Error updating streak:', err));
+
+    // Check budget completion and award points
     const state = get();
+    checkAllBudgets(
+      state.budgetGoals, 
+      state.transactions, 
+      state.preferences.categories
+    ).catch(err => console.error('[Points] Error checking budgets:', err));
+
+    // Trigger auto-sync after adding transaction
     triggerSync(state.transactions, state.budgetGoals);
   },
   updateTransaction: async (id, updates) => {

@@ -22,6 +22,7 @@ import {
   type MockMission,
   type MockAchievement 
 } from "../../lib/crew-mock-data";
+import { getLeaderboardStats, getLevelProgress } from "../../lib/points-service";
 
 export default function CrewScreen() {
   const theme = useAppTheme();
@@ -44,10 +45,19 @@ export default function CrewScreen() {
   const transactions = useFinanceStore((state) => state.transactions);
   const budgetGoals = useFinanceStore((state) => state.budgetGoals);
   
-  // Mock user stats
-  const [userPoints, setUserPoints] = useState(850);
-  const [userStreak, setUserStreak] = useState(5);
-  const userLevel = calculateLevel(userPoints);
+  // Real user stats from points service
+  const [userStats, setUserStats] = useState<{
+    totalPoints: number;
+    level: number;
+    streakDays: number;
+    progress: number;
+    pointsInLevel: number;
+    pointsNeeded: number;
+  } | null>(null);
+  
+  const userPoints = userStats?.totalPoints || 0;
+  const userStreak = userStats?.streakDays || 0;
+  const userLevel = userStats?.level || 1;
   const levelPercent = levelProgress(userPoints, userLevel);
   const nextLevelPoints = pointsForNextLevel(userLevel);
 
@@ -115,8 +125,31 @@ export default function CrewScreen() {
   useEffect(() => {
     if (isAuth) {
       loadLeaderboard();
+      loadUserStats();
     }
   }, [period]);
+
+  // Load user stats from points service
+  useEffect(() => {
+    if (isAuth) {
+      loadUserStats();
+    }
+  }, [transactions.length, isAuth]);
+
+  const loadUserStats = async () => {
+    const result = await getLeaderboardStats();
+    if (result.success && result.stats) {
+      const levelInfo = getLevelProgress(result.stats.totalPoints);
+      setUserStats({
+        totalPoints: result.stats.totalPoints,
+        level: result.stats.level,
+        streakDays: result.stats.streakDays,
+        progress: levelInfo.progress,
+        pointsInLevel: levelInfo.pointsInLevel,
+        pointsNeeded: levelInfo.pointsNeeded,
+      });
+    }
+  };
 
   const renderMission = (mission: MockMission, index: number, array: MockMission[]) => (
     <View key={mission.id} style={[styles.missionCard, index === array.length - 1 && styles.lastItem]}>
@@ -316,14 +349,14 @@ export default function CrewScreen() {
                 style={[
                   styles.levelProgressFill, 
                   { 
-                    width: `${levelPercent}%`,
+                    width: `${userStats?.progress || 0}%`,
                     backgroundColor: theme.colors.primary 
                   }
                 ]} 
               />
             </View>
             <Text style={styles.levelProgressSubtext}>
-              {nextLevelPoints - userPoints} pts to next level
+              {userStats ? `${userStats.pointsNeeded - userStats.pointsInLevel} pts to next level` : 'Loading...'}
             </Text>
           </View>
 
