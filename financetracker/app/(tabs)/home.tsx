@@ -858,7 +858,9 @@ export default function HomeScreen() {
         <View style={[theme.components.surface, styles.goalsCard]}>
           <View style={styles.sectionHeaderRow}>
             <Text style={styles.sectionTitle}>Budget goals</Text>
-            <Text style={styles.sectionCaption}>Stay on track</Text>
+            <Pressable onPress={() => router.push("/budgets")}>
+              <Text style={styles.sectionCaption}>Manage</Text>
+            </Pressable>
           </View>
           {budgetGoals.length > 0 ? (
             <ScrollView
@@ -913,7 +915,7 @@ export default function HomeScreen() {
                     <Text
                       style={[
                         styles.goalPercentage,
-                        goalComplete && { color: theme.colors.success },
+                        { color: barColor },
                       ]}
                     >
                       {Math.min(100, progressPercent)}%
