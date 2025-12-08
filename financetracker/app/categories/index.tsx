@@ -250,8 +250,8 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>) =>
       flexDirection: "row",
       alignItems: "center",
       gap: theme.spacing.sm,
-      paddingHorizontal: theme.spacing.md,
-      paddingTop: theme.spacing.lg,
+      paddingHorizontal: theme.screen.isSmallDevice ? theme.spacing.sm : theme.spacing.md,
+      paddingTop: theme.screen.isSmallDevice ? theme.spacing.md : theme.spacing.lg,
       paddingBottom: theme.spacing.sm,
     },
     backButton: {
@@ -262,7 +262,7 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>) =>
     },
     title: {
       ...theme.typography.title,
-      fontSize: 24,
+      fontSize: theme.screen.isSmallDevice ? 20 : 24,
       fontWeight: "700",
     },
     subtitle: {
@@ -271,9 +271,9 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>) =>
       marginTop: 2,
     },
     content: {
-      paddingHorizontal: theme.spacing.md,
+      paddingHorizontal: theme.screen.isSmallDevice ? theme.spacing.sm : theme.spacing.md,
       paddingBottom: theme.spacing.lg,
-      gap: theme.spacing.md,
+      gap: theme.screen.isSmallDevice ? theme.spacing.sm : theme.spacing.md,
     },
     formCard: {
       gap: theme.spacing.md,

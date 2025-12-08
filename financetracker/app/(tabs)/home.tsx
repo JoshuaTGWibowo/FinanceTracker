@@ -1167,10 +1167,10 @@ const createStyles = (
       backgroundColor: theme.colors.background,
     },
     content: {
-      paddingHorizontal: theme.spacing.md,
+      paddingHorizontal: theme.screen.isSmallDevice ? theme.spacing.sm : theme.spacing.md,
       paddingTop: theme.spacing.lg,
       paddingBottom: theme.spacing.xxl + 96 + insets.bottom,
-      gap: theme.spacing.lg,
+      gap: theme.screen.isSmallDevice ? theme.spacing.md : theme.spacing.lg,
     },
     header: {
       gap: theme.spacing.xs,
@@ -1187,11 +1187,11 @@ const createStyles = (
     },
     hello: {
       ...theme.typography.title,
-      fontSize: 24,
+      fontSize: theme.screen.isSmallDevice ? 20 : 24,
     },
     subtitle: {
       ...theme.typography.subtitle,
-      fontSize: 14,
+      fontSize: theme.screen.isSmallDevice ? 13 : 14,
     },
     syncButton: {
       flexDirection: 'row',
@@ -1233,16 +1233,16 @@ const createStyles = (
       opacity: 0.6,
     },
     accountChipTitle: {
-      fontSize: 13,
+      fontSize: theme.screen.isSmallDevice ? 12 : 13,
       fontWeight: "600",
       color: theme.colors.text,
     },
     accountChipBalance: {
-      fontSize: 12,
+      fontSize: theme.screen.isSmallDevice ? 11 : 12,
       color: theme.colors.textMuted,
     },
     balanceCard: {
-      gap: theme.spacing.lg,
+      gap: theme.screen.isSmallDevice ? theme.spacing.md : theme.spacing.lg,
     },
     balanceHeader: {
       flexDirection: "row",
@@ -1252,11 +1252,11 @@ const createStyles = (
     balanceLabel: {
       ...theme.typography.subtitle,
       textTransform: "uppercase",
-      letterSpacing: 1.2,
-      fontSize: 12,
+      letterSpacing: theme.screen.isSmallDevice ? 0.8 : 1.2,
+      fontSize: theme.screen.isSmallDevice ? 11 : 12,
     },
     balanceValue: {
-      fontSize: 36,
+      fontSize: theme.screen.isSmallDevice ? 28 : 36,
       fontWeight: "700",
       color: theme.colors.text,
     },

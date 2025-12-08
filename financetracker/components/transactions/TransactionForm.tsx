@@ -1194,7 +1194,7 @@ const createStyles = (
       flex: 1,
     },
     header: {
-      paddingHorizontal: theme.spacing.xl,
+      paddingHorizontal: theme.screen.isSmallDevice ? theme.spacing.md : theme.spacing.xl,
       paddingTop: theme.spacing.md,
       paddingBottom: theme.spacing.lg,
       flexDirection: "row",
@@ -1203,22 +1203,22 @@ const createStyles = (
       backgroundColor: theme.colors.background,
     },
     cancelButton: {
-      fontSize: 17,
+      fontSize: theme.screen.isSmallDevice ? 16 : 17,
       color: theme.colors.primary,
       fontWeight: "500",
     },
     headerSpacer: {
-      width: 60,
+      width: theme.screen.isSmallDevice ? 50 : 60,
     },
     title: {
-      fontSize: 18,
+      fontSize: theme.screen.isSmallDevice ? 16 : 18,
       fontWeight: "700",
       color: theme.colors.text,
       letterSpacing: 0.3,
     },
     content: {
-      paddingHorizontal: theme.spacing.xl,
-      paddingBottom: theme.spacing.xl + insets.bottom,
+      paddingHorizontal: theme.screen.isSmallDevice ? theme.spacing.md : theme.spacing.xl,
+      paddingBottom: (theme.screen.isSmallDevice ? theme.spacing.lg : theme.spacing.xl) + insets.bottom,
       paddingTop: theme.spacing.xs,
       gap: theme.spacing.xs,
     },

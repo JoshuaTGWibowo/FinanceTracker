@@ -366,23 +366,23 @@ const createStyles = (
     content: {
       flexGrow: 1,
       paddingTop: theme.spacing.xl,
-      paddingHorizontal: theme.spacing.md,
+      paddingHorizontal: theme.screen.isSmallDevice ? theme.spacing.sm : theme.spacing.md,
       paddingBottom: theme.spacing.xl + insets.bottom,
-      gap: theme.spacing.xl,
+      gap: theme.screen.isSmallDevice ? theme.spacing.lg : theme.spacing.xl,
     },
     header: {
       gap: theme.spacing.sm,
     },
     title: {
       ...theme.typography.title,
-      fontSize: 26,
+      fontSize: theme.screen.isSmallDevice ? 22 : 26,
     },
     subtitle: {
       ...theme.typography.subtitle,
       fontSize: 14,
     },
     sectionCard: {
-      gap: theme.spacing.lg,
+      gap: theme.screen.isSmallDevice ? theme.spacing.md : theme.spacing.lg,
     },
     sectionHeaderRow: {
       flexDirection: "row",
@@ -417,7 +417,7 @@ const createStyles = (
     },
     input: {
       ...theme.components.input,
-      fontSize: 16,
+      fontSize: theme.screen.isSmallDevice ? 15 : 16,
     },
     currencyRow: {
       gap: theme.spacing.md,

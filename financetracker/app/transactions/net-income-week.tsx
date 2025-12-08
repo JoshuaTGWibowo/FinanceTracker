@@ -331,8 +331,8 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>, insets: { top: numb
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "space-between",
-      paddingHorizontal: theme.spacing.xl,
-      paddingVertical: theme.spacing.lg,
+      paddingHorizontal: theme.screen.isSmallDevice ? theme.spacing.lg : theme.spacing.xl,
+      paddingVertical: theme.screen.isSmallDevice ? theme.spacing.md : theme.spacing.lg,
     },
     iconButton: {
       width: 40,
@@ -347,12 +347,12 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>, insets: { top: numb
       height: 40,
     },
     title: {
-      fontSize: 18,
+      fontSize: theme.screen.isSmallDevice ? 16 : 18,
       fontWeight: "700",
       color: theme.colors.text,
     },
     listContent: {
-      paddingHorizontal: theme.spacing.xl,
+      paddingHorizontal: theme.screen.isSmallDevice ? theme.spacing.lg : theme.spacing.xl,
       paddingBottom: Math.max(theme.spacing.xl * 2, insets.bottom + theme.spacing.lg),
     },
     summaryCard: {

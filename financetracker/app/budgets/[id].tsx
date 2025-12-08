@@ -336,8 +336,8 @@ const createStyles = (
     },
     content: {
       flexGrow: 1,
-      padding: theme.spacing.md,
-      gap: theme.spacing.md,
+      padding: theme.screen.isSmallDevice ? theme.spacing.sm : theme.spacing.md,
+      gap: theme.screen.isSmallDevice ? theme.spacing.sm : theme.spacing.md,
     },
     notFoundContainer: {
       flex: 1,
@@ -372,8 +372,8 @@ const createStyles = (
       gap: theme.spacing.md,
     },
     budgetIcon: {
-      width: 64,
-      height: 64,
+      width: theme.screen.isSmallDevice ? 56 : 64,
+      height: theme.screen.isSmallDevice ? 56 : 64,
       borderRadius: theme.radii.lg,
       backgroundColor: `${theme.colors.primary}22`,
       alignItems: 'center',
@@ -384,7 +384,7 @@ const createStyles = (
       gap: theme.spacing.xs,
     },
     budgetName: {
-      fontSize: 22,
+      fontSize: theme.screen.isSmallDevice ? 20 : 22,
       fontWeight: '700',
       color: theme.colors.text,
     },
@@ -435,7 +435,7 @@ const createStyles = (
       gap: theme.spacing.xs,
     },
     spendingText: {
-      fontSize: 32,
+      fontSize: theme.screen.isSmallDevice ? 28 : 32,
       fontWeight: '700',
       color: theme.colors.text,
     },

@@ -245,8 +245,8 @@ const createStyles = (
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "space-between",
-      paddingHorizontal: theme.spacing.xl,
-      paddingTop: theme.spacing.lg,
+      paddingHorizontal: theme.screen.isSmallDevice ? theme.spacing.lg : theme.spacing.xl,
+      paddingTop: theme.screen.isSmallDevice ? theme.spacing.md : theme.spacing.lg,
       paddingBottom: theme.spacing.md,
     },
     iconButton: {
@@ -262,17 +262,17 @@ const createStyles = (
     },
     title: {
       ...theme.typography.title,
-      fontSize: 20,
+      fontSize: theme.screen.isSmallDevice ? 18 : 20,
     },
     content: {
-      paddingHorizontal: theme.spacing.xl,
+      paddingHorizontal: theme.screen.isSmallDevice ? theme.spacing.lg : theme.spacing.xl,
       paddingBottom: theme.spacing.xl + insets.bottom,
-      gap: theme.spacing.lg,
+      gap: theme.screen.isSmallDevice ? theme.spacing.md : theme.spacing.lg,
     },
     summaryCard: {
       ...theme.components.surface,
-      padding: theme.spacing.lg,
-      gap: theme.spacing.lg,
+      padding: theme.screen.isSmallDevice ? theme.spacing.md : theme.spacing.lg,
+      gap: theme.screen.isSmallDevice ? theme.spacing.md : theme.spacing.lg,
     },
     amountRow: {
       flexDirection: "row",
@@ -280,7 +280,7 @@ const createStyles = (
       justifyContent: "space-between",
     },
     amount: (type: TransactionType) => ({
-      fontSize: 28,
+      fontSize: theme.screen.isSmallDevice ? 24 : 28,
       fontWeight: "700",
       color:
         type === "income"

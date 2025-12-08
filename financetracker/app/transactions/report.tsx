@@ -667,8 +667,8 @@ const createStyles = (theme: Theme) =>
       flex: 1,
     },
     header: {
-      paddingHorizontal: theme.spacing.xl,
-      paddingVertical: theme.spacing.lg,
+      paddingHorizontal: theme.screen.isSmallDevice ? theme.spacing.lg : theme.spacing.xl,
+      paddingVertical: theme.screen.isSmallDevice ? theme.spacing.md : theme.spacing.lg,
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "space-between",
@@ -683,16 +683,16 @@ const createStyles = (theme: Theme) =>
     },
     headerTitle: {
       ...theme.typography.title,
-      fontSize: 22,
+      fontSize: theme.screen.isSmallDevice ? 20 : 22,
     },
     headerSpacer: {
       width: 36,
     },
     content: {
-      paddingHorizontal: theme.spacing.md,
-      paddingTop: theme.spacing.lg,
+      paddingHorizontal: theme.screen.isSmallDevice ? theme.spacing.sm : theme.spacing.md,
+      paddingTop: theme.screen.isSmallDevice ? theme.spacing.md : theme.spacing.lg,
       paddingBottom: theme.spacing.xl + 16,
-      gap: theme.spacing.lg,
+      gap: theme.screen.isSmallDevice ? theme.spacing.md : theme.spacing.lg,
     },
     selectorCard: {
       ...theme.components.card,

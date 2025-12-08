@@ -575,8 +575,8 @@ const createStyles = (
       backgroundColor: theme.colors.background,
     },
     scrollContent: {
-      paddingTop: theme.spacing.xl,
-      paddingHorizontal: theme.spacing.md,
+      paddingTop: theme.screen.isSmallDevice ? theme.spacing.lg : theme.spacing.xl,
+      paddingHorizontal: theme.screen.isSmallDevice ? theme.spacing.sm : theme.spacing.md,
       paddingBottom: theme.spacing.xxl * 3 + insets.bottom,
     },
     header: {
@@ -606,16 +606,16 @@ const createStyles = (
     playerHeader: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: theme.spacing.lg,
-      marginBottom: theme.spacing.lg,
+      gap: theme.screen.isSmallDevice ? theme.spacing.md : theme.spacing.lg,
+      marginBottom: theme.screen.isSmallDevice ? theme.spacing.md : theme.spacing.lg,
     },
     avatarWrapper: {
       position: 'relative',
     },
     avatar: {
-      width: 64,
-      height: 64,
-      borderRadius: 32,
+      width: theme.screen.isSmallDevice ? 56 : 64,
+      height: theme.screen.isSmallDevice ? 56 : 64,
+      borderRadius: theme.screen.isSmallDevice ? 28 : 32,
       backgroundColor: theme.colors.primary + '20',
       alignItems: 'center',
       justifyContent: 'center',
@@ -644,7 +644,7 @@ const createStyles = (
       gap: theme.spacing.sm,
     },
     playerName: {
-      fontSize: 20,
+      fontSize: theme.screen.isSmallDevice ? 18 : 20,
       fontWeight: '700',
       color: theme.colors.text,
     },

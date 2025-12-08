@@ -1501,16 +1501,16 @@ const createStyles = (theme: any, insets: any) =>
       paddingBottom: 100,
     },
     header: {
-      paddingHorizontal: 12,
-      paddingTop: 16,
+      paddingHorizontal: theme.screen.isSmallDevice ? 12 : 16,
+      paddingTop: theme.screen.isSmallDevice ? 12 : 16,
     },
     
     // Balance Card
     balanceCard: {
       backgroundColor: theme.colors.surface,
-      borderRadius: 20,
-      padding: 20,
-      marginBottom: 16,
+      borderRadius: theme.screen.isSmallDevice ? 16 : 20,
+      padding: theme.screen.isSmallDevice ? 16 : 20,
+      marginBottom: theme.screen.isSmallDevice ? 12 : 16,
       shadowColor: "#000",
       shadowOffset: { width: 0, height: 2 },
       shadowOpacity: 0.05,
@@ -1521,7 +1521,7 @@ const createStyles = (theme: any, insets: any) =>
       flexDirection: "row",
       justifyContent: "space-between",
       alignItems: "flex-start",
-      marginBottom: 20,
+      marginBottom: theme.screen.isSmallDevice ? 16 : 20,
     },
     balanceLabel: {
       fontSize: 12,
@@ -1880,9 +1880,9 @@ const createStyles = (theme: any, insets: any) =>
       flex: 1,
     },
     categoryIcon: (variant: TransactionVisualVariant) => ({
-      width: 36,
-      height: 36,
-      borderRadius: 10,
+      width: theme.screen.isSmallDevice ? 32 : 36,
+      height: theme.screen.isSmallDevice ? 32 : 36,
+      borderRadius: theme.screen.isSmallDevice ? 8 : 10,
       backgroundColor:
         variant === "income"
           ? `${theme.colors.success}20`
@@ -1902,7 +1902,7 @@ const createStyles = (theme: any, insets: any) =>
       gap: 4,
     },
     transactionCategory: {
-      fontSize: 14,
+      fontSize: theme.screen.isSmallDevice ? 13 : 14,
       fontWeight: "600",
       color: theme.colors.text,
     },
