@@ -15,7 +15,16 @@ import {
   removeMemberFromCrew,
   disbandCrew,
   updateCrew,
+  getCrewBudgets,
+  createCrewBudget,
+  deleteCrewBudget,
+  calculateCrewBudgetSpendingLocal,
+  syncBudgetContribution,
+  calculateCrewBudgetSpendingFromContributions,
+  type CrewBudget,
 } from "../../lib/crew-service";
+import { useFinanceStore } from "../../lib/store";
+import { DEFAULT_CATEGORIES } from "../../lib/types";
 
 type CrewData = {
   id: string;
@@ -58,12 +67,67 @@ export default function YourCrewScreen() {
   const [maxMembers, setMaxMembers] = useState(10);
   const [crewData, setCrewData] = useState<CrewData | null>(null);
   const [crewMembers, setCrewMembers] = useState<CrewMemberData[]>([]);
+  const [crewBudgets, setCrewBudgets] = useState<CrewBudget[]>([]);
+  const [showBudgetModal, setShowBudgetModal] = useState(false);
+  const [showCategoryModal, setShowCategoryModal] = useState(false);
+  const [budgetName, setBudgetName] = useState('');
+  const [budgetTarget, setBudgetTarget] = useState('');
+  const [budgetPeriod, setBudgetPeriod] = useState<'week' | 'month'>('month');
+  const [budgetCategory, setBudgetCategory] = useState('');
+  const [isRepeating, setIsRepeating] = useState(true);
+  
+  const categories = useFinanceStore((state) => state.preferences.categories);
+  const transactions = useFinanceStore((state) => state.transactions);
   const [isProcessing, setIsProcessing] = useState(false);
 
   // Load crew data on mount
   useEffect(() => {
     loadCrewData();
   }, []);
+
+  // Sync local spending to Supabase and recalculate crew-wide progress
+  useEffect(() => {
+    const syncAndRecalculate = async () => {
+      if (!crewData || crewBudgets.length === 0) {
+        console.log('[Budget Sync] Skipping - no crew or budgets:', { 
+          hasCrewData: !!crewData, 
+          budgetCount: crewBudgets.length 
+        });
+        return;
+      }
+
+      console.log('[Budget Sync] Starting sync for', crewBudgets.length, 'budgets with', transactions.length, 'transactions');
+
+      // Sync each budget's contribution to Supabase
+      for (const budget of crewBudgets) {
+        const result = await syncBudgetContribution({
+          crewId: crewData.id,
+          budget,
+          transactions,
+          allCategories: categories,
+        });
+        console.log('[Budget Sync] Synced budget', budget.name, ':', result.success ? 'success' : result.error);
+      }
+
+      // Recalculate crew-wide spending from all members
+      const updatedBudgets = await Promise.all(
+        crewBudgets.map(async (budget) => {
+          const spending = await calculateCrewBudgetSpendingFromContributions(budget.id);
+          const progress = budget.target > 0 ? Math.min((spending / budget.target) * 100, 100) : 0;
+          console.log('[Budget Calc]', budget.name, ':', { spending, target: budget.target, progress });
+          return {
+            ...budget,
+            currentSpending: spending,
+            progress: Math.round(progress)
+          };
+        })
+      );
+
+      setCrewBudgets(updatedBudgets);
+    };
+
+    syncAndRecalculate();
+  }, [transactions, crewData?.id, categories]);
 
   const loadCrewData = async () => {
     setIsLoading(true);
@@ -74,6 +138,25 @@ export default function YourCrewScreen() {
       const membersResult = await getCrewMembers(result.crew.id);
       if (membersResult.success && membersResult.members) {
         setCrewMembers(membersResult.members);
+      }
+      // Load budgets and calculate crew-wide spending
+      const budgetsResult = await getCrewBudgets(result.crew.id);
+      if (budgetsResult.success && budgetsResult.budgets) {
+        console.log('[Load Crew] Loaded', budgetsResult.budgets.length, 'budgets');
+        // Calculate crew-wide spending from all members' contributions
+        const budgetsWithCrewSpending = await Promise.all(
+          budgetsResult.budgets.map(async (budget) => {
+            const spending = await calculateCrewBudgetSpendingFromContributions(budget.id);
+            const progress = budget.target > 0 ? Math.min((spending / budget.target) * 100, 100) : 0;
+            console.log('[Load Crew]', budget.name, 'spending:', spending);
+            return {
+              ...budget,
+              currentSpending: spending,
+              progress: Math.round(progress)
+            };
+          })
+        );
+        setCrewBudgets(budgetsWithCrewSpending);
       }
     }
     setIsLoading(false);
@@ -256,6 +339,75 @@ export default function YourCrewScreen() {
     } else {
       Alert.alert('Error', result.error || 'Failed to update crew');
     }
+  };
+
+  const handleCreateBudget = async () => {
+    if (!crewData) return;
+    if (!budgetName.trim()) {
+      Alert.alert('Error', 'Please enter a budget name');
+      return;
+    }
+    if (!budgetTarget || parseFloat(budgetTarget) <= 0) {
+      Alert.alert('Error', 'Please enter a valid target amount');
+      return;
+    }
+    if (!budgetCategory) {
+      Alert.alert('Error', 'Please select a category');
+      return;
+    }
+
+    setIsProcessing(true);
+    const result = await createCrewBudget({
+      crewId: crewData.id,
+      name: budgetName.trim(),
+      target: parseFloat(budgetTarget),
+      period: budgetPeriod,
+      category: budgetCategory,
+      isRepeating: isRepeating,
+    });
+    setIsProcessing(false);
+
+    if (result.success) {
+      setShowBudgetModal(false);
+      setBudgetName('');
+      setBudgetTarget('');
+      setBudgetCategory('');
+      setIsRepeating(true);
+      Alert.alert('Success', 'Crew budget created successfully!');
+      await loadCrewData();
+    } else {
+      Alert.alert('Error', result.error || 'Failed to create budget');
+    }
+  };
+
+  const handleDeleteBudget = (budgetId: string) => {
+    if (!crewData) return;
+    Alert.alert(
+      'Delete Budget',
+      'Are you sure you want to delete this budget goal?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Delete', 
+          style: 'destructive', 
+          onPress: async () => {
+            setIsProcessing(true);
+            const result = await deleteCrewBudget({
+              budgetId,
+              crewId: crewData.id,
+            });
+            setIsProcessing(false);
+            
+            if (result.success) {
+              Alert.alert('Success', 'Budget deleted');
+              loadCrewData();
+            } else {
+              Alert.alert('Error', result.error || 'Failed to delete budget');
+            }
+          }
+        },
+      ]
+    );
   };
 
   // Loading state
@@ -533,6 +685,213 @@ export default function YourCrewScreen() {
     );
   }
 
+  // Category Selection Modal
+  if (showCategoryModal) {
+    const defaultExpenseCategories = DEFAULT_CATEGORIES.filter(c => c.type === 'expense' && !c.parentCategoryId);
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.headerBar}>
+          <Pressable style={styles.backButton} onPress={() => setShowCategoryModal(false)}>
+            <Ionicons name="chevron-back" size={24} color={theme.colors.text} />
+          </Pressable>
+          <Text style={styles.headerTitle}>Select Category</Text>
+          <View style={{ width: 40 }} />
+        </View>
+
+        <ScrollView contentContainerStyle={styles.scrollContent}>
+          <View style={styles.categoryList}>
+            {defaultExpenseCategories.map((category) => (
+              <Pressable
+                key={category.id}
+                style={[
+                  theme.components.surface,
+                  styles.categoryListItem,
+                  budgetCategory === category.id && styles.categoryListItemActive
+                ]}
+                onPress={() => {
+                  setBudgetCategory(category.id);
+                  setShowCategoryModal(false);
+                }}
+              >
+                <View style={styles.categoryListIconWrapper}>
+                  <Ionicons 
+                    name={(category.icon as any) || 'folder'} 
+                    size={24} 
+                    color={budgetCategory === category.id ? theme.colors.primary : theme.colors.text} 
+                  />
+                </View>
+                <Text style={[
+                  styles.categoryListItemText,
+                  budgetCategory === category.id && styles.categoryListItemTextActive
+                ]}>
+                  {category.name}
+                </Text>
+                {budgetCategory === category.id && (
+                  <Ionicons name="checkmark-circle" size={24} color={theme.colors.primary} />
+                )}
+              </Pressable>
+            ))}
+          </View>
+        </ScrollView>
+      </SafeAreaView>
+    );
+  }
+
+  // Budget Modal
+  if (showBudgetModal) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.headerBar}>
+          <Pressable style={styles.backButton} onPress={() => setShowBudgetModal(false)}>
+            <Ionicons name="chevron-back" size={24} color={theme.colors.text} />
+          </Pressable>
+          <Text style={styles.headerTitle}>Create Budget Goal</Text>
+          <View style={{ width: 40 }} />
+        </View>
+
+        <ScrollView contentContainerStyle={styles.scrollContent}>
+          <View style={[theme.components.surface, styles.createForm]}>
+            <View style={styles.formField}>
+              <Text style={styles.formLabel}>Goal Name</Text>
+              <TextInput
+                value={budgetName}
+                onChangeText={setBudgetName}
+                placeholder="e.g., Team Food Budget"
+                placeholderTextColor={theme.colors.textMuted}
+                style={styles.formInput}
+              />
+            </View>
+
+            <View style={styles.formField}>
+              <Text style={styles.formLabel}>Target Amount</Text>
+              <TextInput
+                value={budgetTarget}
+                onChangeText={setBudgetTarget}
+                placeholder="0.00"
+                placeholderTextColor={theme.colors.textMuted}
+                style={styles.formInput}
+                keyboardType="decimal-pad"
+              />
+            </View>
+
+            <View style={styles.formField}>
+              <Text style={styles.formLabel}>Period</Text>
+              <View style={styles.periodSelector}>
+                <Pressable
+                  style={[
+                    styles.periodButton,
+                    budgetPeriod === 'week' && styles.periodButtonActive
+                  ]}
+                  onPress={() => setBudgetPeriod('week')}
+                >
+                  <Text style={[
+                    styles.periodButtonText,
+                    budgetPeriod === 'week' && styles.periodButtonTextActive
+                  ]}>
+                    Weekly
+                  </Text>
+                </Pressable>
+                <Pressable
+                  style={[
+                    styles.periodButton,
+                    budgetPeriod === 'month' && styles.periodButtonActive
+                  ]}
+                  onPress={() => setBudgetPeriod('month')}
+                >
+                  <Text style={[
+                    styles.periodButtonText,
+                    budgetPeriod === 'month' && styles.periodButtonTextActive
+                  ]}>
+                    Monthly
+                  </Text>
+                </Pressable>
+              </View>
+            </View>
+
+            <View style={styles.formField}>
+              <Text style={styles.formLabel}>Repeating</Text>
+              <Pressable
+                style={styles.repeatToggle}
+                onPress={() => setIsRepeating(!isRepeating)}
+              >
+                <View style={styles.repeatToggleInfo}>
+                  <Ionicons 
+                    name={isRepeating ? "repeat" : "repeat-outline"} 
+                    size={20} 
+                    color={theme.colors.text} 
+                  />
+                  <View style={styles.repeatToggleTextContainer}>
+                    <Text style={styles.repeatToggleText}>
+                      {isRepeating ? 'Repeating Budget' : 'One-time Budget'}
+                    </Text>
+                    <Text style={styles.repeatToggleSubtext}>
+                      {isRepeating 
+                        ? 'Budget resets each period' 
+                        : 'Budget does not reset'}
+                    </Text>
+                  </View>
+                </View>
+                <View style={[
+                  styles.toggle,
+                  isRepeating && styles.toggleActive
+                ]}>
+                  <View style={[
+                    styles.toggleThumb,
+                    isRepeating && styles.toggleThumbActive
+                  ]} />
+                </View>
+              </Pressable>
+            </View>
+
+            <View style={styles.formField}>
+              <Text style={styles.formLabel}>Category</Text>
+              <Pressable
+                style={styles.categorySelector}
+                onPress={() => setShowCategoryModal(true)}
+              >
+                {budgetCategory ? (
+                  <>
+                    <View style={styles.selectedCategoryContent}>
+                      <Ionicons 
+                        name={(DEFAULT_CATEGORIES.find(c => c.id === budgetCategory)?.icon as any) || 'folder'} 
+                        size={20} 
+                        color={theme.colors.text} 
+                      />
+                      <Text style={styles.selectedCategoryText}>
+                        {DEFAULT_CATEGORIES.find(c => c.id === budgetCategory)?.name || 'Select category'}
+                      </Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={20} color={theme.colors.textMuted} />
+                  </>
+                ) : (
+                  <>
+                    <Text style={styles.categorySelectorPlaceholder}>Select a category</Text>
+                    <Ionicons name="chevron-forward" size={20} color={theme.colors.textMuted} />
+                  </>
+                )}
+              </Pressable>
+            </View>
+
+            <Pressable
+              style={[theme.components.buttonPrimary, styles.createButton]}
+              onPress={handleCreateBudget}
+              disabled={isProcessing}
+            >
+              {isProcessing ? (
+                <ActivityIndicator size="small" color={theme.colors.text} />
+              ) : (
+                <>
+                  <Ionicons name="checkmark" size={20} color={theme.colors.text} />
+                  <Text style={styles.createButtonText}>Create Budget Goal</Text>
+                </>
+              )}
+            </Pressable>
+          </View>
+        </ScrollView>
+      </SafeAreaView>
+    );
+  }
+
   // Member or Owner State - Show Crew Details
   if (!crewData) return null;
 
@@ -637,6 +996,142 @@ export default function YourCrewScreen() {
             </View>
           ))}
         </View>
+
+        {/* Crew Budgets/Goals - Visible to all members */}
+        {crewBudgets.length > 0 && (
+          <View style={styles.section}>
+            <View style={styles.sectionTitleRow}>
+              <Text style={styles.sectionTitle}>Crew Budget Goals</Text>
+              <View style={{ flexDirection: 'row', gap: theme.spacing.sm }}>
+                <Pressable 
+                  style={styles.refreshButton}
+                  onPress={loadCrewData}
+                >
+                  <Ionicons name="refresh" size={20} color={theme.colors.textMuted} />
+                </Pressable>
+                {isOwner && (
+                  <Pressable 
+                    style={styles.addBudgetButton}
+                    onPress={() => setShowBudgetModal(true)}
+                  >
+                    <Ionicons name="add-circle" size={24} color={theme.colors.primary} />
+                  </Pressable>
+                )}
+              </View>
+            </View>
+            
+            {crewBudgets.map((budget) => {
+                const category = categories.find(c => c.id === budget.category);
+                const spending = budget.currentSpending ?? 0;
+                const progress = budget.progress ?? 0;
+                const remaining = Math.max(budget.target - spending, 0);
+                const isOverBudget = spending > budget.target;
+                
+                return (
+                  <View key={budget.id} style={[theme.components.surface, styles.budgetCard]}>
+                    <View style={styles.budgetHeader}>
+                      <View style={styles.budgetIconWrapper}>
+                        <Ionicons 
+                          name={(category?.icon as any) || 'wallet'} 
+                          size={20} 
+                          color={theme.colors.primary} 
+                        />
+                      </View>
+                      <View style={styles.budgetInfo}>
+                        <Text style={styles.budgetName}>{budget.name}</Text>
+                        <Text style={styles.budgetCategory}>{category?.name || 'Unknown'}</Text>
+                      </View>
+                      {isOwner && (
+                        <Pressable
+                          style={styles.deleteBudgetButton}
+                          onPress={() => handleDeleteBudget(budget.id)}
+                        >
+                          <Ionicons name="trash-outline" size={20} color={theme.colors.danger} />
+                        </Pressable>
+                      )}
+                    </View>
+
+                    {/* Progress Bar */}
+                    <View style={styles.progressSection}>
+                      <View style={styles.progressHeader}>
+                        <Text style={styles.progressText}>
+                          ${spending.toFixed(2)} of ${budget.target.toFixed(2)}
+                        </Text>
+                        <Text style={[
+                          styles.progressPercentage,
+                          isOverBudget && styles.progressOverBudget
+                        ]}>
+                          {progress}%
+                        </Text>
+                      </View>
+                      <View style={styles.progressBar}>
+                        <View 
+                          style={[
+                            styles.progressFill,
+                            { width: `${Math.min(progress, 100)}%` },
+                            isOverBudget ? styles.progressFillOverBudget : styles.progressFillNormal
+                          ]} 
+                        />
+                      </View>
+                      {isOverBudget ? (
+                        <Text style={styles.progressWarning}>
+                          <Ionicons name="warning" size={12} /> Over budget by ${(spending - budget.target).toFixed(2)}
+                        </Text>
+                      ) : (
+                        <Text style={styles.progressRemaining}>
+                          ${remaining.toFixed(2)} remaining
+                        </Text>
+                      )}
+                    </View>
+
+                    <View style={styles.budgetDetails}>
+                      <View style={styles.budgetStat}>
+                        <Text style={styles.budgetStatLabel}>Period</Text>
+                        <Text style={styles.budgetStatValue}>
+                          {budget.period === 'week' ? 'Weekly' : 'Monthly'}
+                        </Text>
+                      </View>
+                      <View style={styles.budgetStat}>
+                        <Text style={styles.budgetStatLabel}>Type</Text>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                          <Ionicons 
+                            name={budget.isRepeating ? "repeat" : "time-outline"} 
+                            size={14} 
+                            color={theme.colors.text} 
+                          />
+                          <Text style={styles.budgetStatValue}>
+                            {budget.isRepeating ? 'Repeating' : 'One-time'}
+                          </Text>
+                        </View>
+                      </View>
+                    </View>
+                  </View>
+                );
+              })}
+          </View>
+        )}
+
+        {/* Owner can create budgets even when none exist */}
+        {isOwner && crewBudgets.length === 0 && (
+          <View style={styles.section}>
+            <View style={styles.sectionTitleRow}>
+              <Text style={styles.sectionTitle}>Crew Budget Goals</Text>
+              <Pressable 
+                style={styles.addBudgetButton}
+                onPress={() => setShowBudgetModal(true)}
+              >
+                <Ionicons name="add-circle" size={24} color={theme.colors.primary} />
+              </Pressable>
+            </View>
+            <View style={[theme.components.surface, styles.emptyBudgets]}>
+              <Ionicons name="wallet-outline" size={48} color={theme.colors.textMuted} />
+              <Text style={styles.emptyBudgetsText}>No budget goals yet</Text>
+              <Text style={styles.emptyBudgetsSubtext}>
+                Set shared financial goals for your crew to work towards together
+              </Text>
+            </View>
+          </View>
+        )}
 
         {/* Leave/Manage Crew */}
         {!isOwner && (
@@ -1243,5 +1738,311 @@ const createStyles = (
       justifyContent: 'center',
       backgroundColor: theme.colors.primary + '20',
       borderRadius: theme.radii.md,
+    },
+
+    // Budget Styles
+    sectionTitleRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginBottom: theme.spacing.md,
+    },
+    addBudgetButton: {
+      padding: 4,
+    },
+    refreshButton: {
+      padding: 4,
+    },
+    emptyBudgets: {
+      padding: theme.spacing.xl,
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: theme.spacing.sm,
+    },
+    emptyBudgetsText: {
+      fontSize: 16,
+      fontWeight: '600',
+      color: theme.colors.textMuted,
+      textAlign: 'center',
+    },
+    emptyBudgetsSubtext: {
+      fontSize: 14,
+      color: theme.colors.textMuted,
+      textAlign: 'center',
+      paddingHorizontal: theme.spacing.md,
+    },
+    budgetCard: {
+      padding: theme.spacing.md,
+      marginBottom: theme.spacing.sm,
+    },
+    budgetHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: theme.spacing.sm,
+      marginBottom: theme.spacing.md,
+    },
+    budgetIconWrapper: {
+      width: 40,
+      height: 40,
+      borderRadius: theme.radii.md,
+      backgroundColor: theme.colors.primary + '20',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    budgetInfo: {
+      flex: 1,
+    },
+    budgetName: {
+      fontSize: 16,
+      fontWeight: '600',
+      color: theme.colors.text,
+      marginBottom: 2,
+    },
+    budgetCategory: {
+      fontSize: 13,
+      color: theme.colors.textMuted,
+    },
+    deleteBudgetButton: {
+      padding: 8,
+    },
+    budgetDetails: {
+      flexDirection: 'row',
+      gap: theme.spacing.lg,
+    },
+    budgetStat: {
+      flex: 1,
+    },
+    budgetStatLabel: {
+      fontSize: 12,
+      color: theme.colors.textMuted,
+      marginBottom: 4,
+    },
+    budgetStatValue: {
+      fontSize: 18,
+      fontWeight: '700',
+      color: theme.colors.text,
+    },
+    periodSelector: {
+      flexDirection: 'row',
+      gap: theme.spacing.sm,
+    },
+    periodButton: {
+      flex: 1,
+      paddingVertical: 12,
+      paddingHorizontal: 16,
+      borderRadius: theme.radii.md,
+      backgroundColor: theme.colors.surface,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      alignItems: 'center',
+    },
+    periodButtonActive: {
+      backgroundColor: theme.colors.primary,
+      borderColor: theme.colors.primary,
+    },
+    periodButtonText: {
+      fontSize: 14,
+      fontWeight: '600',
+      color: theme.colors.text,
+    },
+    periodButtonTextActive: {
+      color: theme.colors.background,
+    },
+    categoryScroll: {
+      marginTop: theme.spacing.sm,
+    },
+    categoryChip: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      paddingVertical: 8,
+      paddingHorizontal: 12,
+      borderRadius: theme.radii.pill,
+      backgroundColor: theme.colors.surface,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      marginRight: theme.spacing.sm,
+    },
+    categoryChipActive: {
+      backgroundColor: theme.colors.primary,
+      borderColor: theme.colors.primary,
+    },
+    categoryChipText: {
+      fontSize: 13,
+      fontWeight: '500',
+      color: theme.colors.text,
+    },
+    categoryChipTextActive: {
+      color: theme.colors.background,
+    },
+
+    // Repeating Toggle Styles
+    repeatToggle: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      padding: theme.spacing.md,
+      backgroundColor: theme.colors.surface,
+      borderRadius: theme.radii.md,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+    },
+    repeatToggleInfo: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: theme.spacing.sm,
+      flex: 1,
+    },
+    repeatToggleTextContainer: {
+      flex: 1,
+    },
+    repeatToggleText: {
+      fontSize: 15,
+      fontWeight: '600',
+      color: theme.colors.text,
+      marginBottom: 2,
+    },
+    repeatToggleSubtext: {
+      fontSize: 13,
+      color: theme.colors.textMuted,
+    },
+    toggle: {
+      width: 50,
+      height: 30,
+      borderRadius: 15,
+      backgroundColor: theme.colors.border,
+      padding: 2,
+      justifyContent: 'center',
+    },
+    toggleActive: {
+      backgroundColor: theme.colors.primary,
+    },
+    toggleThumb: {
+      width: 26,
+      height: 26,
+      borderRadius: 13,
+      backgroundColor: theme.colors.background,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.1,
+      shadowRadius: 2,
+      elevation: 2,
+    },
+    toggleThumbActive: {
+      transform: [{ translateX: 20 }],
+    },
+
+    // Category Selector Styles
+    categorySelector: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      padding: theme.spacing.md,
+      backgroundColor: theme.colors.surface,
+      borderRadius: theme.radii.md,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      minHeight: 56,
+    },
+    categorySelectorPlaceholder: {
+      fontSize: 15,
+      color: theme.colors.textMuted,
+    },
+    selectedCategoryContent: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: theme.spacing.sm,
+    },
+    selectedCategoryText: {
+      fontSize: 15,
+      fontWeight: '500',
+      color: theme.colors.text,
+    },
+
+    // Category List Modal Styles
+    categoryList: {
+      gap: theme.spacing.sm,
+    },
+    categoryListItem: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      padding: theme.spacing.md,
+      gap: theme.spacing.md,
+      borderRadius: theme.radii.md,
+      borderWidth: 1,
+      borderColor: 'transparent',
+    },
+    categoryListItemActive: {
+      borderColor: theme.colors.primary,
+      backgroundColor: theme.colors.primary + '10',
+    },
+    categoryListIconWrapper: {
+      width: 44,
+      height: 44,
+      borderRadius: theme.radii.md,
+      backgroundColor: theme.colors.surface,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    categoryListItemText: {
+      flex: 1,
+      fontSize: 16,
+      fontWeight: '500',
+      color: theme.colors.text,
+    },
+    categoryListItemTextActive: {
+      color: theme.colors.primary,
+      fontWeight: '600',
+    },
+
+    // Progress Tracking Styles
+    progressSection: {
+      marginTop: theme.spacing.md,
+      marginBottom: theme.spacing.sm,
+    },
+    progressHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: 8,
+    },
+    progressText: {
+      fontSize: 14,
+      fontWeight: '600',
+      color: theme.colors.text,
+    },
+    progressPercentage: {
+      fontSize: 14,
+      fontWeight: '700',
+      color: theme.colors.primary,
+    },
+    progressOverBudget: {
+      color: theme.colors.danger,
+    },
+    progressBar: {
+      height: 8,
+      backgroundColor: theme.colors.surface,
+      borderRadius: 4,
+      overflow: 'hidden',
+      marginBottom: 6,
+    },
+    progressFill: {
+      height: '100%',
+      borderRadius: 4,
+    },
+    progressFillNormal: {
+      backgroundColor: theme.colors.primary,
+    },
+    progressFillOverBudget: {
+      backgroundColor: theme.colors.danger,
+    },
+    progressRemaining: {
+      fontSize: 12,
+      color: theme.colors.textMuted,
+    },
+    progressWarning: {
+      fontSize: 12,
+      color: theme.colors.danger,
+      fontWeight: '600',
     },
   });
