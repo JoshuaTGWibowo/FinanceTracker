@@ -337,7 +337,11 @@ export default function BudgetsScreen() {
                   const isOverBudget = spending > goal.target;
                   
                   return (
-                    <View key={goal.id} style={styles.goalCard}>
+                    <Pressable 
+                      key={goal.id} 
+                      style={styles.goalCard}
+                      onPress={() => router.push(`/budgets/${goal.id}`)}
+                    >
                       <View style={styles.goalCardHeader}>
                         <View style={styles.goalCardIcon}>
                           <Ionicons
@@ -370,7 +374,8 @@ export default function BudgetsScreen() {
                           </View>
                         </View>
                         <Pressable
-                          onPress={() => {
+                          onPress={(e) => {
+                            e.stopPropagation();
                             Alert.alert(
                               "Delete Budget",
                               `Are you sure you want to delete "${goal.name}"?`,
@@ -422,7 +427,7 @@ export default function BudgetsScreen() {
                           </Text>
                         )}
                       </View>
-                    </View>
+                    </Pressable>
                   );
                 })}
               </View>

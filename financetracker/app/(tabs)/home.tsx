@@ -894,7 +894,11 @@ export default function HomeScreen() {
                 }
 
                 return (
-                  <View key={goal.id} style={styles.goalRow}>
+                  <Pressable 
+                    key={goal.id} 
+                    style={styles.goalRow}
+                    onPress={() => router.push({ pathname: "/budgets/[id]", params: { id: goal.id } })}
+                  >
                     <View style={styles.goalCopy}>
                       <Text style={styles.goalName}>{goal.name}</Text>
                       <Text style={styles.goalMeta}>
@@ -920,7 +924,7 @@ export default function HomeScreen() {
                     >
                       {Math.min(100, progressPercent)}%
                     </Text>
-                  </View>
+                  </Pressable>
                 );
               })}
             </ScrollView>
