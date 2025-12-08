@@ -29,6 +29,7 @@ export interface Transaction {
   location?: string;
   photos?: string[];
   excludeFromReports?: boolean;
+  createdAt?: string;
 }
 
 export interface Category {

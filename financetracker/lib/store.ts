@@ -338,6 +338,7 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
       date: normalizedDate.toISOString(),
       accountId: normalizedAccountId,
       toAccountId: transaction.type === "transfer" ? normalizedToAccountId : null,
+      createdAt: new Date().toISOString(),
     };
 
     await saveTransaction(payload);

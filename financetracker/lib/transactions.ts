@@ -73,3 +73,20 @@ export const getTransactionVisualState = (
     ? { prefix: "+", variant: "income" }
     : { prefix: "−", variant: "expense" };
 };
+
+export const sortTransactionsByRecency = (a: Transaction, b: Transaction): number => {
+  // First sort by date (newest first)
+  const aDate = new Date(a.date).getTime();
+  const bDate = new Date(b.date).getTime();
+  const dateDiff = bDate - aDate;
+  
+  if (dateDiff !== 0) {
+    return dateDiff;
+  }
+
+  // Then sort by createdAt timestamp (newest first)
+  const aCreated = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+  const bCreated = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+  
+  return bCreated - aCreated;
+};

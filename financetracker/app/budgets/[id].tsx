@@ -15,6 +15,7 @@ import dayjs from "dayjs";
 import { useAppTheme } from "../../theme";
 import { useFinanceStore } from "../../lib/store";
 import { doesCategoryMatchBudget } from "../../lib/categoryUtils";
+import { sortTransactionsByRecency } from "../../lib/transactions";
 
 const toIconName = (value?: string | null) =>
   (value as keyof typeof Ionicons.glyphMap) || ("pricetag" as keyof typeof Ionicons.glyphMap);
@@ -84,7 +85,7 @@ export default function BudgetDetailScreen() {
     return {
       periodStart: start,
       periodEnd: end,
-      matchingTransactions: matching.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
+      matchingTransactions: matching.sort(sortTransactionsByRecency),
       spending: totalSpending,
       progress: Math.round(progressPercent),
       isOverBudget: over,

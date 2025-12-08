@@ -125,6 +125,9 @@ const ensureSchema = async (db: SQLiteDatabase) => {
   await ensureColumnExists(db, "categories", "parentCategoryId", "TEXT");
   await ensureColumnExists(db, "categories", "activeAccountIds", "TEXT");
   
+  // Add createdAt column to transactions
+  await ensureColumnExists(db, "transactions", "createdAt", "TEXT");
+  
   // Add new budget_goals columns
   await ensureColumnExists(db, "budget_goals", "isRepeating", "INTEGER", "DEFAULT 1");
   await ensureColumnExists(db, "budget_goals", "createdAt", "TEXT", `DEFAULT '${new Date().toISOString()}'`);
@@ -206,6 +209,7 @@ interface TransactionRow {
   location: string | null;
   photos: string | null;
   excludeFromReports: number;
+  createdAt?: string;
 }
 
 interface AccountRow {
@@ -314,6 +318,7 @@ export const fetchFinanceState = async (): Promise<FinanceStatePayload> => {
     location: row.location ?? undefined,
     photos: row.photos ? (JSON.parse(row.photos) as string[]) : [],
     excludeFromReports: Boolean(row.excludeFromReports),
+    createdAt: row.createdAt,
   }));
 
   const recurringTransactions = recurringRows.map((row) => ({
@@ -366,8 +371,9 @@ export const saveTransaction = async (transaction: Transaction) => {
       participants,
       location,
       photos,
-      excludeFromReports
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      excludeFromReports,
+      createdAt
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       amount=excluded.amount,
       note=excluded.note,
@@ -379,7 +385,8 @@ export const saveTransaction = async (transaction: Transaction) => {
       participants=excluded.participants,
       location=excluded.location,
       photos=excluded.photos,
-      excludeFromReports=excluded.excludeFromReports`,
+      excludeFromReports=excluded.excludeFromReports,
+      createdAt=COALESCE(transactions.createdAt, excluded.createdAt)`,
     [
       transaction.id,
       transaction.amount,
@@ -393,6 +400,7 @@ export const saveTransaction = async (transaction: Transaction) => {
       transaction.location ?? null,
       serializeArray(transaction.photos),
       transaction.excludeFromReports ? 1 : 0,
+      transaction.createdAt ?? new Date().toISOString(),
     ],
   );
 };

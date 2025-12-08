@@ -10,7 +10,7 @@ import { SpendingBarChart, SpendingLineChart } from "../../components/SpendingCh
 import { MonthlyCalendar } from "../../components/MonthlyCalendar";
 import { useAppTheme } from "../../theme";
 import { BudgetGoal, useFinanceStore } from "../../lib/store";
-import { filterTransactionsByAccount, getTransactionDelta, getTransactionVisualState } from "../../lib/transactions";
+import { filterTransactionsByAccount, getTransactionDelta, getTransactionVisualState, sortTransactionsByRecency } from "../../lib/transactions";
 import { truncateWords } from "../../lib/text";
 import { syncMetricsToSupabase } from "../../lib/sync-service";
 import { isAuthenticated } from "../../lib/supabase";
@@ -499,7 +499,7 @@ export default function HomeScreen() {
   const recentTransactions = useMemo(
     () =>
       [...recentSourceTransactions]
-        .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+        .sort(sortTransactionsByRecency)
         .slice(0, 5),
     [recentSourceTransactions],
   );
