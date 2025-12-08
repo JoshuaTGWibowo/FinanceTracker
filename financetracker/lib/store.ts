@@ -6,6 +6,7 @@ import {
   type BudgetGoal,
   type Category,
   type CategoryType,
+  type DateFormat,
   DEFAULT_ACCOUNT_ID,
   DEFAULT_CATEGORIES,
   type Preferences,
@@ -24,6 +25,7 @@ import {
   saveAccount,
   saveBudgetGoal,
   saveCategory,
+  saveDateFormat,
   saveProfile,
   saveRecurringTransaction,
   saveThemeMode,
@@ -71,6 +73,7 @@ export interface FinanceState {
   removeBudgetGoal: (id: string) => Promise<void>;
   updateProfile: (payload: Partial<Profile>) => Promise<void>;
   setThemeMode: (mode: ThemeMode) => Promise<void>;
+  setDateFormat: (format: DateFormat) => Promise<void>;
   addCategory: (category: Omit<Category, "id">) => Promise<void>;
   updateCategory: (id: string, updates: Partial<Omit<Category, "id">>) => Promise<void>;
   setCategoryFormDraft: (
@@ -260,9 +263,11 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
   profile: {
     name: "Alicia Jeanelly",
     currency: "USD",
+    dateFormat: "dd/mm/yyyy",
   },
   preferences: {
     themeMode: "dark",
+    dateFormat: "dd/mm/yyyy",
     categories: [...DEFAULT_CATEGORIES],
   },
   accounts: [createDefaultAccount("USD")],
@@ -603,6 +608,19 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
       preferences: {
         ...state.preferences,
         themeMode: mode,
+      },
+    }));
+  },
+  setDateFormat: async (format) => {
+    await saveDateFormat(format);
+    set((state) => ({
+      profile: {
+        ...state.profile,
+        dateFormat: format,
+      },
+      preferences: {
+        ...state.preferences,
+        dateFormat: format,
       },
     }));
   },

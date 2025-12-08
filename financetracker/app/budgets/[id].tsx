@@ -16,6 +16,7 @@ import { useAppTheme } from "../../theme";
 import { useFinanceStore } from "../../lib/store";
 import { doesCategoryMatchBudget } from "../../lib/categoryUtils";
 import { sortTransactionsByRecency } from "../../lib/transactions";
+import { formatDate } from "../../lib/text";
 
 const toIconName = (value?: string | null) =>
   (value as keyof typeof Ionicons.glyphMap) || ("pricetag" as keyof typeof Ionicons.glyphMap);
@@ -29,6 +30,7 @@ export default function BudgetDetailScreen() {
   const transactions = useFinanceStore((state) => state.transactions);
   const categories = useFinanceStore((state) => state.preferences.categories);
   const currency = useFinanceStore((state) => state.profile.currency);
+  const dateFormat = useFinanceStore((state) => state.preferences.dateFormat);
   const accounts = useFinanceStore((state) => state.accounts);
   const removeBudgetGoal = useFinanceStore((state) => state.removeBudgetGoal);
 
@@ -269,7 +271,7 @@ export default function BudgetDetailScreen() {
                       </Text>
                       <View style={styles.transactionMeta}>
                         <Text style={styles.transactionDate}>
-                          {dayjs(transaction.date).format('MMM D, YYYY')}
+                          {formatDate(transaction.date, dateFormat)}
                         </Text>
                         {account && (
                           <>

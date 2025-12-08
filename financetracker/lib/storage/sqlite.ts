@@ -62,11 +62,13 @@ const ensureSchema = async (db: SQLiteDatabase) => {
     CREATE TABLE IF NOT EXISTS profile (
       id INTEGER PRIMARY KEY NOT NULL,
       name TEXT NOT NULL,
-      currency TEXT NOT NULL
+      currency TEXT NOT NULL,
+      dateFormat TEXT NOT NULL DEFAULT 'dd/mm/yyyy'
     );
     CREATE TABLE IF NOT EXISTS preferences (
       id INTEGER PRIMARY KEY NOT NULL,
-      themeMode TEXT NOT NULL
+      themeMode TEXT NOT NULL,
+      dateFormat TEXT NOT NULL DEFAULT 'dd/mm/yyyy'
     );
     CREATE TABLE IF NOT EXISTS categories (
       id TEXT PRIMARY KEY NOT NULL,
@@ -131,20 +133,25 @@ const ensureSchema = async (db: SQLiteDatabase) => {
   // Add new budget_goals columns
   await ensureColumnExists(db, "budget_goals", "isRepeating", "INTEGER", "DEFAULT 1");
   await ensureColumnExists(db, "budget_goals", "createdAt", "TEXT", `DEFAULT '${new Date().toISOString()}'`);
+  
+  // Add dateFormat columns
+  await ensureColumnExists(db, "profile", "dateFormat", "TEXT", "DEFAULT 'dd/mm/yyyy'");
+  await ensureColumnExists(db, "preferences", "dateFormat", "TEXT", "DEFAULT 'dd/mm/yyyy'");
 
   const profileCount = await db.getFirstAsync<{ count: number }>("SELECT COUNT(*) as count FROM profile");
   if (!profileCount?.count) {
-    await db.runAsync("INSERT INTO profile (id, name, currency) VALUES (1, ?, ?)", [
+    await db.runAsync("INSERT INTO profile (id, name, currency, dateFormat) VALUES (1, ?, ?, ?)", [
       "Alicia Jeanelly",
       "USD",
+      "dd/mm/yyyy",
     ]);
   }
 
-  const preferencesCount = await db.getFirstAsync<{ count: number }>(
+  const preferenceCount = await db.getFirstAsync<{ count: number }>(
     "SELECT COUNT(*) as count FROM preferences",
   );
-  if (!preferencesCount?.count) {
-    await db.runAsync("INSERT INTO preferences (id, themeMode) VALUES (1, ?)", ["dark"]);
+  if (!preferenceCount?.count) {
+    await db.runAsync("INSERT INTO preferences (id, themeMode, dateFormat) VALUES (1, ?, ?)", ["dark", "dd/mm/yyyy"]);
   }
 
   const categoryCount = await db.getFirstAsync<{ count: number }>(
@@ -247,11 +254,11 @@ interface BudgetGoalRow {
 export const fetchFinanceState = async (): Promise<FinanceStatePayload> => {
   const db = await getDatabase();
 
-  const profileRow = await db.getFirstAsync<Profile>("SELECT name, currency FROM profile LIMIT 1");
-  const profile: Profile = profileRow ?? { name: "Alicia Jeanelly", currency: "USD" };
+  const profileRow = await db.getFirstAsync<Profile>("SELECT name, currency, dateFormat FROM profile LIMIT 1");
+  const profile: Profile = profileRow ?? { name: "Alicia Jeanelly", currency: "USD", dateFormat: "dd/mm/yyyy" };
 
-  const preferenceRow = await db.getFirstAsync<{ themeMode: ThemeMode }>(
-    "SELECT themeMode FROM preferences LIMIT 1",
+  const preferenceRow = await db.getFirstAsync<{ themeMode: ThemeMode; dateFormat: string }>(
+    "SELECT themeMode, dateFormat FROM preferences LIMIT 1",
   );
 
   const categoryRows = await db.getAllAsync<{
@@ -290,6 +297,7 @@ export const fetchFinanceState = async (): Promise<FinanceStatePayload> => {
 
   const preferences: Preferences = {
     themeMode: preferenceRow?.themeMode ?? "dark",
+    dateFormat: (preferenceRow?.dateFormat as any) ?? profile.dateFormat ?? "dd/mm/yyyy",
     categories: categories.length ? categories : [...DEFAULT_CATEGORIES],
   };
 
@@ -481,15 +489,22 @@ export const deleteBudgetGoal = async (id: string) => {
 
 export const saveProfile = async (profile: Profile) => {
   const db = await getDatabase();
-  await db.runAsync("UPDATE profile SET name = ?, currency = ? WHERE id = 1", [
+  await db.runAsync("UPDATE profile SET name = ?, currency = ?, dateFormat = ? WHERE id = 1", [
     profile.name,
     profile.currency,
+    profile.dateFormat,
   ]);
 };
 
 export const saveThemeMode = async (mode: ThemeMode) => {
   const db = await getDatabase();
   await db.runAsync("UPDATE preferences SET themeMode = ? WHERE id = 1", [mode]);
+};
+
+export const saveDateFormat = async (format: string) => {
+  const db = await getDatabase();
+  await db.runAsync("UPDATE preferences SET dateFormat = ? WHERE id = 1", [format]);
+  await db.runAsync("UPDATE profile SET dateFormat = ? WHERE id = 1", [format]);
 };
 
 export const saveCategory = async (category: Category) => {

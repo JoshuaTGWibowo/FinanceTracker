@@ -28,7 +28,7 @@ import {
   sortTransactionsByRecency,
   type TransactionVisualVariant,
 } from "../../lib/transactions";
-import { truncateWords } from "../../lib/text";
+import { truncateWords, formatDate } from "../../lib/text";
 import { buildMonthlyPeriods } from "../../lib/periods";
 
 const formatCurrency = (
@@ -100,6 +100,7 @@ export default function TransactionsScreen() {
   const theme = useAppTheme();
   const transactions = useFinanceStore((state) => state.transactions);
   const currency = useFinanceStore((state) => state.profile.currency);
+  const dateFormat = useFinanceStore((state) => state.preferences.dateFormat);
   const categories = useFinanceStore((state) => state.preferences.categories);
   const recurringTransactions = useFinanceStore((state) => state.recurringTransactions);
   const logRecurringTransaction = useFinanceStore((state) => state.logRecurringTransaction);
@@ -396,10 +397,10 @@ export default function TransactionsScreen() {
       });
     }
     if (startDate) {
-      filters.push({ key: "start", label: startDate.format("MMM D"), type: "start" });
+      filters.push({ key: "start", label: formatDate(startDate.toDate(), dateFormat), type: "start" });
     }
     if (endDate) {
-      filters.push({ key: "end", label: endDate.format("MMM D"), type: "end" });
+      filters.push({ key: "end", label: formatDate(endDate.toDate(), dateFormat), type: "end" });
     }
     if (categoryTypeFilter) {
       filters.push({
@@ -885,7 +886,7 @@ export default function TransactionsScreen() {
                           </Text>
                         ) : null}
                         <Text style={styles.recurringDate}>
-                          {dayjs(item.nextOccurrence).format("MMM D")} • {item.frequency}
+                          {formatDate(item.nextOccurrence, dateFormat)} • {item.frequency}
                         </Text>
                       </View>
                       <Pressable
@@ -1049,7 +1050,7 @@ export default function TransactionsScreen() {
                     style={styles.dateButton}
                   >
                     <Text style={styles.dateButtonText}>
-                      {startDate ? startDate.format("MMM D") : "Start"}
+                      {startDate ? formatDate(startDate.toDate(), dateFormat) : "Start"}
                     </Text>
                   </Pressable>
                   <Text style={styles.filterSeparator}>to</Text>
@@ -1058,7 +1059,7 @@ export default function TransactionsScreen() {
                     style={styles.dateButton}
                   >
                     <Text style={styles.dateButtonText}>
-                      {endDate ? endDate.format("MMM D") : "End"}
+                      {endDate ? formatDate(endDate.toDate(), dateFormat) : "End"}
                     </Text>
                   </Pressable>
                 </View>

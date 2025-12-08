@@ -32,6 +32,7 @@ import {
   useFinanceStore,
 } from "../../lib/store";
 import { isCategoryActiveForAccount } from "../../lib/categoryUtils";
+import { formatDate } from "../../lib/text";
 import { AccountPicker } from "../accounts/AccountPicker";
 
 interface TransactionFormProps {
@@ -215,6 +216,7 @@ export function TransactionForm({
 }: TransactionFormProps) {
   const router = useRouter();
   const theme = useAppTheme();
+  const dateFormat = useFinanceStore((state) => state.preferences.dateFormat);
   const insets = useSafeAreaInsets();
   const styles = useMemo(() => createStyles(theme, insets), [theme, insets]);
   const currency = useFinanceStore((state) => state.profile.currency);
@@ -738,7 +740,7 @@ export function TransactionForm({
                 onPress={() => setCalendarVisible(true)}
               >
                 <Ionicons name="calendar-outline" size={20} color={theme.colors.textMuted} />
-                <Text style={styles.dateTextCompact}>{dayjs(date).format("dddd, MM/DD/YYYY")}</Text>
+                <Text style={styles.dateTextCompact}>{dayjs(date).format("dddd")}, {formatDate(date, dateFormat)}</Text>
               </Pressable>
               <Pressable
                 style={styles.dateNavButton}

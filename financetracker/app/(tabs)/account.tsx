@@ -16,8 +16,13 @@ import { Ionicons } from "@expo/vector-icons";
 
 import { useAppTheme } from "../../theme";
 import { ThemeMode, useFinanceStore } from "../../lib/store";
+import { DateFormat } from "../../lib/types";
 
 const currencies = ["USD", "EUR", "GBP", "CAD", "AUD", "JPY"];
+const dateFormats: { value: DateFormat; label: string }[] = [
+  { value: "dd/mm/yyyy", label: "DD/MM/YYYY" },
+  { value: "mm/dd/yyyy", label: "MM/DD/YYYY" },
+];
 
 export default function AccountScreen() {
   const theme = useAppTheme();
@@ -26,6 +31,8 @@ export default function AccountScreen() {
   const updateProfile = useFinanceStore((state) => state.updateProfile);
   const themeMode = useFinanceStore((state) => state.preferences.themeMode);
   const setThemeMode = useFinanceStore((state) => state.setThemeMode);
+  const dateFormat = useFinanceStore((state) => state.preferences.dateFormat);
+  const setDateFormat = useFinanceStore((state) => state.setDateFormat);
   const accounts = useFinanceStore((state) => state.accounts);
   const transactions = useFinanceStore((state) => state.transactions);
   const budgetGoals = useFinanceStore((state) => state.budgetGoals);
@@ -197,6 +204,36 @@ export default function AccountScreen() {
                     />
                     <Text style={[styles.themeChipText, active && styles.themeChipTextActive]}>
                       {mode === "dark" ? "Dark" : "Light"}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+
+          <View style={[theme.components.surface, styles.sectionCard]}>
+            <Text style={styles.sectionTitle}>Date Format</Text>
+            <Text style={styles.sectionSubtitle}>
+              Choose how dates are displayed throughout the app.
+            </Text>
+            <View style={styles.themeRow}>
+              {dateFormats.map((format) => {
+                const active = dateFormat === format.value;
+                return (
+                  <Pressable
+                    key={format.value}
+                    style={[styles.themeChip, active && styles.themeChipActive]}
+                    onPress={() => void setDateFormat(format.value)}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: active }}
+                  >
+                    <Ionicons
+                      name="calendar-outline"
+                      size={18}
+                      color={active ? theme.colors.text : theme.colors.textMuted}
+                    />
+                    <Text style={[styles.themeChipText, active && styles.themeChipTextActive]}>
+                      {format.label}
                     </Text>
                   </Pressable>
                 );

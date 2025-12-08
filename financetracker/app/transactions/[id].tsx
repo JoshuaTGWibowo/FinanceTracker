@@ -15,6 +15,7 @@ import dayjs from "dayjs";
 
 import { useAppTheme } from "../../theme";
 import { useFinanceStore, type TransactionType } from "../../lib/store";
+import { formatDate } from "../../lib/text";
 
 const formatCurrency = (
   value: number,
@@ -37,6 +38,7 @@ export default function TransactionDetailsScreen() {
   const styles = useMemo(() => createStyles(theme, insets), [theme, insets]);
 
   const currency = useFinanceStore((state) => state.profile.currency);
+  const dateFormat = useFinanceStore((state) => state.preferences.dateFormat);
   const transaction = useFinanceStore((state) =>
     state.transactions.find((item) => item.id === id),
   );
@@ -149,7 +151,7 @@ export default function TransactionDetailsScreen() {
             <View style={styles.metaRow}>
               <Ionicons name="calendar" size={16} color={theme.colors.textMuted} />
               <Text style={styles.metaLabel}>Date</Text>
-              <Text style={styles.metaValue}>{dayjs(transaction.date).format("MMM D, YYYY")}</Text>
+              <Text style={styles.metaValue}>{formatDate(transaction.date, dateFormat)}</Text>
             </View>
             <View style={styles.metaRow}>
               <Ionicons name="wallet" size={16} color={theme.colors.textMuted} />

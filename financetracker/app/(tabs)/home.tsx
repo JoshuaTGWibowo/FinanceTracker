@@ -11,7 +11,7 @@ import { MonthlyCalendar } from "../../components/MonthlyCalendar";
 import { useAppTheme } from "../../theme";
 import { BudgetGoal, useFinanceStore } from "../../lib/store";
 import { filterTransactionsByAccount, getTransactionDelta, getTransactionVisualState, sortTransactionsByRecency } from "../../lib/transactions";
-import { truncateWords } from "../../lib/text";
+import { truncateWords, formatDate } from "../../lib/text";
 import { syncMetricsToSupabase } from "../../lib/sync-service";
 import { isAuthenticated } from "../../lib/supabase";
 import { doesCategoryMatchBudget } from "../../lib/categoryUtils";
@@ -80,6 +80,7 @@ const summarizeGoalProgress = (
 
 export default function HomeScreen() {
   const theme = useAppTheme();
+  const dateFormat = useFinanceStore((state) => state.preferences.dateFormat);
   const router = useRouter();
   const transactions = useFinanceStore((state) => state.transactions);
   const profile = useFinanceStore((state) => state.profile);
@@ -991,7 +992,7 @@ export default function HomeScreen() {
                     <View style={styles.recentCopy}>
                       <Text style={styles.recentNote}>{transaction.note}</Text>
                       <Text style={styles.recentMeta}>
-                        {dayjs(transaction.date).format("ddd, D MMM")} •
+                        {formatDate(transaction.date, dateFormat)} •
                         {" "}
                         {isTransfer ? `Transfer · ${transferLabel}` : transaction.category}
                       </Text>

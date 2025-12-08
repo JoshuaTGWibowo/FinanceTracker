@@ -2,6 +2,8 @@ export type TransactionType = "income" | "expense" | "transfer";
 
 export type CategoryType = "expense" | "income" | "debt";
 
+export type DateFormat = "dd/mm/yyyy" | "mm/dd/yyyy";
+
 export type AccountType = "cash" | "bank" | "card" | "investment";
 
 export interface Account {
@@ -153,11 +155,13 @@ export interface BudgetGoal {
 export interface Profile {
   name: string;
   currency: string;
+  dateFormat: DateFormat;
 }
 
 export interface Preferences {
   themeMode: ThemeMode;
   categories: Category[];
+  dateFormat: DateFormat;
 }
 
 export const createDefaultAccount = (currency: string): Account => ({
