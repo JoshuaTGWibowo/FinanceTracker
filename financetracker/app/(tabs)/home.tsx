@@ -723,6 +723,7 @@ export default function HomeScreen() {
           transactions={scopedTransactions}
           selectedAccountId={selectedAccountId}
           currency={baseCurrency}
+          onDatePress={(date) => router.push({ pathname: "/(tabs)/transactions", params: { date } })}
         />
 
         <View style={[theme.components.surface, styles.topSpendingCard]}>

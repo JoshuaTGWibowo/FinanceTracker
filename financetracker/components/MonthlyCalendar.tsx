@@ -9,6 +9,7 @@ interface MonthlyCalendarProps {
   transactions: Transaction[];
   selectedAccountId?: string | null;
   currency: string;
+  onDatePress?: (date: string) => void;
 }
 
 // Calculate net for a specific day
@@ -37,7 +38,7 @@ const calculateDayNet = (
     }, 0);
 };
 
-export function MonthlyCalendar({ transactions, selectedAccountId, currency }: MonthlyCalendarProps) {
+export function MonthlyCalendar({ transactions, selectedAccountId, currency, onDatePress }: MonthlyCalendarProps) {
   const theme = useAppTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
   const [currentMonth, setCurrentMonth] = useState(dayjs());
@@ -150,13 +151,21 @@ export function MonthlyCalendar({ transactions, selectedAccountId, currency }: M
       <View style={styles.calendarGrid}>
         {calendarData.days.map((day, index) => {
           const isCurrentMonth = day.date.month() === currentMonth.month();
+          const hasTransactions = isCurrentMonth && day.net !== 0;
+          
           return (
-            <View
+            <Pressable
               key={index}
               style={[
                 styles.dayCell,
                 day.isToday && styles.todayCell,
               ]}
+              onPress={() => {
+                if (isCurrentMonth && hasTransactions && onDatePress) {
+                  onDatePress(day.date.format('YYYY-MM-DD'));
+                }
+              }}
+              disabled={!isCurrentMonth || !hasTransactions || !onDatePress}
             >
               <Text
                 style={[
@@ -180,7 +189,7 @@ export function MonthlyCalendar({ transactions, selectedAccountId, currency }: M
               {isCurrentMonth && day.isFuture && (
                 <Text style={styles.futureIndicator}>•</Text>
               )}
-            </View>
+            </Pressable>
           );
         })}
       </View>

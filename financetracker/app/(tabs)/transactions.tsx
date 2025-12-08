@@ -105,7 +105,7 @@ export default function TransactionsScreen() {
   const logRecurringTransaction = useFinanceStore((state) => state.logRecurringTransaction);
   const accounts = useFinanceStore((state) => state.accounts);
   const router = useRouter();
-  const { category: categoryParam } = useLocalSearchParams<{ category?: string | string[] }>();
+  const { category: categoryParam, date: dateParam } = useLocalSearchParams<{ category?: string | string[]; date?: string }>();
 
   const baseCurrency = currency || "USD";
 
@@ -205,6 +205,30 @@ export default function TransactionsScreen() {
       setCategoryTypeFilter(normalizeCategoryType(match.type));
     }
   }, [categories, categoryParam]);
+
+  // Handle date parameter from calendar navigation
+  useEffect(() => {
+    if (!dateParam) {
+      return;
+    }
+
+    const date = dayjs(dateParam);
+    if (!date.isValid()) {
+      return;
+    }
+
+    // Set both start and end date to the same date for single-day filter
+    setStartDate(date);
+    setEndDate(date);
+    setFiltersExpanded(true);
+
+    // Set the period to the month containing this date
+    const monthKey = date.startOf("month").format("YYYY-MM");
+    setSelectedPeriod(monthKey);
+
+    // Clear the date param from URL after applying the filter
+    router.replace("/(tabs)/transactions");
+  }, [dateParam, router]);
 
   const insets = useSafeAreaInsets();
   const styles = useMemo(() => createStyles(theme, insets), [theme, insets]);
