@@ -143,6 +143,10 @@ export interface BudgetGoal {
   target: number;
   period: "week" | "month";
   category: string;
+  isRepeating: boolean;
+  createdAt: string;
+  currentSpending?: number;
+  progress?: number;
 }
 
 export interface Profile {

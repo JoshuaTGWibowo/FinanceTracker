@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import {
   Alert,
   KeyboardAvoidingView,
@@ -10,6 +10,7 @@ import {
   Text,
   TextInput,
   View,
+  Switch,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
@@ -17,6 +18,7 @@ import { Ionicons } from "@expo/vector-icons";
 
 import { useAppTheme } from "../../theme";
 import { Category, useFinanceStore } from "../../lib/store";
+import { doesCategoryMatchBudget } from "../../lib/categoryUtils";
 
 const goalPeriods = ["month", "week"] as const;
 
@@ -38,9 +40,90 @@ export default function BudgetsScreen() {
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
   const [categoryModalVisible, setCategoryModalVisible] = useState(false);
   const [categorySearch, setCategorySearch] = useState("");
+  const [isRepeating, setIsRepeating] = useState(true);
+
+  const transactions = useFinanceStore((state) => state.transactions);
 
   const insets = useSafeAreaInsets();
   const styles = useMemo(() => createStyles(theme, insets), [theme, insets]);
+
+  // Calculate budget progress based on transactions
+  const budgetsWithProgress = useMemo(() => {
+    console.log('[Budget Progress] Calculating for', budgetGoals.length, 'budgets with', transactions.length, 'transactions');
+    console.log('[Budget Progress] Sample transaction categories:', transactions.slice(0, 3).map(t => ({ cat: t.category, type: t.type })));
+    console.log('[Budget Progress] Available categories:', categories.slice(0, 5).map(c => ({ id: c.id, name: c.name, parent: c.parentCategoryId })));
+    
+    return budgetGoals.map(goal => {
+        const goalStartDate = new Date(goal.createdAt);
+        const now = new Date();
+        
+        // Calculate period dates
+        let periodStart: Date;
+        let periodEnd: Date;
+        
+        if (goal.period === 'week') {
+          // Weekly: Monday to Sunday
+          const dayOfWeek = now.getDay();
+          const diffToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+          periodStart = new Date(now);
+          periodStart.setDate(now.getDate() + diffToMonday);
+          periodStart.setHours(0, 0, 0, 0);
+          
+          periodEnd = new Date(periodStart);
+          periodEnd.setDate(periodStart.getDate() + 6);
+          periodEnd.setHours(23, 59, 59, 999);
+        } else {
+          // Monthly: 1st to end of month
+          periodStart = new Date(now.getFullYear(), now.getMonth(), 1);
+          periodEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+        }
+        
+        // Only count if goal was created before period end
+        if (goalStartDate > periodEnd) {
+          return { ...goal, currentSpending: 0, progress: 0 };
+        }
+        
+        // Filter transactions matching budget
+        const matchingTransactions = transactions.filter(t => {
+          const txDate = new Date(t.date);
+          const inDateRange = txDate >= periodStart && txDate <= periodEnd;
+          const isExpense = t.type === 'expense';
+          const matchesCategory = doesCategoryMatchBudget(t.category, goal.category, categories, true);
+          
+          if (isExpense && inDateRange) {
+            console.log('[Budget Filter]', goal.name, '- checking tx:', {
+              amount: t.amount,
+              txCategory: t.category,
+              budgetCategory: goal.category,
+              matches: matchesCategory,
+              date: txDate.toISOString()
+            });
+          }
+          
+          return isExpense && matchesCategory && inDateRange;
+        });
+        
+        const spending = matchingTransactions.reduce((sum, t) => sum + Math.abs(t.amount), 0);
+        const progress = goal.target > 0 ? Math.min((spending / goal.target) * 100, 100) : 0;
+        
+        // Debug logging
+        console.log(`[Budget Result] ${goal.name} (${goal.category}):`, {
+          matchingTxCount: matchingTransactions.length,
+          spending,
+          target: goal.target,
+          progress: `${progress}%`,
+          periodStart: periodStart.toISOString(),
+          periodEnd: periodEnd.toISOString(),
+          totalExpenses: transactions.filter(t => t.type === 'expense' && new Date(t.date) >= periodStart && new Date(t.date) <= periodEnd).length
+        });
+        
+        return {
+          ...goal,
+          currentSpending: spending,
+          progress: Math.round(progress)
+        };
+    });
+  }, [budgetGoals, transactions, categories]);
 
   const groupedCategories = useMemo(() => {
     const parentCategories = categories.filter((category) => !category.parentCategoryId);
@@ -88,11 +171,14 @@ export default function BudgetsScreen() {
       target: targetValue,
       period: goalPeriod,
       category: selectedCategory.name,
+      isRepeating,
+      createdAt: new Date().toISOString(),
     });
 
     setGoalName("");
     setGoalTarget("");
     setSelectedCategory(null);
+    setIsRepeating(true);
     Alert.alert("Success", "Budget goal created successfully.");
   };
 
@@ -204,6 +290,23 @@ export default function BudgetsScreen() {
                 </Pressable>
               </View>
 
+              <View style={styles.fieldGroup}>
+                <View style={styles.switchRow}>
+                  <View style={styles.flex}>
+                    <Text style={styles.label}>Repeating budget</Text>
+                    <Text style={styles.switchDescription}>
+                      Automatically track every {goalPeriod === 'week' ? 'week' : 'month'}
+                    </Text>
+                  </View>
+                  <Switch
+                    value={isRepeating}
+                    onValueChange={setIsRepeating}
+                    trackColor={{ false: theme.colors.border, true: theme.colors.primary + '80' }}
+                    thumbColor={isRepeating ? theme.colors.primary : theme.colors.surface}
+                  />
+                </View>
+              </View>
+
               <Pressable style={styles.primaryButton} onPress={handleCreateGoal}>
                 <Ionicons name="add" size={18} color={theme.colors.text} />
                 <Text style={styles.primaryButtonText}>Create budget</Text>
@@ -224,10 +327,15 @@ export default function BudgetsScreen() {
               </View>
             </View>
 
-            {budgetGoals.length > 0 ? (
+            {budgetsWithProgress.length > 0 ? (
               <View style={styles.goalsList}>
-                {budgetGoals.map((goal) => {
+                {budgetsWithProgress.map((goal) => {
                   const category = categories.find((c) => c.name === goal.category);
+                  const spending = goal.currentSpending ?? 0;
+                  const progress = goal.progress ?? 0;
+                  const remaining = Math.max(goal.target - spending, 0);
+                  const isOverBudget = spending > goal.target;
+                  
                   return (
                     <View key={goal.id} style={styles.goalCard}>
                       <View style={styles.goalCardHeader}>
@@ -250,6 +358,15 @@ export default function BudgetsScreen() {
                               <Ionicons name="calendar" size={11} color={theme.colors.textMuted} />
                               <Text style={styles.goalMetaText}>{goal.period}ly</Text>
                             </View>
+                            {goal.isRepeating && (
+                              <>
+                                <Text style={styles.goalMetaDivider}>•</Text>
+                                <View style={styles.goalMetaBadge}>
+                                  <Ionicons name="repeat" size={11} color={theme.colors.textMuted} />
+                                  <Text style={styles.goalMetaText}>Repeating</Text>
+                                </View>
+                              </>
+                            )}
                           </View>
                         </View>
                         <Pressable
@@ -272,11 +389,38 @@ export default function BudgetsScreen() {
                           <Ionicons name="trash-outline" size={16} color={theme.colors.danger} />
                         </Pressable>
                       </View>
-                      <View style={styles.goalCardTarget}>
-                        <Text style={styles.goalCardTargetLabel}>Target</Text>
-                        <Text style={styles.goalCardTargetAmount}>
-                          {currency} {goal.target.toLocaleString()}
-                        </Text>
+
+                      {/* Progress Section */}
+                      <View style={styles.progressSection}>
+                        <View style={styles.progressHeader}>
+                          <Text style={styles.progressText}>
+                            {currency}{spending.toFixed(2)} of {currency}{goal.target.toFixed(2)}
+                          </Text>
+                          <Text style={[styles.progressPercentage, isOverBudget && styles.progressPercentageOver]}>
+                            {progress}%
+                          </Text>
+                        </View>
+                        <View style={styles.progressBar}>
+                          <View 
+                            style={[
+                              styles.progressFill, 
+                              { width: `${Math.min(progress, 100)}%` },
+                              isOverBudget ? styles.progressFillOver : styles.progressFillGood
+                            ]} 
+                          />
+                        </View>
+                        {isOverBudget ? (
+                          <View style={styles.progressWarning}>
+                            <Ionicons name="warning" size={14} color={theme.colors.danger} />
+                            <Text style={styles.progressWarningText}>
+                              Over budget by {currency}{(spending - goal.target).toFixed(2)}
+                            </Text>
+                          </View>
+                        ) : (
+                          <Text style={styles.progressRemaining}>
+                            {currency}{remaining.toFixed(2)} remaining
+                          </Text>
+                        )}
                       </View>
                     </View>
                   );
@@ -902,5 +1046,73 @@ const createStyles = (
       color: theme.colors.textMuted,
       textAlign: "center",
       paddingVertical: theme.spacing.xl,
+    },
+    switchRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: theme.spacing.md,
+    },
+    switchDescription: {
+      fontSize: 12,
+      color: theme.colors.textMuted,
+      marginTop: 2,
+    },
+    progressSection: {
+      paddingTop: theme.spacing.md,
+      borderTopWidth: 1,
+      borderTopColor: theme.colors.border,
+      gap: theme.spacing.xs,
+    },
+    progressHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: 6,
+    },
+    progressText: {
+      fontSize: 13,
+      fontWeight: '600',
+      color: theme.colors.text,
+    },
+    progressPercentage: {
+      fontSize: 13,
+      fontWeight: '600',
+      color: theme.colors.primary,
+    },
+    progressPercentageOver: {
+      color: theme.colors.danger,
+    },
+    progressBar: {
+      height: 8,
+      backgroundColor: theme.colors.border,
+      borderRadius: theme.radii.pill,
+      overflow: 'hidden',
+    },
+    progressFill: {
+      height: '100%',
+      borderRadius: theme.radii.pill,
+    },
+    progressFillGood: {
+      backgroundColor: theme.colors.success,
+    },
+    progressFillOver: {
+      backgroundColor: theme.colors.danger,
+    },
+    progressRemaining: {
+      fontSize: 12,
+      color: theme.colors.textMuted,
+      marginTop: 2,
+    },
+    progressWarning: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      marginTop: 2,
+    },
+    progressWarningText: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: theme.colors.danger,
     },
   });

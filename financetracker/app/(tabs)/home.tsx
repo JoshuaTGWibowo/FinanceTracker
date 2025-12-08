@@ -14,6 +14,7 @@ import { filterTransactionsByAccount, getTransactionDelta, getTransactionVisualS
 import { truncateWords } from "../../lib/text";
 import { syncMetricsToSupabase } from "../../lib/sync-service";
 import { isAuthenticated } from "../../lib/supabase";
+import { doesCategoryMatchBudget } from "../../lib/categoryUtils";
 
 const formatCurrency = (
   value: number,
@@ -33,6 +34,7 @@ const summarizeGoalProgress = (
   currency: string,
   transactions: ReturnType<typeof useFinanceStore.getState>["transactions"],
   accountId: string | null,
+  categories: ReturnType<typeof useFinanceStore.getState>["preferences"]["categories"],
 ) => {
   const now = dayjs();
   const start = goal.period === "week" ? now.startOf("week") : now.startOf("month");
@@ -45,7 +47,10 @@ const summarizeGoalProgress = (
 
   if (goal.category) {
     const spent = withinPeriod
-      .filter((transaction) => transaction.type === "expense" && transaction.category === goal.category)
+      .filter((transaction) => 
+        transaction.type === "expense" && 
+        doesCategoryMatchBudget(transaction.category, goal.category, categories)
+      )
       .reduce((acc, transaction) => acc + transaction.amount, 0);
 
     return {
@@ -83,6 +88,7 @@ export default function HomeScreen() {
   const logRecurringTransaction = useFinanceStore((state) => state.logRecurringTransaction);
   const accounts = useFinanceStore((state) => state.accounts);
   const addAccount = useFinanceStore((state) => state.addAccount);
+  const categories = useFinanceStore((state) => state.preferences.categories);
 
   const [createAccountModalVisible, setCreateAccountModalVisible] = useState(false);
   const [accountFormName, setAccountFormName] = useState("");
@@ -867,6 +873,7 @@ export default function HomeScreen() {
                   currency,
                   scopedTransactions,
                   selectedAccountId,
+                  categories,
                 );
                 const progressPercent = Math.round(progress.percentage * 100);
                 const goalComplete = progressPercent >= 100;

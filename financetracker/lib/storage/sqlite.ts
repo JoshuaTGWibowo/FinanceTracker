@@ -124,6 +124,10 @@ const ensureSchema = async (db: SQLiteDatabase) => {
   await ensureColumnExists(db, "categories", "icon", "TEXT");
   await ensureColumnExists(db, "categories", "parentCategoryId", "TEXT");
   await ensureColumnExists(db, "categories", "activeAccountIds", "TEXT");
+  
+  // Add new budget_goals columns
+  await ensureColumnExists(db, "budget_goals", "isRepeating", "INTEGER", "DEFAULT 1");
+  await ensureColumnExists(db, "budget_goals", "createdAt", "TEXT", `DEFAULT '${new Date().toISOString()}'`);
 
   const profileCount = await db.getFirstAsync<{ count: number }>("SELECT COUNT(*) as count FROM profile");
   if (!profileCount?.count) {
@@ -331,6 +335,8 @@ export const fetchFinanceState = async (): Promise<FinanceStatePayload> => {
     target: row.target,
     period: row.period as BudgetGoal["period"],
     category: row.category,
+    isRepeating: row.isRepeating !== undefined ? Boolean(row.isRepeating) : true,
+    createdAt: row.createdAt || new Date().toISOString(),
   }));
 
   return {
@@ -439,14 +445,24 @@ export const saveRecurringTransaction = async (transaction: RecurringTransaction
 export const saveBudgetGoal = async (goal: BudgetGoal) => {
   const db = await getDatabase();
   await db.runAsync(
-    `INSERT INTO budget_goals (id, name, target, period, category)
-     VALUES (?, ?, ?, ?, ?)
+    `INSERT INTO budget_goals (id, name, target, period, category, isRepeating, createdAt)
+     VALUES (?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET
        name=excluded.name,
        target=excluded.target,
        period=excluded.period,
-       category=excluded.category`,
-    [goal.id, goal.name, goal.target, goal.period, goal.category ?? null],
+       category=excluded.category,
+       isRepeating=excluded.isRepeating,
+       createdAt=excluded.createdAt`,
+    [
+      goal.id, 
+      goal.name, 
+      goal.target, 
+      goal.period, 
+      goal.category ?? null,
+      goal.isRepeating ? 1 : 0,
+      goal.createdAt,
+    ],
   );
 };
 
