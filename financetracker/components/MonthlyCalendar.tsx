@@ -82,7 +82,8 @@ export function MonthlyCalendar({ transactions, selectedAccountId, currency }: M
       const date = startOfMonth.date(day);
       const net = calculateDayNet(transactions, date, selectedAccountId);
       const isToday = date.isSame(now, 'day');
-      const isFuture = date.isAfter(now, 'day');
+      // Only mark as future if it's in a future month, not if it's in the current month
+      const isFuture = date.isAfter(now, 'day') && !currentMonth.isSame(now, 'month');
       days.push({ date, net, isToday, isFuture });
     }
 
