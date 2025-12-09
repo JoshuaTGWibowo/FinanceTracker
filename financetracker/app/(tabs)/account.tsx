@@ -24,6 +24,24 @@ const dateFormats: { value: DateFormat; label: string }[] = [
   { value: "mm/dd/yyyy", label: "MM/DD/YYYY" },
 ];
 
+const timezones = [
+  { value: "Australia/Sydney", label: "Sydney (AEDT)" },
+  { value: "Australia/Melbourne", label: "Melbourne (AEDT)" },
+  { value: "Australia/Brisbane", label: "Brisbane (AEST)" },
+  { value: "Australia/Perth", label: "Perth (AWST)" },
+  { value: "Pacific/Auckland", label: "Auckland (NZDT)" },
+  { value: "Asia/Jakarta", label: "Jakarta (WIB)" },
+  { value: "Asia/Singapore", label: "Singapore (SGT)" },
+  { value: "Asia/Tokyo", label: "Tokyo (JST)" },
+  { value: "Asia/Hong_Kong", label: "Hong Kong (HKT)" },
+  { value: "Europe/London", label: "London (GMT)" },
+  { value: "Europe/Paris", label: "Paris (CET)" },
+  { value: "America/New_York", label: "New York (EST)" },
+  { value: "America/Los_Angeles", label: "Los Angeles (PST)" },
+  { value: "America/Chicago", label: "Chicago (CST)" },
+  { value: "UTC", label: "UTC" },
+];
+
 export default function AccountScreen() {
   const theme = useAppTheme();
   const router = useRouter();
@@ -33,6 +51,7 @@ export default function AccountScreen() {
   const setThemeMode = useFinanceStore((state) => state.setThemeMode);
   const dateFormat = useFinanceStore((state) => state.preferences.dateFormat);
   const setDateFormat = useFinanceStore((state) => state.setDateFormat);
+  const setTimezone = useFinanceStore((state) => state.setTimezone);
   const accounts = useFinanceStore((state) => state.accounts);
   const transactions = useFinanceStore((state) => state.transactions);
   const budgetGoals = useFinanceStore((state) => state.budgetGoals);
@@ -239,6 +258,38 @@ export default function AccountScreen() {
                 );
               })}
             </View>
+          </View>
+
+          <View style={[theme.components.surface, styles.sectionCard]}>
+            <Text style={styles.sectionTitle}>Timezone</Text>
+            <Text style={styles.sectionSubtitle}>
+              Affects mission timers and scheduling. Missions will reset based on your local time.
+            </Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.timezoneScroll}>
+              <View style={styles.timezoneRow}>
+                {timezones.map((tz) => {
+                  const active = profile.timezone === tz.value;
+                  return (
+                    <Pressable
+                      key={tz.value}
+                      style={[styles.timezoneChip, active && styles.timezoneChipActive]}
+                      onPress={() => void setTimezone(tz.value)}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: active }}
+                    >
+                      <Ionicons
+                        name="time-outline"
+                        size={16}
+                        color={active ? theme.colors.text : theme.colors.textMuted}
+                      />
+                      <Text style={[styles.timezoneChipText, active && styles.timezoneChipTextActive]}>
+                        {tz.label}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </ScrollView>
           </View>
 
           <View style={[theme.components.surface, styles.sectionCard]}>
@@ -599,6 +650,39 @@ const createStyles = (
     },
     buttonDisabled: {
       opacity: 0.5,
+    },
+    timezoneScroll: {
+      marginTop: theme.spacing.sm,
+    },
+    timezoneRow: {
+      flexDirection: "row",
+      gap: theme.spacing.sm,
+      paddingVertical: theme.spacing.xs,
+    },
+    timezoneChip: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: theme.spacing.xs,
+      paddingHorizontal: theme.spacing.md,
+      paddingVertical: theme.spacing.sm,
+      borderRadius: theme.radii.lg,
+      backgroundColor: theme.colors.surface,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      minWidth: 140,
+    },
+    timezoneChipActive: {
+      backgroundColor: theme.colors.primary + "20",
+      borderColor: theme.colors.primary,
+    },
+    timezoneChipText: {
+      ...theme.typography.subtitle,
+      color: theme.colors.textMuted,
+      fontSize: 13,
+    },
+    timezoneChipTextActive: {
+      color: theme.colors.text,
+      fontWeight: "600",
     },
   });
 

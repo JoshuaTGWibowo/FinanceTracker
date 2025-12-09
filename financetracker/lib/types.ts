@@ -156,6 +156,7 @@ export interface Profile {
   name: string;
   currency: string;
   dateFormat: DateFormat;
+  timezone: string;
 }
 
 export interface Preferences {

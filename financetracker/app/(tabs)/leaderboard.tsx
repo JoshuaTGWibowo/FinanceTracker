@@ -11,8 +11,6 @@ import { useFinanceStore } from "../../lib/store";
 import AuthForm from "../../components/AuthForm";
 import { SkeletonLoader, SkeletonCard, SkeletonListItem } from "../../components/SkeletonLoader";
 import { 
-  mockMissions,
-  mockCrewMissions,
   mockAchievements,
   mockLeaderboardData,
   calculateLevel, 
@@ -23,6 +21,7 @@ import {
   type MockAchievement 
 } from "../../lib/crew-mock-data";
 import { getLeaderboardStats, getLevelProgress } from "../../lib/points-service";
+import { getMissionsWithProgress, type Mission } from "../../lib/mission-service";
 
 export default function CrewScreen() {
   const theme = useAppTheme();
@@ -44,6 +43,11 @@ export default function CrewScreen() {
   
   const transactions = useFinanceStore((state) => state.transactions);
   const budgetGoals = useFinanceStore((state) => state.budgetGoals);
+  const profile = useFinanceStore((state) => state.profile);
+  
+  // Real mission data
+  const [missions, setMissions] = useState<Array<Mission & { progress: number; completed: boolean }>>([]);
+  const [isLoadingMissions, setIsLoadingMissions] = useState(false);
   
   // Real user stats from points service
   const [userStats, setUserStats] = useState<{
@@ -62,24 +66,42 @@ export default function CrewScreen() {
   const nextLevelPoints = pointsForNextLevel(userLevel);
 
   const filteredMissions = useMemo(() => {
-    // First filter by period
-    let missions = mockMissions.filter(m => m.period === missionPeriod);
+    // Filter individual missions by period and completion status
+    let filtered = missions.filter(m => m.missionType === 'individual');
+    
+    // Filter by period (map period names to timeframe in description)
+    filtered = filtered.filter(m => {
+      const desc = m.description.toLowerCase();
+      if (missionPeriod === 'daily') return desc.includes('today') || desc.includes('day');
+      if (missionPeriod === 'weekly') return desc.includes('week');
+      if (missionPeriod === 'monthly') return desc.includes('month');
+      return false;
+    });
     
     // Then filter by completion status
-    if (missionFilter === 'all') return missions;
-    if (missionFilter === 'completed') return missions.filter(m => (m.progress || 0) >= 100);
-    return missions.filter(m => (m.progress || 0) < 100);
-  }, [missionFilter, missionPeriod]);
+    if (missionFilter === 'all') return filtered;
+    if (missionFilter === 'completed') return filtered.filter(m => m.completed);
+    return filtered.filter(m => !m.completed);
+  }, [missions, missionFilter, missionPeriod]);
 
   const filteredCrewMissions = useMemo(() => {
-    // First filter by period
-    let missions = mockCrewMissions.filter(m => m.period === crewMissionPeriod);
+    // Filter crew missions by period and completion status
+    let filtered = missions.filter(m => m.missionType === 'crew');
+    
+    // Filter by period (map period names to timeframe in description)
+    filtered = filtered.filter(m => {
+      const desc = m.description.toLowerCase();
+      if (crewMissionPeriod === 'daily') return desc.includes('today') || desc.includes('day');
+      if (crewMissionPeriod === 'weekly') return desc.includes('week');
+      if (crewMissionPeriod === 'monthly') return desc.includes('month');
+      return false;
+    });
     
     // Then filter by completion status
-    if (crewMissionFilter === 'all') return missions;
-    if (crewMissionFilter === 'completed') return missions.filter(m => (m.progress || 0) >= 100);
-    return missions.filter(m => (m.progress || 0) < 100);
-  }, [crewMissionFilter, crewMissionPeriod]);
+    if (crewMissionFilter === 'all') return filtered;
+    if (crewMissionFilter === 'completed') return filtered.filter(m => m.completed);
+    return filtered.filter(m => !m.completed);
+  }, [missions, crewMissionFilter, crewMissionPeriod]);
 
   const checkAuth = async () => {
     const auth = await isAuthenticated();
@@ -115,8 +137,10 @@ export default function CrewScreen() {
     setIsRefreshing(true);
     await syncMetricsToSupabase(transactions, budgetGoals);
     await loadLeaderboard();
+    await loadUserStats();
+    await loadMissions();
     setIsRefreshing(false);
-  }, [transactions, budgetGoals, period]);
+  }, [transactions, budgetGoals, period, userStats]);
 
   useEffect(() => {
     checkAuth();
@@ -136,6 +160,14 @@ export default function CrewScreen() {
     }
   }, [transactions.length, isAuth]);
 
+  // Load missions when authenticated or transactions change
+  useEffect(() => {
+    if (isAuth && userStats) {
+      console.log(`[Leaderboard] Transactions changed (${transactions.length}), reloading missions...`);
+      loadMissions();
+    }
+  }, [transactions, isAuth, userStats?.streakDays, profile.timezone]);
+
   const loadUserStats = async () => {
     const result = await getLeaderboardStats();
     if (result.success && result.stats) {
@@ -151,21 +183,56 @@ export default function CrewScreen() {
     }
   };
 
-  const renderMission = (mission: MockMission, index: number, array: MockMission[]) => (
+  const loadMissions = async () => {
+    if (!isAuth) return;
+    
+    setIsLoadingMissions(true);
+    console.log(`[Leaderboard] Loading missions with ${transactions.length} transactions`);
+    
+    const result = await getMissionsWithProgress(
+      transactions,
+      userStats?.streakDays || 0,
+      'all' // Get all missions, we'll filter in the UI
+    );
+    
+    if (result.success && result.missions) {
+      console.log(`[Leaderboard] Loaded ${result.missions.length} missions`);
+      result.missions.forEach(m => {
+        console.log(`[Leaderboard] - ${m.title}: ${m.progress.toFixed(1)}% (${m.goalType})`);
+      });
+      setMissions(result.missions);
+    } else {
+      console.log('[Leaderboard] Failed to load missions:', result.error);
+    }
+    setIsLoadingMissions(false);
+  };
+
+  // Map goal types to icons
+  const getMissionIcon = (goalType: string): string => {
+    switch (goalType) {
+      case 'transactions_logged': return 'list';
+      case 'streak': return 'flame';
+      case 'savings_rate': return 'trending-up';
+      case 'budget_adherence': return 'checkmark-circle';
+      default: return 'trophy';
+    }
+  };
+
+  const renderMission = (mission: Mission & { progress: number; completed: boolean }, index: number, array: Array<Mission & { progress: number; completed: boolean }>) => (
     <View key={mission.id} style={[styles.missionCard, index === array.length - 1 && styles.lastItem]}>
       <View style={styles.missionHeader}>
         <View style={[styles.missionIcon, { backgroundColor: theme.colors.primary + '20' }]}>
-          <Ionicons name={mission.icon as any} size={20} color={theme.colors.primary} />
+          <Ionicons name={getMissionIcon(mission.goalType) as any} size={20} color={theme.colors.primary} />
         </View>
         <View style={styles.missionHeaderText}>
           <Text style={styles.missionTitle}>{mission.title}</Text>
           <Text style={styles.missionTime}>
-            {mission.ends_at ? getTimeRemaining(mission.ends_at) : 'No deadline'}
+            {mission.endsAt ? getTimeRemaining(mission.endsAt) : 'No deadline'}
           </Text>
         </View>
         <View style={styles.missionReward}>
           <Ionicons name="sparkles" size={14} color={theme.colors.accent} />
-          <Text style={styles.missionRewardText}>+{mission.points_reward}</Text>
+          <Text style={styles.missionRewardText}>+{mission.pointsReward}</Text>
         </View>
       </View>
       
@@ -180,7 +247,7 @@ export default function CrewScreen() {
             ]} 
           />
         </View>
-        <Text style={styles.progressText}>{mission.progress || 0}%</Text>
+        <Text style={styles.progressText}>{Math.round(mission.progress || 0)}%</Text>
       </View>
     </View>
   );

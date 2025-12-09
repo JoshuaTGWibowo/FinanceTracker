@@ -33,8 +33,10 @@ import {
 } from "./storage/sqlite";
 import { generateAllMockData } from "./mockData";
 import { triggerSync } from "./sync-service";
-import { awardTransactionPoints, updateDailyStreak } from "./points-service";
+import { awardTransactionPoints, updateDailyStreak, getLeaderboardStats } from "./points-service";
 import { checkAllBudgets } from "./budget-tracking";
+import { checkAndUpdateAllMissions } from "./mission-service";
+import { refreshExpiredMissions } from "./mission-refresh";
 
 export interface FinanceState {
   profile: Profile;
@@ -76,6 +78,7 @@ export interface FinanceState {
   updateProfile: (payload: Partial<Profile>) => Promise<void>;
   setThemeMode: (mode: ThemeMode) => Promise<void>;
   setDateFormat: (format: DateFormat) => Promise<void>;
+  setTimezone: (timezone: string) => Promise<void>;
   addCategory: (category: Omit<Category, "id">) => Promise<void>;
   updateCategory: (id: string, updates: Partial<Omit<Category, "id">>) => Promise<void>;
   setCategoryFormDraft: (
@@ -267,6 +270,7 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
     name: "Alicia Jeanelly",
     currency: "USD",
     dateFormat: "dd/mm/yyyy",
+    timezone: "Australia/Melbourne",
   },
   preferences: {
     themeMode: "dark",
@@ -357,13 +361,16 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
     });
 
     // Award points for logging transaction
-    awardTransactionPoints(payload).then((result) => {
+    awardTransactionPoints(payload).then(async (result) => {
       if (result.success && result.pointsAwarded) {
         console.log(`[Points] +${result.pointsAwarded} pts for transaction`);
         if (result.leveledUp) {
           console.log('[Points] 🎉 Level up!');
           // TODO: Trigger level-up modal via event emitter or global state
         }
+        // Force UI update by triggering state change
+        const currentState = get();
+        set({ transactions: [...currentState.transactions] });
       }
     }).catch(err => console.error('[Points] Error awarding points:', err));
 
@@ -371,15 +378,44 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
     updateDailyStreak().catch(err => console.error('[Points] Error updating streak:', err));
 
     // Check budget completion and award points
-    const state = get();
+    // IMPORTANT: Use get() to get the UPDATED state with the new transaction
+    const updatedState = get();
     checkAllBudgets(
-      state.budgetGoals, 
-      state.transactions, 
-      state.preferences.categories
+      updatedState.budgetGoals, 
+      updatedState.transactions, 
+      updatedState.preferences.categories
     ).catch(err => console.error('[Points] Error checking budgets:', err));
 
+    // Check and update mission progress with the NEW transaction included
+    (async () => {
+      try {
+        // Get fresh state to ensure new transaction is included
+        const currentTransactions = get().transactions;
+        console.log(`[Mission] Checking missions with ${currentTransactions.length} transactions`);
+        
+        const statsResult = await getLeaderboardStats();
+        if (statsResult.success && statsResult.stats) {
+          const result = await checkAndUpdateAllMissions(
+            currentTransactions, // Use fresh transactions with new one included
+            statsResult.stats.streakDays
+          );
+          if (result.success) {
+            if (result.completedMissions && result.completedMissions.length > 0) {
+              console.log(`[Mission] 🎉 Completed ${result.completedMissions.length} mission(s)!`);
+            }
+            // Always trigger a state update to refresh mission UI with new progress
+            const freshState = get();
+            set({ transactions: [...freshState.transactions] });
+            console.log('[Mission] Triggered UI refresh');
+          }
+        }
+      } catch (err) {
+        console.error('[Mission] Error in mission checking:', err);
+      }
+    })();
+
     // Trigger auto-sync after adding transaction
-    triggerSync(state.transactions, state.budgetGoals);
+    triggerSync(updatedState.transactions, updatedState.budgetGoals);
   },
   updateTransaction: async (id, updates) => {
     set((state) => {
@@ -647,6 +683,33 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
         dateFormat: format,
       },
     }));
+  },
+  setTimezone: async (timezone) => {
+    set((state) => ({
+      profile: { ...state.profile, timezone },
+    }));
+
+    const state = get();
+    await saveProfile(state.profile);
+    
+    // Trigger mission refresh with new timezone
+    console.log(`[Timezone] Changing timezone to ${timezone}, refreshing missions...`);
+    try {
+      const result = await refreshExpiredMissions(timezone);
+      if (result.success) {
+        if (result.refreshedCount && result.refreshedCount > 0) {
+          console.log(`[Timezone] 🌏 Refreshed ${result.refreshedCount} mission(s) for new timezone`);
+        } else {
+          console.log('[Timezone] No expired missions to refresh');
+        }
+        // Force UI refresh
+        set((state) => ({ profile: { ...state.profile, timezone } }));
+      } else {
+        console.error('[Timezone] Refresh failed:', result.error);
+      }
+    } catch (err) {
+      console.error('[Timezone] Error refreshing missions:', err);
+    }
   },
   setCategoryFormDraft: (updates) =>
     set((state) => {
