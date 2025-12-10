@@ -189,6 +189,22 @@ export default function RootLayout() {
             animation: "slide_from_bottom",
           }}
         />
+        <Stack.Screen
+          name="transactions/auto-add"
+          options={{
+            presentation: "modal",
+            headerShown: false,
+            animation: "slide_from_bottom",
+          }}
+        />
+        <Stack.Screen
+          name="transactions/auto-add-review"
+          options={{
+            presentation: "modal",
+            headerShown: false,
+            animation: "slide_from_right",
+          }}
+        />
       </Stack>
       
       <LevelUpModal

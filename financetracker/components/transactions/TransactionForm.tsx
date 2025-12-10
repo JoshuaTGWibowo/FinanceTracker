@@ -596,7 +596,14 @@ export function TransactionForm({
             <Text style={styles.cancelButton}>Cancel</Text>
           </Pressable>
           <Text style={styles.title}>{title}</Text>
-          <View style={styles.headerSpacer} />
+          <Pressable
+            style={styles.autoAddButton}
+            onPress={() => router.push('/transactions/auto-add')}
+            accessibilityRole="button"
+            accessibilityLabel="Auto add transaction from receipt"
+          >
+            <Ionicons name="sparkles" size={20} color={theme.colors.primary} />
+          </Pressable>
         </View>
 
         <ScrollView
@@ -1207,6 +1214,14 @@ const createStyles = (
     },
     headerSpacer: {
       width: theme.screen.isSmallDevice ? 50 : 60,
+    },
+    autoAddButton: {
+      width: theme.screen.isSmallDevice ? 40 : 44,
+      height: theme.screen.isSmallDevice ? 40 : 44,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderRadius: theme.radii.pill,
+      backgroundColor: `${theme.colors.primary}15`,
     },
     title: {
       fontSize: theme.screen.isSmallDevice ? 16 : 18,
