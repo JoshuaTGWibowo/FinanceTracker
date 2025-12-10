@@ -15,13 +15,11 @@ export default function RootLayout() {
   const themeMode = useFinanceStore((state) => state.preferences.themeMode);
   const hydrateFromDatabase = useFinanceStore((state) => state.hydrateFromDatabase);
   const isHydrated = useFinanceStore((state) => state.isHydrated);
-  const transactions = useFinanceStore((state) => state.transactions);
-  const budgetGoals = useFinanceStore((state) => state.budgetGoals);
   const statusBarStyle = themeMode === "light" ? "dark" : "light";
 
   // Level-up modal state
   const [levelUpVisible, setLevelUpVisible] = useState(false);
-  const [levelUpData, setLevelUpData] = useState({ level: 1, points: 0, reason: '' });
+  const [levelUpData] = useState({ level: 1, points: 0, reason: '' });
 
   useEffect(() => {
     hydrateFromDatabase();

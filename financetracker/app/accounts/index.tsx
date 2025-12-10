@@ -19,7 +19,6 @@ import { useRouter } from "expo-router";
 import { useAppTheme } from "../../theme";
 import { Account, AccountType, useFinanceStore } from "../../lib/store";
 
-const currencies = ["USD", "EUR", "GBP", "CAD", "AUD", "JPY"];
 const accountTypes: AccountType[] = ["cash", "bank", "card", "investment"];
 const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
   cash: "Cash",

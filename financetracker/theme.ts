@@ -137,6 +137,12 @@ const buildComponents = (colors: Colors, screen: ReturnType<typeof useScreenSize
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
   },
+  inputSurface: {
+    backgroundColor: colors.surfaceElevated,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
   chip: {
     borderRadius: radii.pill,
     paddingHorizontal: spacing.lg,

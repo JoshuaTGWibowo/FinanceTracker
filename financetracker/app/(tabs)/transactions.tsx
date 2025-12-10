@@ -2321,25 +2321,25 @@ const createStyles = (theme: any, insets: any) =>
     modalFlex: {
       flex: 1,
     },
-    modalHeader: {
+    accountModalHeader: {
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "space-between",
       paddingHorizontal: 24,
       paddingVertical: 16,
     },
-    modalTitle: {
+    accountModalTitle: {
       fontSize: 18,
       fontWeight: "600",
       color: theme.colors.text,
     },
-    modalClose: {
+    accountModalClose: {
       padding: 8,
     },
     modalBody: {
       flex: 1,
     },
-    modalContent: {
+    accountModalContent: {
       padding: 24,
       gap: 20,
     },

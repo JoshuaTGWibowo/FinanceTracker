@@ -35,9 +35,6 @@ export default function CategoriesScreen() {
   const [activeTab, setActiveTab] = useState<CategoryType>("expense");
   const [query, setQuery] = useState("");
 
-  const accountLabel =
-    activeAccounts.length === 1 ? activeAccounts[0].name : `${activeAccounts.length} wallets`;
-
   const groupedCategories = useMemo(() => {
     const searchText = query.trim().toLowerCase();
     const matchesSearch = (category: Category) =>

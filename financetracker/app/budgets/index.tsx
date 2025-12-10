@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState } from "react";
 import {
   Alert,
   KeyboardAvoidingView,
@@ -49,9 +49,11 @@ export default function BudgetsScreen() {
 
   // Calculate budget progress based on transactions
   const budgetsWithProgress = useMemo(() => {
-    console.log('[Budget Progress] Calculating for', budgetGoals.length, 'budgets with', transactions.length, 'transactions');
-    console.log('[Budget Progress] Sample transaction categories:', transactions.slice(0, 3).map(t => ({ cat: t.category, type: t.type })));
-    console.log('[Budget Progress] Available categories:', categories.slice(0, 5).map(c => ({ id: c.id, name: c.name, parent: c.parentCategoryId })));
+    if (__DEV__) {
+      console.log('[Budget Progress] Calculating for', budgetGoals.length, 'budgets with', transactions.length, 'transactions');
+      console.log('[Budget Progress] Sample transaction categories:', transactions.slice(0, 3).map(t => ({ cat: t.category, type: t.type })));
+      console.log('[Budget Progress] Available categories:', categories.slice(0, 5).map(c => ({ id: c.id, name: c.name, parent: c.parentCategoryId })));
+    }
     
     return budgetGoals.map(goal => {
         const goalStartDate = new Date(goal.createdAt);
@@ -88,17 +90,7 @@ export default function BudgetsScreen() {
           const txDate = new Date(t.date);
           const inDateRange = txDate >= periodStart && txDate <= periodEnd;
           const isExpense = t.type === 'expense';
-          const matchesCategory = doesCategoryMatchBudget(t.category, goal.category, categories, true);
-          
-          if (isExpense && inDateRange) {
-            console.log('[Budget Filter]', goal.name, '- checking tx:', {
-              amount: t.amount,
-              txCategory: t.category,
-              budgetCategory: goal.category,
-              matches: matchesCategory,
-              date: txDate.toISOString()
-            });
-          }
+          const matchesCategory = doesCategoryMatchBudget(t.category, goal.category, categories, __DEV__);
           
           return isExpense && matchesCategory && inDateRange;
         });
@@ -107,15 +99,17 @@ export default function BudgetsScreen() {
         const progress = goal.target > 0 ? Math.min((spending / goal.target) * 100, 100) : 0;
         
         // Debug logging
-        console.log(`[Budget Result] ${goal.name} (${goal.category}):`, {
-          matchingTxCount: matchingTransactions.length,
-          spending,
-          target: goal.target,
-          progress: `${progress}%`,
-          periodStart: periodStart.toISOString(),
-          periodEnd: periodEnd.toISOString(),
-          totalExpenses: transactions.filter(t => t.type === 'expense' && new Date(t.date) >= periodStart && new Date(t.date) <= periodEnd).length
-        });
+        if (__DEV__) {
+          console.log(`[Budget Result] ${goal.name} (${goal.category}):`, {
+            matchingTxCount: matchingTransactions.length,
+            spending,
+            target: goal.target,
+            progress: `${progress}%`,
+            periodStart: periodStart.toISOString(),
+            periodEnd: periodEnd.toISOString(),
+            totalExpenses: transactions.filter(t => t.type === 'expense' && new Date(t.date) >= periodStart && new Date(t.date) <= periodEnd).length
+          });
+        }
         
         return {
           ...goal,

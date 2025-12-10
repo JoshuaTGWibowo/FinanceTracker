@@ -33,7 +33,6 @@ import {
 } from "../../lib/store";
 import { isCategoryActiveForAccount } from "../../lib/categoryUtils";
 import { formatDate } from "../../lib/text";
-import { AccountPicker } from "../accounts/AccountPicker";
 
 interface TransactionFormProps {
   title: string;
@@ -271,7 +270,6 @@ export function TransactionForm({
     base.setHours(0, 0, 0, 0);
     return base;
   });
-  const [showDatePicker, setShowDatePicker] = useState(Platform.OS === "ios");
   const [detailsExpanded, setDetailsExpanded] = useState(() =>
     Boolean(
       initialValues?.participants?.length ||

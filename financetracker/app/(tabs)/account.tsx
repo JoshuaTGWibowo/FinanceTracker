@@ -54,7 +54,6 @@ export default function AccountScreen() {
   const setTimezone = useFinanceStore((state) => state.setTimezone);
   const accounts = useFinanceStore((state) => state.accounts);
   const transactions = useFinanceStore((state) => state.transactions);
-  const budgetGoals = useFinanceStore((state) => state.budgetGoals);
   const loadMockData = useFinanceStore((state) => state.loadMockData);
   const clearAllDataAndReload = useFinanceStore((state) => state.clearAllDataAndReload);
 

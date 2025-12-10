@@ -185,7 +185,7 @@ export default function EditCategoryScreen() {
         <View style={styles.helperCard}>
           <Ionicons name="information-circle" size={18} color={theme.colors.textMuted} />
           <Text style={styles.helperText}>
-            Inactive wallet transactions will still appear in reports but you can't use this category for new transactions
+            Inactive wallet transactions will still appear in reports but you can&apos;t use this category for new transactions
           </Text>
         </View>
       </ScrollView>

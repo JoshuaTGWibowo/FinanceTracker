@@ -1,4 +1,4 @@
-import { useMemo, useEffect, useState } from "react";
+import { useMemo } from "react";
 import {
   Pressable,
   ScrollView,

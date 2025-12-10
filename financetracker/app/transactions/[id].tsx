@@ -11,7 +11,6 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
-import dayjs from "dayjs";
 
 import { useAppTheme } from "../../theme";
 import { useFinanceStore, type TransactionType } from "../../lib/store";

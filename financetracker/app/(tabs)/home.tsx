@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, Alert, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from "react-native";
+import { Alert, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import dayjs from "dayjs";
@@ -12,8 +12,6 @@ import { useAppTheme } from "../../theme";
 import { BudgetGoal, useFinanceStore } from "../../lib/store";
 import { filterTransactionsByAccount, getTransactionDelta, getTransactionVisualState, sortTransactionsByRecency } from "../../lib/transactions";
 import { truncateWords, formatDate } from "../../lib/text";
-import { syncMetricsToSupabase } from "../../lib/sync-service";
-import { isAuthenticated } from "../../lib/supabase";
 import { doesCategoryMatchBudget } from "../../lib/categoryUtils";
 
 const formatCurrency = (
@@ -206,42 +204,15 @@ export default function HomeScreen() {
   const [overviewChart, setOverviewChart] = useState<"bar" | "line">("bar");
   const [topSpendingPeriod, setTopSpendingPeriod] = useState<"week" | "month">("month");
   const [showBalance, setShowBalance] = useState(true);
-  const [isSyncing, setIsSyncing] = useState(false);
-  const [isAuth, setIsAuth] = useState(false);
 
   const insets = useSafeAreaInsets();
   const styles = useMemo(() => createStyles(theme, insets), [theme, insets]);
-
-  useEffect(() => {
-    isAuthenticated().then(setIsAuth);
-  }, []);
 
   useEffect(() => {
     if (overviewPeriod === "week" && overviewChart === "line") {
       setOverviewChart("bar");
     }
   }, [overviewChart, overviewPeriod]);
-
-  const handleSyncToSupabase = async () => {
-    if (!isAuth) {
-      Alert.alert(
-        'Not Signed In',
-        'You need to sign in to sync your stats to the leaderboard. Go to the Leaderboard tab to sign in.',
-        [{ text: 'OK' }]
-      );
-      return;
-    }
-
-    setIsSyncing(true);
-    const result = await syncMetricsToSupabase(transactions, budgetGoals);
-    setIsSyncing(false);
-
-    if (result.success) {
-      Alert.alert('Success', 'Your anonymized stats have been synced to the leaderboard!');
-    } else {
-      Alert.alert('Error', result.error || 'Failed to sync stats');
-    }
-  };
 
   const startOfMonth = useMemo(() => dayjs().startOf("month"), []);
   const endOfMonth = useMemo(() => dayjs().endOf("month"), []);
@@ -880,7 +851,6 @@ export default function HomeScreen() {
                   categories,
                 );
                 const progressPercent = Math.round(progress.percentage * 100);
-                const goalComplete = progressPercent >= 100;
 
                 let barColor = theme.colors.primary;
                 if (progress.direction === "save") {
