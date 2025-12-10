@@ -487,18 +487,16 @@ const SpendingBarChartComponent = ({ data, style, formatValue, onActiveChange }:
     const width = tooltipSize?.width ?? 140;
     const height = tooltipSize?.height ?? 64;
     const margin = 12;
+    const fingerOffset = 60; // Offset above the touch point to avoid finger obstruction
     const barCenterX = activePoint.x + activePoint.width / 2;
-    const desiredAnchorY =
-      activePoint.y + activePoint.height * (1 - BAR_TOOLTIP_ANCHOR_RATIO);
-    const anchorY = Math.max(
-      VERTICAL_PADDING,
-      Math.min(CHART_HEIGHT - VERTICAL_PADDING, desiredAnchorY),
-    );
-    const proposedTop = anchorY - height / 2;
-    const top = Math.min(
-      CHART_HEIGHT - height - margin,
-      Math.max(margin, proposedTop),
-    );
+    
+    // Position tooltip above the bar top, with additional offset for finger clearance
+    const proposedTop = activePoint.y - height - fingerOffset;
+    
+    // Ensure tooltip stays within vertical bounds
+    const top = Math.max(margin, Math.min(CHART_HEIGHT - height - margin, proposedTop));
+    
+    // Center horizontally on the bar, but keep within horizontal bounds
     const left = Math.min(
       chartWidth - margin - width,
       Math.max(margin, barCenterX - width / 2),
