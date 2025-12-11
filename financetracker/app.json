@@ -7,7 +7,7 @@
     "icon": "./assets/images/icon.png",
     "scheme": "financetracker",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": false,
+    "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.joshuat723.financetracker",
@@ -45,7 +45,9 @@
             "backgroundColor": "#000000"
           }
         }
-      ]
+      ],
+      "expo-sqlite",
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true
