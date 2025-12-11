@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { StyleSheet } from "react-native";
 
 import { ThemeMode, useFinanceStore } from "./lib/store";
+import { useScreenSize, responsiveFontSize, responsiveSpacing } from "./lib/responsive";
 
 type Colors = {
   background: string;
@@ -61,44 +62,44 @@ const lightColors: Colors = {
   border: "#CBD5F5",
 };
 
-const buildTypography = (colors: Colors) => ({
+const buildTypography = (colors: Colors, screen: ReturnType<typeof useScreenSize>) => ({
   title: {
-    fontSize: 28,
+    fontSize: responsiveFontSize(screen.isSmallDevice ? 24 : 28),
     fontWeight: "700" as const,
     color: colors.text,
     letterSpacing: 0.2,
   },
   subtitle: {
-    fontSize: 16,
+    fontSize: responsiveFontSize(16),
     fontWeight: "500" as const,
     color: colors.textMuted,
     letterSpacing: 0.3,
   },
   body: {
-    fontSize: 15,
+    fontSize: responsiveFontSize(15),
     fontWeight: "400" as const,
     color: colors.text,
     lineHeight: 22,
   },
   label: {
-    fontSize: 12,
+    fontSize: responsiveFontSize(12),
     fontWeight: "600" as const,
     color: colors.textMuted,
     textTransform: "uppercase" as const,
-    letterSpacing: 1.8,
+    letterSpacing: screen.isSmallDevice ? 1.2 : 1.8,
   },
 });
 
-const buildComponents = (colors: Colors) => ({
+const buildComponents = (colors: Colors, screen: ReturnType<typeof useScreenSize>) => ({
   card: {
     backgroundColor: colors.surface,
     borderRadius: radii.lg,
-    padding: spacing.xl,
+    padding: responsiveSpacing(screen.isSmallDevice ? 16 : spacing.xl),
   },
   surface: {
     backgroundColor: colors.surfaceElevated,
     borderRadius: radii.md,
-    padding: spacing.lg,
+    padding: responsiveSpacing(screen.isSmallDevice ? 12 : spacing.lg),
   },
   buttonPrimary: {
     backgroundColor: colors.primary,
@@ -136,6 +137,12 @@ const buildComponents = (colors: Colors) => ({
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
   },
+  inputSurface: {
+    backgroundColor: colors.surfaceElevated,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
   chip: {
     borderRadius: radii.pill,
     paddingHorizontal: spacing.lg,
@@ -144,27 +151,24 @@ const buildComponents = (colors: Colors) => ({
   },
 });
 
-const buildTheme = (mode: ThemeMode) => {
+const buildTheme = (mode: ThemeMode, screen: ReturnType<typeof useScreenSize>) => {
   const colors = mode === "light" ? lightColors : darkColors;
   return {
     colors,
     spacing,
     radii,
-    typography: buildTypography(colors),
-    components: buildComponents(colors),
-  } as const;
+    typography: buildTypography(colors, screen),
+    components: buildComponents(colors, screen),
+    screen,
+  };
 };
 
-const themeMap = {
-  light: buildTheme("light"),
-  dark: buildTheme("dark"),
-} as const satisfies Record<ThemeMode, ReturnType<typeof buildTheme>>;
-
-export type Theme = (typeof themeMap)[keyof typeof themeMap];
+export type Theme = ReturnType<typeof buildTheme>;
 
 export const useAppTheme = (): Theme => {
   const mode = useFinanceStore((state) => state.preferences.themeMode);
-  return useMemo(() => themeMap[mode], [mode]);
+  const screen = useScreenSize();
+  return useMemo(() => buildTheme(mode, screen), [mode, screen.width, screen.height]);
 };
 
 export const useThemedStyles = <T extends StyleSheet.NamedStyles<T> | StyleSheet.NamedStyles<any>>(
@@ -174,4 +178,4 @@ export const useThemedStyles = <T extends StyleSheet.NamedStyles<T> | StyleSheet
   return useMemo(() => StyleSheet.create(factory(theme)), [factory, theme]);
 };
 
-export const getThemeForMode = (mode: ThemeMode): Theme => themeMap[mode];
+export const getThemeForMode = (mode: ThemeMode, screen: ReturnType<typeof useScreenSize>): Theme => buildTheme(mode, screen);

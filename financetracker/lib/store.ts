@@ -6,6 +6,7 @@ import {
   type BudgetGoal,
   type Category,
   type CategoryType,
+  type DateFormat,
   DEFAULT_ACCOUNT_ID,
   DEFAULT_CATEGORIES,
   type Preferences,
@@ -24,12 +25,18 @@ import {
   saveAccount,
   saveBudgetGoal,
   saveCategory,
+  saveDateFormat,
   saveProfile,
   saveRecurringTransaction,
   saveThemeMode,
   saveTransaction,
 } from "./storage/sqlite";
 import { generateAllMockData } from "./mockData";
+import { triggerSync } from "./sync-service";
+import { awardTransactionPoints, updateDailyStreak, getLeaderboardStats } from "./points-service";
+import { checkAllBudgets } from "./budget-tracking";
+import { checkAndUpdateAllMissions } from "./mission-service";
+import { refreshExpiredMissions } from "./mission-refresh";
 
 export interface FinanceState {
   profile: Profile;
@@ -70,6 +77,8 @@ export interface FinanceState {
   removeBudgetGoal: (id: string) => Promise<void>;
   updateProfile: (payload: Partial<Profile>) => Promise<void>;
   setThemeMode: (mode: ThemeMode) => Promise<void>;
+  setDateFormat: (format: DateFormat) => Promise<void>;
+  setTimezone: (timezone: string) => Promise<void>;
   addCategory: (category: Omit<Category, "id">) => Promise<void>;
   updateCategory: (id: string, updates: Partial<Omit<Category, "id">>) => Promise<void>;
   setCategoryFormDraft: (
@@ -100,7 +109,7 @@ export interface FinanceState {
       initialBalance?: number;
       excludeFromTotal?: boolean;
     },
-  ) => Promise<void>;
+  ) => Promise<string | undefined>;
   updateAccount: (
     id: string,
     updates: Partial<
@@ -134,18 +143,18 @@ const recalculateAccountBalances = (
   }));
   const extras: Account[] = [];
 
-  const ensureAccount = (accountId?: string | null) => {
+  const ensureAccount = (accountId?: string | null): Account | undefined => {
     if (!accountId) {
       return undefined;
     }
 
-    let account = base.find((item) => item.id === accountId);
+    let account: Account | undefined = base.find((item) => item.id === accountId);
     if (!account) {
       account = extras.find((item) => item.id === accountId);
     }
 
     if (!account) {
-      account = {
+      const newAccount: Account = {
         id: accountId,
         name: "Legacy account",
         type: "cash",
@@ -156,7 +165,8 @@ const recalculateAccountBalances = (
         isArchived: true,
         createdAt: new Date().toISOString(),
       };
-      extras.push(account);
+      extras.push(newAccount);
+      return newAccount;
     }
 
     return account;
@@ -259,9 +269,12 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
   profile: {
     name: "Alicia Jeanelly",
     currency: "USD",
+    dateFormat: "dd/mm/yyyy",
+    timezone: "Australia/Melbourne",
   },
   preferences: {
     themeMode: "dark",
+    dateFormat: "dd/mm/yyyy",
     categories: [...DEFAULT_CATEGORIES],
   },
   accounts: [createDefaultAccount("USD")],
@@ -337,6 +350,7 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
       date: normalizedDate.toISOString(),
       accountId: normalizedAccountId,
       toAccountId: transaction.type === "transfer" ? normalizedToAccountId : null,
+      createdAt: new Date().toISOString(),
     };
 
     await saveTransaction(payload);
@@ -345,8 +359,65 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
       const nextTransactions = [payload, ...state.transactions];
       return applyAccountBalanceUpdate(state, nextTransactions);
     });
+
+    // Award points for logging transaction
+    awardTransactionPoints(payload).then(async (result) => {
+      if (result.success && result.pointsAwarded) {
+        console.log(`[Points] +${result.pointsAwarded} pts for transaction`);
+        if (result.leveledUp) {
+          console.log('[Points] 🎉 Level up!');
+          // TODO: Trigger level-up modal via event emitter or global state
+        }
+        // Force UI update by triggering state change
+        const currentState = get();
+        set({ transactions: [...currentState.transactions] });
+      }
+    }).catch(err => console.error('[Points] Error awarding points:', err));
+
+    // Update daily streak
+    updateDailyStreak().catch(err => console.error('[Points] Error updating streak:', err));
+
+    // Check budget completion and award points
+    // IMPORTANT: Use get() to get the UPDATED state with the new transaction
+    const updatedState = get();
+    checkAllBudgets(
+      updatedState.budgetGoals, 
+      updatedState.transactions, 
+      updatedState.preferences.categories
+    ).catch(err => console.error('[Points] Error checking budgets:', err));
+
+    // Check and update mission progress with the NEW transaction included
+    (async () => {
+      try {
+        // Get fresh state to ensure new transaction is included
+        const currentTransactions = get().transactions;
+        console.log(`[Mission] Checking missions with ${currentTransactions.length} transactions`);
+        
+        const statsResult = await getLeaderboardStats();
+        if (statsResult.success && statsResult.stats) {
+          const result = await checkAndUpdateAllMissions(
+            currentTransactions, // Use fresh transactions with new one included
+            statsResult.stats.streakDays
+          );
+          if (result.success) {
+            if (result.completedMissions && result.completedMissions.length > 0) {
+              console.log(`[Mission] 🎉 Completed ${result.completedMissions.length} mission(s)!`);
+            }
+            // Always trigger a state update to refresh mission UI with new progress
+            const freshState = get();
+            set({ transactions: [...freshState.transactions] });
+            console.log('[Mission] Triggered UI refresh');
+          }
+        }
+      } catch (err) {
+        console.error('[Mission] Error in mission checking:', err);
+      }
+    })();
+
+    // Trigger auto-sync after adding transaction
+    triggerSync(updatedState.transactions, updatedState.budgetGoals);
   },
-  updateTransaction: (id, updates) =>
+  updateTransaction: async (id, updates) => {
     set((state) => {
       const nextTransactions = state.transactions.map((transaction) => {
         if (transaction.id !== id) {
@@ -410,13 +481,22 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
       });
 
       return applyAccountBalanceUpdate(state, nextTransactions);
-    }),
+    });
+
+    // Trigger auto-sync after updating transaction
+    const state = get();
+    triggerSync(state.transactions, state.budgetGoals);
+  },
   removeTransaction: async (id) => {
     await deleteTransaction(id);
     set((state) => {
       const nextTransactions = state.transactions.filter((transaction) => transaction.id !== id);
       return applyAccountBalanceUpdate(state, nextTransactions);
     });
+
+    // Trigger auto-sync after removing transaction
+    const state = get();
+    triggerSync(state.transactions, state.budgetGoals);
   },
   duplicateTransaction: async (id) => {
     const existing = get().transactions.find((transaction) => transaction.id === id);
@@ -591,6 +671,46 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
       },
     }));
   },
+  setDateFormat: async (format) => {
+    await saveDateFormat(format);
+    set((state) => ({
+      profile: {
+        ...state.profile,
+        dateFormat: format,
+      },
+      preferences: {
+        ...state.preferences,
+        dateFormat: format,
+      },
+    }));
+  },
+  setTimezone: async (timezone) => {
+    set((state) => ({
+      profile: { ...state.profile, timezone },
+    }));
+
+    const state = get();
+    await saveProfile(state.profile);
+    
+    // Trigger mission refresh with new timezone
+    console.log(`[Timezone] Changing timezone to ${timezone}, refreshing missions...`);
+    try {
+      const result = await refreshExpiredMissions(timezone);
+      if (result.success) {
+        if (result.refreshedCount && result.refreshedCount > 0) {
+          console.log(`[Timezone] 🌏 Refreshed ${result.refreshedCount} mission(s) for new timezone`);
+        } else {
+          console.log('[Timezone] No expired missions to refresh');
+        }
+        // Force UI refresh
+        set((state) => ({ profile: { ...state.profile, timezone } }));
+      } else {
+        console.error('[Timezone] Refresh failed:', result.error);
+      }
+    } catch (err) {
+      console.error('[Timezone] Error refreshing missions:', err);
+    }
+  },
   setCategoryFormDraft: (updates) =>
     set((state) => {
       const activeAccounts = state.accounts.filter((account) => !account.isArchived);
@@ -629,7 +749,7 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
     const state = get();
     const value = name.trim();
     if (!value) {
-      return;
+      return undefined;
     }
 
     const normalizedCurrency = (currency || state.profile.currency || "USD").trim().toUpperCase();
@@ -669,6 +789,8 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
         nextTransactions,
       );
     });
+
+    return nextAccount.id;
   },
   updateAccount: async (id, updates) => {
     const existing = get().accounts.find((account) => account.id === id);

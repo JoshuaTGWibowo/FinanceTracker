@@ -16,8 +16,31 @@ import { Ionicons } from "@expo/vector-icons";
 
 import { useAppTheme } from "../../theme";
 import { ThemeMode, useFinanceStore } from "../../lib/store";
+import { DateFormat } from "../../lib/types";
 
 const currencies = ["USD", "EUR", "GBP", "CAD", "AUD", "JPY"];
+const dateFormats: { value: DateFormat; label: string }[] = [
+  { value: "dd/mm/yyyy", label: "DD/MM/YYYY" },
+  { value: "mm/dd/yyyy", label: "MM/DD/YYYY" },
+];
+
+const timezones = [
+  { value: "Australia/Sydney", label: "Sydney (AEDT)" },
+  { value: "Australia/Melbourne", label: "Melbourne (AEDT)" },
+  { value: "Australia/Brisbane", label: "Brisbane (AEST)" },
+  { value: "Australia/Perth", label: "Perth (AWST)" },
+  { value: "Pacific/Auckland", label: "Auckland (NZDT)" },
+  { value: "Asia/Jakarta", label: "Jakarta (WIB)" },
+  { value: "Asia/Singapore", label: "Singapore (SGT)" },
+  { value: "Asia/Tokyo", label: "Tokyo (JST)" },
+  { value: "Asia/Hong_Kong", label: "Hong Kong (HKT)" },
+  { value: "Europe/London", label: "London (GMT)" },
+  { value: "Europe/Paris", label: "Paris (CET)" },
+  { value: "America/New_York", label: "New York (EST)" },
+  { value: "America/Los_Angeles", label: "Los Angeles (PST)" },
+  { value: "America/Chicago", label: "Chicago (CST)" },
+  { value: "UTC", label: "UTC" },
+];
 
 export default function AccountScreen() {
   const theme = useAppTheme();
@@ -26,9 +49,11 @@ export default function AccountScreen() {
   const updateProfile = useFinanceStore((state) => state.updateProfile);
   const themeMode = useFinanceStore((state) => state.preferences.themeMode);
   const setThemeMode = useFinanceStore((state) => state.setThemeMode);
+  const dateFormat = useFinanceStore((state) => state.preferences.dateFormat);
+  const setDateFormat = useFinanceStore((state) => state.setDateFormat);
+  const setTimezone = useFinanceStore((state) => state.setTimezone);
   const accounts = useFinanceStore((state) => state.accounts);
   const transactions = useFinanceStore((state) => state.transactions);
-  const budgetGoals = useFinanceStore((state) => state.budgetGoals);
   const loadMockData = useFinanceStore((state) => state.loadMockData);
   const clearAllDataAndReload = useFinanceStore((state) => state.clearAllDataAndReload);
 
@@ -205,6 +230,68 @@ export default function AccountScreen() {
           </View>
 
           <View style={[theme.components.surface, styles.sectionCard]}>
+            <Text style={styles.sectionTitle}>Date Format</Text>
+            <Text style={styles.sectionSubtitle}>
+              Choose how dates are displayed throughout the app.
+            </Text>
+            <View style={styles.themeRow}>
+              {dateFormats.map((format) => {
+                const active = dateFormat === format.value;
+                return (
+                  <Pressable
+                    key={format.value}
+                    style={[styles.themeChip, active && styles.themeChipActive]}
+                    onPress={() => void setDateFormat(format.value)}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: active }}
+                  >
+                    <Ionicons
+                      name="calendar-outline"
+                      size={18}
+                      color={active ? theme.colors.text : theme.colors.textMuted}
+                    />
+                    <Text style={[styles.themeChipText, active && styles.themeChipTextActive]}>
+                      {format.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+
+          <View style={[theme.components.surface, styles.sectionCard]}>
+            <Text style={styles.sectionTitle}>Timezone</Text>
+            <Text style={styles.sectionSubtitle}>
+              Affects mission timers and scheduling. Missions will reset based on your local time.
+            </Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.timezoneScroll}>
+              <View style={styles.timezoneRow}>
+                {timezones.map((tz) => {
+                  const active = profile.timezone === tz.value;
+                  return (
+                    <Pressable
+                      key={tz.value}
+                      style={[styles.timezoneChip, active && styles.timezoneChipActive]}
+                      onPress={() => void setTimezone(tz.value)}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: active }}
+                    >
+                      <Ionicons
+                        name="time-outline"
+                        size={16}
+                        color={active ? theme.colors.text : theme.colors.textMuted}
+                      />
+                      <Text style={[styles.timezoneChipText, active && styles.timezoneChipTextActive]}>
+                        {tz.label}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </ScrollView>
+          </View>
+
+          <View style={[theme.components.surface, styles.sectionCard]}>
             <Text style={styles.sectionTitle}>Manage</Text>
             <Pressable style={styles.linkRow} onPress={() => router.push("/categories")}>
               <View style={styles.linkRowContent}>
@@ -247,34 +334,8 @@ export default function AccountScreen() {
           <View style={[theme.components.surface, styles.sectionCard]}>
             <Text style={styles.sectionTitle}>Leaderboard & Social</Text>
             <Text style={styles.sectionSubtitle}>
-              Sync your anonymized stats to compete with others.
+              Your stats sync automatically. Pull down on the Crew tab to refresh.
             </Text>
-            <Pressable
-              style={styles.primaryButton}
-              onPress={async () => {
-                const { syncMetricsToSupabase } = require('../../lib/sync-service');
-                const { isAuthenticated } = require('../../lib/supabase');
-                
-                const auth = await isAuthenticated();
-                if (!auth) {
-                  Alert.alert(
-                    'Not Signed In',
-                    'Go to the Leaderboard tab to sign in first.',
-                    [{ text: 'OK' }]
-                  );
-                  return;
-                }
-
-                const result = await syncMetricsToSupabase(transactions, budgetGoals);
-                if (result.success) {
-                  Alert.alert('Success', 'Your stats have been synced to the leaderboard!');
-                } else {
-                  Alert.alert('Error', result.error || 'Failed to sync');
-                }
-              }}
-            >
-              <Text style={styles.primaryButtonText}>Sync to Leaderboard</Text>
-            </Pressable>
 
             <Pressable
               style={styles.dangerButton}
@@ -355,23 +416,23 @@ const createStyles = (
     content: {
       flexGrow: 1,
       paddingTop: theme.spacing.xl,
-      paddingHorizontal: theme.spacing.md,
+      paddingHorizontal: theme.screen.isSmallDevice ? theme.spacing.sm : theme.spacing.md,
       paddingBottom: theme.spacing.xl + insets.bottom,
-      gap: theme.spacing.xl,
+      gap: theme.screen.isSmallDevice ? theme.spacing.lg : theme.spacing.xl,
     },
     header: {
       gap: theme.spacing.sm,
     },
     title: {
       ...theme.typography.title,
-      fontSize: 26,
+      fontSize: theme.screen.isSmallDevice ? 22 : 26,
     },
     subtitle: {
       ...theme.typography.subtitle,
       fontSize: 14,
     },
     sectionCard: {
-      gap: theme.spacing.lg,
+      gap: theme.screen.isSmallDevice ? theme.spacing.md : theme.spacing.lg,
     },
     sectionHeaderRow: {
       flexDirection: "row",
@@ -406,7 +467,7 @@ const createStyles = (
     },
     input: {
       ...theme.components.input,
-      fontSize: 16,
+      fontSize: theme.screen.isSmallDevice ? 15 : 16,
     },
     currencyRow: {
       gap: theme.spacing.md,
@@ -588,6 +649,39 @@ const createStyles = (
     },
     buttonDisabled: {
       opacity: 0.5,
+    },
+    timezoneScroll: {
+      marginTop: theme.spacing.sm,
+    },
+    timezoneRow: {
+      flexDirection: "row",
+      gap: theme.spacing.sm,
+      paddingVertical: theme.spacing.xs,
+    },
+    timezoneChip: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: theme.spacing.xs,
+      paddingHorizontal: theme.spacing.md,
+      paddingVertical: theme.spacing.sm,
+      borderRadius: theme.radii.lg,
+      backgroundColor: theme.colors.surface,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      minWidth: 140,
+    },
+    timezoneChipActive: {
+      backgroundColor: theme.colors.primary + "20",
+      borderColor: theme.colors.primary,
+    },
+    timezoneChipText: {
+      ...theme.typography.subtitle,
+      color: theme.colors.textMuted,
+      fontSize: 13,
+    },
+    timezoneChipTextActive: {
+      color: theme.colors.text,
+      fontWeight: "600",
     },
   });
 

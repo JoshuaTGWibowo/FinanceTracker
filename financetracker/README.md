@@ -7,6 +7,7 @@ A minimalist finance tracker MVP built with Expo Router, TypeScript, Zustand, an
 - **Bottom tab navigation** with Home, Transactions, Leaderboard, and Account screens powered by Expo Router.
 - **Home dashboard** showing balance, monthly insights, and a 7-day cash flow mini bar chart rendered with `react-native-svg`.
 - **Floating action button** to add new transactions in a polished modal using the native date picker.
+- **Auto Add with AI** - Take a photo of a receipt or bank statement and AI extracts transactions automatically using Google Gemini Vision.
 - **Transactions feed** grouped by day with income in green and expenses in red.
 - **Account settings** to tweak the profile name and preferred currency.
 - **Hybrid storage architecture**: SQLite for private financial data, Supabase for leaderboards, crews, and missions.
@@ -49,13 +50,21 @@ theme.ts                 // Shared colors, spacing, typography, components
      ```
    - Find these values in your Supabase project settings at: **Settings > API**
 
-3. **Start the Expo dev server**
+3. **Configure Google Gemini AI** (required for Auto Add feature)
+   - Get a free API key at [https://makersuite.google.com/app/apikey](https://makersuite.google.com/app/apikey)
+   - Add it to your `.env` file:
+     ```
+     EXPO_PUBLIC_GEMINI_API_KEY=your_gemini_api_key
+     ```
+   - Note: The free tier has generous limits for personal use
+
+4. **Start the Expo dev server**
    ```bash
    npx expo start --tunnel
    ```
    The `--tunnel` flag is recommended on Windows to avoid local network configuration issues when pairing with an iOS device running Expo Go.
 
-4. **Open the app**
+5. **Open the app**
    - Scan the QR code with the Camera app on your iPhone and open with Expo Go, **or**
    - Run `npx expo start --ios` from a Mac if you have access to the iOS simulator.
 

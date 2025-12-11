@@ -62,11 +62,13 @@ const ensureSchema = async (db: SQLiteDatabase) => {
     CREATE TABLE IF NOT EXISTS profile (
       id INTEGER PRIMARY KEY NOT NULL,
       name TEXT NOT NULL,
-      currency TEXT NOT NULL
+      currency TEXT NOT NULL,
+      dateFormat TEXT NOT NULL DEFAULT 'dd/mm/yyyy'
     );
     CREATE TABLE IF NOT EXISTS preferences (
       id INTEGER PRIMARY KEY NOT NULL,
-      themeMode TEXT NOT NULL
+      themeMode TEXT NOT NULL,
+      dateFormat TEXT NOT NULL DEFAULT 'dd/mm/yyyy'
     );
     CREATE TABLE IF NOT EXISTS categories (
       id TEXT PRIMARY KEY NOT NULL,
@@ -124,20 +126,32 @@ const ensureSchema = async (db: SQLiteDatabase) => {
   await ensureColumnExists(db, "categories", "icon", "TEXT");
   await ensureColumnExists(db, "categories", "parentCategoryId", "TEXT");
   await ensureColumnExists(db, "categories", "activeAccountIds", "TEXT");
+  
+  // Add createdAt column to transactions
+  await ensureColumnExists(db, "transactions", "createdAt", "TEXT");
+  
+  // Add new budget_goals columns
+  await ensureColumnExists(db, "budget_goals", "isRepeating", "INTEGER", "DEFAULT 1");
+  await ensureColumnExists(db, "budget_goals", "createdAt", "TEXT", `DEFAULT '${new Date().toISOString()}'`);
+  
+  // Add dateFormat columns
+  await ensureColumnExists(db, "profile", "dateFormat", "TEXT", "DEFAULT 'dd/mm/yyyy'");
+  await ensureColumnExists(db, "preferences", "dateFormat", "TEXT", "DEFAULT 'dd/mm/yyyy'");
 
   const profileCount = await db.getFirstAsync<{ count: number }>("SELECT COUNT(*) as count FROM profile");
   if (!profileCount?.count) {
-    await db.runAsync("INSERT INTO profile (id, name, currency) VALUES (1, ?, ?)", [
+    await db.runAsync("INSERT INTO profile (id, name, currency, dateFormat) VALUES (1, ?, ?, ?)", [
       "Alicia Jeanelly",
       "USD",
+      "dd/mm/yyyy",
     ]);
   }
 
-  const preferencesCount = await db.getFirstAsync<{ count: number }>(
+  const preferenceCount = await db.getFirstAsync<{ count: number }>(
     "SELECT COUNT(*) as count FROM preferences",
   );
-  if (!preferencesCount?.count) {
-    await db.runAsync("INSERT INTO preferences (id, themeMode) VALUES (1, ?)", ["dark"]);
+  if (!preferenceCount?.count) {
+    await db.runAsync("INSERT INTO preferences (id, themeMode, dateFormat) VALUES (1, ?, ?)", ["dark", "dd/mm/yyyy"]);
   }
 
   const categoryCount = await db.getFirstAsync<{ count: number }>(
@@ -202,6 +216,7 @@ interface TransactionRow {
   location: string | null;
   photos: string | null;
   excludeFromReports: number;
+  createdAt?: string;
 }
 
 interface AccountRow {
@@ -239,11 +254,11 @@ interface BudgetGoalRow {
 export const fetchFinanceState = async (): Promise<FinanceStatePayload> => {
   const db = await getDatabase();
 
-  const profileRow = await db.getFirstAsync<Profile>("SELECT name, currency FROM profile LIMIT 1");
-  const profile: Profile = profileRow ?? { name: "Alicia Jeanelly", currency: "USD" };
+  const profileRow = await db.getFirstAsync<Profile>("SELECT name, currency, dateFormat FROM profile LIMIT 1");
+  const profile: Profile = profileRow ?? { name: "Alicia Jeanelly", currency: "USD", dateFormat: "dd/mm/yyyy" };
 
-  const preferenceRow = await db.getFirstAsync<{ themeMode: ThemeMode }>(
-    "SELECT themeMode FROM preferences LIMIT 1",
+  const preferenceRow = await db.getFirstAsync<{ themeMode: ThemeMode; dateFormat: string }>(
+    "SELECT themeMode, dateFormat FROM preferences LIMIT 1",
   );
 
   const categoryRows = await db.getAllAsync<{
@@ -282,6 +297,7 @@ export const fetchFinanceState = async (): Promise<FinanceStatePayload> => {
 
   const preferences: Preferences = {
     themeMode: preferenceRow?.themeMode ?? "dark",
+    dateFormat: (preferenceRow?.dateFormat as any) ?? profile.dateFormat ?? "dd/mm/yyyy",
     categories: categories.length ? categories : [...DEFAULT_CATEGORIES],
   };
 
@@ -310,6 +326,7 @@ export const fetchFinanceState = async (): Promise<FinanceStatePayload> => {
     location: row.location ?? undefined,
     photos: row.photos ? (JSON.parse(row.photos) as string[]) : [],
     excludeFromReports: Boolean(row.excludeFromReports),
+    createdAt: row.createdAt,
   }));
 
   const recurringTransactions = recurringRows.map((row) => ({
@@ -331,6 +348,8 @@ export const fetchFinanceState = async (): Promise<FinanceStatePayload> => {
     target: row.target,
     period: row.period as BudgetGoal["period"],
     category: row.category,
+    isRepeating: row.isRepeating !== undefined ? Boolean(row.isRepeating) : true,
+    createdAt: row.createdAt || new Date().toISOString(),
   }));
 
   return {
@@ -360,8 +379,9 @@ export const saveTransaction = async (transaction: Transaction) => {
       participants,
       location,
       photos,
-      excludeFromReports
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      excludeFromReports,
+      createdAt
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       amount=excluded.amount,
       note=excluded.note,
@@ -373,7 +393,8 @@ export const saveTransaction = async (transaction: Transaction) => {
       participants=excluded.participants,
       location=excluded.location,
       photos=excluded.photos,
-      excludeFromReports=excluded.excludeFromReports`,
+      excludeFromReports=excluded.excludeFromReports,
+      createdAt=COALESCE(transactions.createdAt, excluded.createdAt)`,
     [
       transaction.id,
       transaction.amount,
@@ -387,6 +408,7 @@ export const saveTransaction = async (transaction: Transaction) => {
       transaction.location ?? null,
       serializeArray(transaction.photos),
       transaction.excludeFromReports ? 1 : 0,
+      transaction.createdAt ?? new Date().toISOString(),
     ],
   );
 };
@@ -439,14 +461,24 @@ export const saveRecurringTransaction = async (transaction: RecurringTransaction
 export const saveBudgetGoal = async (goal: BudgetGoal) => {
   const db = await getDatabase();
   await db.runAsync(
-    `INSERT INTO budget_goals (id, name, target, period, category)
-     VALUES (?, ?, ?, ?, ?)
+    `INSERT INTO budget_goals (id, name, target, period, category, isRepeating, createdAt)
+     VALUES (?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET
        name=excluded.name,
        target=excluded.target,
        period=excluded.period,
-       category=excluded.category`,
-    [goal.id, goal.name, goal.target, goal.period, goal.category ?? null],
+       category=excluded.category,
+       isRepeating=excluded.isRepeating,
+       createdAt=excluded.createdAt`,
+    [
+      goal.id, 
+      goal.name, 
+      goal.target, 
+      goal.period, 
+      goal.category ?? null,
+      goal.isRepeating ? 1 : 0,
+      goal.createdAt,
+    ],
   );
 };
 
@@ -457,15 +489,22 @@ export const deleteBudgetGoal = async (id: string) => {
 
 export const saveProfile = async (profile: Profile) => {
   const db = await getDatabase();
-  await db.runAsync("UPDATE profile SET name = ?, currency = ? WHERE id = 1", [
+  await db.runAsync("UPDATE profile SET name = ?, currency = ?, dateFormat = ? WHERE id = 1", [
     profile.name,
     profile.currency,
+    profile.dateFormat,
   ]);
 };
 
 export const saveThemeMode = async (mode: ThemeMode) => {
   const db = await getDatabase();
   await db.runAsync("UPDATE preferences SET themeMode = ? WHERE id = 1", [mode]);
+};
+
+export const saveDateFormat = async (format: string) => {
+  const db = await getDatabase();
+  await db.runAsync("UPDATE preferences SET dateFormat = ? WHERE id = 1", [format]);
+  await db.runAsync("UPDATE profile SET dateFormat = ? WHERE id = 1", [format]);
 };
 
 export const saveCategory = async (category: Category) => {

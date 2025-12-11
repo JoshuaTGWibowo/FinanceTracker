@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Alert, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import dayjs from "dayjs";
@@ -7,12 +7,12 @@ import { Link, useRouter } from "expo-router";
 
 import { DonutChart } from "../../components/DonutChart";
 import { SpendingBarChart, SpendingLineChart } from "../../components/SpendingCharts";
+import { MonthlyCalendar } from "../../components/MonthlyCalendar";
 import { useAppTheme } from "../../theme";
 import { BudgetGoal, useFinanceStore } from "../../lib/store";
-import { filterTransactionsByAccount, getTransactionDelta, getTransactionVisualState } from "../../lib/transactions";
-import { truncateWords } from "../../lib/text";
-import { syncMetricsToSupabase } from "../../lib/sync-service";
-import { isAuthenticated } from "../../lib/supabase";
+import { filterTransactionsByAccount, getTransactionDelta, getTransactionVisualState, sortTransactionsByRecency } from "../../lib/transactions";
+import { truncateWords, formatDate } from "../../lib/text";
+import { doesCategoryMatchBudget } from "../../lib/categoryUtils";
 
 const formatCurrency = (
   value: number,
@@ -32,6 +32,7 @@ const summarizeGoalProgress = (
   currency: string,
   transactions: ReturnType<typeof useFinanceStore.getState>["transactions"],
   accountId: string | null,
+  categories: ReturnType<typeof useFinanceStore.getState>["preferences"]["categories"],
 ) => {
   const now = dayjs();
   const start = goal.period === "week" ? now.startOf("week") : now.startOf("month");
@@ -44,7 +45,10 @@ const summarizeGoalProgress = (
 
   if (goal.category) {
     const spent = withinPeriod
-      .filter((transaction) => transaction.type === "expense" && transaction.category === goal.category)
+      .filter((transaction) => 
+        transaction.type === "expense" && 
+        doesCategoryMatchBudget(transaction.category, goal.category, categories)
+      )
       .reduce((acc, transaction) => acc + transaction.amount, 0);
 
     return {
@@ -74,6 +78,7 @@ const summarizeGoalProgress = (
 
 export default function HomeScreen() {
   const theme = useAppTheme();
+  const dateFormat = useFinanceStore((state) => state.preferences.dateFormat);
   const router = useRouter();
   const transactions = useFinanceStore((state) => state.transactions);
   const profile = useFinanceStore((state) => state.profile);
@@ -81,6 +86,15 @@ export default function HomeScreen() {
   const recurringTransactions = useFinanceStore((state) => state.recurringTransactions);
   const logRecurringTransaction = useFinanceStore((state) => state.logRecurringTransaction);
   const accounts = useFinanceStore((state) => state.accounts);
+  const addAccount = useFinanceStore((state) => state.addAccount);
+  const categories = useFinanceStore((state) => state.preferences.categories);
+
+  const [createAccountModalVisible, setCreateAccountModalVisible] = useState(false);
+  const [accountFormName, setAccountFormName] = useState("");
+  const [accountFormType, setAccountFormType] = useState<"cash" | "bank" | "card" | "investment">("bank");
+  const [accountFormCurrency, setAccountFormCurrency] = useState(profile.currency);
+  const [accountFormInitialBalance, setAccountFormInitialBalance] = useState("");
+  const [accountFormExcludeFromTotal, setAccountFormExcludeFromTotal] = useState(false);
 
   const reportableTransactions = useMemo(
     () => transactions.filter((transaction) => !transaction.excludeFromReports),
@@ -95,6 +109,50 @@ export default function HomeScreen() {
     accounts.forEach((account) => map.set(account.id, account.name));
     return map;
   }, [accounts]);
+
+  const handleOpenCreateModal = useCallback(() => {
+    setAccountFormName("");
+    setAccountFormType("bank");
+    setAccountFormCurrency(profile.currency);
+    setAccountFormInitialBalance("");
+    setAccountFormExcludeFromTotal(false);
+    setCreateAccountModalVisible(true);
+  }, [profile.currency]);
+
+  const handleCloseCreateModal = useCallback(() => {
+    setCreateAccountModalVisible(false);
+  }, []);
+
+  const handleSaveAccount = useCallback(async () => {
+    if (!accountFormName.trim()) {
+      Alert.alert("Heads up", "Give the account a name first.");
+      return;
+    }
+
+    if (!accountFormCurrency.trim()) {
+      Alert.alert("Heads up", "Currency code cannot be empty.");
+      return;
+    }
+
+    const sanitizedBalance = accountFormInitialBalance.replace(/[^0-9.-]/g, "");
+    const parsedInitial = sanitizedBalance ? Number(sanitizedBalance) : 0;
+    const initialBalanceValue = Number.isNaN(parsedInitial) ? 0 : parsedInitial;
+    const normalizedCurrency = accountFormCurrency.trim().toUpperCase();
+
+    const newAccountId = await addAccount({
+      name: accountFormName,
+      type: accountFormType,
+      currency: normalizedCurrency,
+      initialBalance: initialBalanceValue,
+      excludeFromTotal: accountFormExcludeFromTotal,
+    });
+
+    handleCloseCreateModal();
+    
+    if (newAccountId) {
+      setSelectedAccountId(newAccountId);
+    }
+  }, [accountFormName, accountFormType, accountFormCurrency, accountFormInitialBalance, accountFormExcludeFromTotal, addAccount, handleCloseCreateModal, setSelectedAccountId]);
 
   const resolveAccountName = useCallback(
     (accountId?: string | null) => {
@@ -146,42 +204,15 @@ export default function HomeScreen() {
   const [overviewChart, setOverviewChart] = useState<"bar" | "line">("bar");
   const [topSpendingPeriod, setTopSpendingPeriod] = useState<"week" | "month">("month");
   const [showBalance, setShowBalance] = useState(true);
-  const [isSyncing, setIsSyncing] = useState(false);
-  const [isAuth, setIsAuth] = useState(false);
 
   const insets = useSafeAreaInsets();
   const styles = useMemo(() => createStyles(theme, insets), [theme, insets]);
-
-  useEffect(() => {
-    isAuthenticated().then(setIsAuth);
-  }, []);
 
   useEffect(() => {
     if (overviewPeriod === "week" && overviewChart === "line") {
       setOverviewChart("bar");
     }
   }, [overviewChart, overviewPeriod]);
-
-  const handleSyncToSupabase = async () => {
-    if (!isAuth) {
-      Alert.alert(
-        'Not Signed In',
-        'You need to sign in to sync your stats to the leaderboard. Go to the Leaderboard tab to sign in.',
-        [{ text: 'OK' }]
-      );
-      return;
-    }
-
-    setIsSyncing(true);
-    const result = await syncMetricsToSupabase(transactions, budgetGoals);
-    setIsSyncing(false);
-
-    if (result.success) {
-      Alert.alert('Success', 'Your anonymized stats have been synced to the leaderboard!');
-    } else {
-      Alert.alert('Error', result.error || 'Failed to sync stats');
-    }
-  };
 
   const startOfMonth = useMemo(() => dayjs().startOf("month"), []);
   const endOfMonth = useMemo(() => dayjs().endOf("month"), []);
@@ -440,7 +471,7 @@ export default function HomeScreen() {
   const recentTransactions = useMemo(
     () =>
       [...recentSourceTransactions]
-        .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+        .sort(sortTransactionsByRecency)
         .slice(0, 5),
     [recentSourceTransactions],
   );
@@ -550,6 +581,13 @@ export default function HomeScreen() {
               </Pressable>
             );
           })}
+          <Pressable
+            onPress={handleOpenCreateModal}
+            style={[styles.accountChip, styles.addAccountChip]}
+          >
+            <Ionicons name="add-circle" size={20} color={theme.colors.primary} />
+            <Text style={[styles.accountChipTitle, { color: theme.colors.primary }]}>Add Account</Text>
+          </Pressable>
         </ScrollView>
 
         <View style={[theme.components.surface, styles.monthlyReport]}>
@@ -651,6 +689,14 @@ export default function HomeScreen() {
             )}
           </View>
         </View>
+
+        {/* Monthly Calendar */}
+        <MonthlyCalendar
+          transactions={scopedTransactions}
+          selectedAccountId={selectedAccountId}
+          currency={baseCurrency}
+          onDatePress={(date) => router.push({ pathname: "/(tabs)/transactions", params: { date } })}
+        />
 
         <View style={[theme.components.surface, styles.topSpendingCard]}>
           <View style={styles.sectionHeaderRow}>
@@ -785,7 +831,9 @@ export default function HomeScreen() {
         <View style={[theme.components.surface, styles.goalsCard]}>
           <View style={styles.sectionHeaderRow}>
             <Text style={styles.sectionTitle}>Budget goals</Text>
-            <Text style={styles.sectionCaption}>Stay on track</Text>
+            <Pressable onPress={() => router.push("/budgets")}>
+              <Text style={styles.sectionCaption}>Manage</Text>
+            </Pressable>
           </View>
           {budgetGoals.length > 0 ? (
             <ScrollView
@@ -800,9 +848,9 @@ export default function HomeScreen() {
                   currency,
                   scopedTransactions,
                   selectedAccountId,
+                  categories,
                 );
                 const progressPercent = Math.round(progress.percentage * 100);
-                const goalComplete = progressPercent >= 100;
 
                 let barColor = theme.colors.primary;
                 if (progress.direction === "save") {
@@ -818,7 +866,11 @@ export default function HomeScreen() {
                 }
 
                 return (
-                  <View key={goal.id} style={styles.goalRow}>
+                  <Pressable 
+                    key={goal.id} 
+                    style={styles.goalRow}
+                    onPress={() => router.push({ pathname: "/budgets/[id]", params: { id: goal.id } })}
+                  >
                     <View style={styles.goalCopy}>
                       <Text style={styles.goalName}>{goal.name}</Text>
                       <Text style={styles.goalMeta}>
@@ -839,12 +891,12 @@ export default function HomeScreen() {
                     <Text
                       style={[
                         styles.goalPercentage,
-                        goalComplete && { color: theme.colors.success },
+                        { color: barColor },
                       ]}
                     >
                       {Math.min(100, progressPercent)}%
                     </Text>
-                  </View>
+                  </Pressable>
                 );
               })}
             </ScrollView>
@@ -910,7 +962,7 @@ export default function HomeScreen() {
                     <View style={styles.recentCopy}>
                       <Text style={styles.recentNote}>{transaction.note}</Text>
                       <Text style={styles.recentMeta}>
-                        {dayjs(transaction.date).format("ddd, D MMM")} •
+                        {formatDate(transaction.date, dateFormat)} •
                         {" "}
                         {isTransfer ? `Transfer · ${transferLabel}` : transaction.category}
                       </Text>
@@ -936,6 +988,141 @@ export default function HomeScreen() {
           )}
         </View>
       </ScrollView>
+
+      {/* Create Account Modal */}
+      <Modal
+        visible={createAccountModalVisible}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={handleCloseCreateModal}
+      >
+        <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.colors.background }]}>
+          <KeyboardAvoidingView
+            style={styles.modalFlex}
+            behavior={Platform.OS === "ios" ? "padding" : undefined}
+            keyboardVerticalOffset={24}
+          >
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>New Account</Text>
+              <Pressable style={styles.modalClose} onPress={handleCloseCreateModal}>
+                <Ionicons name="close" size={22} color={theme.colors.text} />
+              </Pressable>
+            </View>
+
+            <ScrollView
+              style={styles.modalBody}
+              contentContainerStyle={styles.modalContent}
+              showsVerticalScrollIndicator={false}
+            >
+              <View style={styles.fieldGroup}>
+                <Text style={styles.fieldLabel}>Account Name</Text>
+                <TextInput
+                  value={accountFormName}
+                  onChangeText={setAccountFormName}
+                  placeholder="e.g., Main Checking"
+                  placeholderTextColor={theme.colors.textMuted}
+                  style={[styles.textInput, theme.components.inputSurface, { color: theme.colors.text }]}
+                />
+              </View>
+
+              <View style={styles.fieldGroup}>
+                <Text style={styles.fieldLabel}>Type</Text>
+                <View style={styles.accountTypeGrid}>
+                  {(["cash", "bank", "card", "investment"] as const).map((type) => {
+                    const active = accountFormType === type;
+                    const iconName =
+                      type === "cash"
+                        ? "cash"
+                        : type === "bank"
+                        ? "business"
+                        : type === "card"
+                        ? "card"
+                        : "trending-up";
+                    const label = type === "cash" ? "Cash" : type === "bank" ? "Bank" : type === "card" ? "Card" : "Investment";
+                    return (
+                      <Pressable
+                        key={type}
+                        style={[
+                          styles.accountTypeCard,
+                          theme.components.surface,
+                          active && { borderColor: theme.colors.primary, borderWidth: 2 }
+                        ]}
+                        onPress={() => setAccountFormType(type)}
+                      >
+                        <Ionicons
+                          name={iconName}
+                          size={20}
+                          color={active ? theme.colors.primary : theme.colors.textMuted}
+                        />
+                        <Text
+                          style={[
+                            styles.accountTypeCardText,
+                            { color: theme.colors.text },
+                            active && { color: theme.colors.primary, fontWeight: "600" }
+                          ]}
+                        >
+                          {label}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
+
+              <View style={styles.rowFields}>
+                <View style={[styles.fieldGroup, styles.flexField]}>
+                  <Text style={styles.fieldLabel}>Currency</Text>
+                  <TextInput
+                    value={accountFormCurrency}
+                    onChangeText={(text) => setAccountFormCurrency(text.toUpperCase())}
+                    placeholder="USD"
+                    placeholderTextColor={theme.colors.textMuted}
+                    autoCapitalize="characters"
+                    maxLength={3}
+                    style={[styles.textInput, theme.components.inputSurface, { color: theme.colors.text }]}
+                  />
+                </View>
+
+                <View style={[styles.fieldGroup, styles.flexField]}>
+                  <Text style={styles.fieldLabel}>Initial Balance</Text>
+                  <TextInput
+                    value={accountFormInitialBalance}
+                    onChangeText={setAccountFormInitialBalance}
+                    placeholder="0.00"
+                    placeholderTextColor={theme.colors.textMuted}
+                    keyboardType="decimal-pad"
+                    style={[styles.textInput, theme.components.inputSurface, { color: theme.colors.text }]}
+                  />
+                </View>
+              </View>
+
+              <View style={[styles.fieldGroup, styles.switchField]}>
+                <View style={styles.switchLabelContainer}>
+                  <Text style={styles.fieldLabel}>Exclude from Total</Text>
+                  <Text style={[styles.fieldHelperText, { color: theme.colors.textMuted }]}>
+                    Don&apos;t include this account in your net worth
+                  </Text>
+                </View>
+                <Switch
+                  value={accountFormExcludeFromTotal}
+                  onValueChange={setAccountFormExcludeFromTotal}
+                  trackColor={{ false: theme.colors.border, true: theme.colors.primary }}
+                  thumbColor={theme.colors.background}
+                />
+              </View>
+            </ScrollView>
+
+            <View style={styles.modalFooter}>
+              <Pressable
+                style={[styles.saveButton, { backgroundColor: theme.colors.primary }]}
+                onPress={handleSaveAccount}
+              >
+                <Text style={styles.saveButtonText}>Create Account</Text>
+              </Pressable>
+            </View>
+          </KeyboardAvoidingView>
+        </SafeAreaView>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -950,10 +1137,10 @@ const createStyles = (
       backgroundColor: theme.colors.background,
     },
     content: {
-      paddingHorizontal: theme.spacing.md,
+      paddingHorizontal: theme.screen.isSmallDevice ? theme.spacing.sm : theme.spacing.md,
       paddingTop: theme.spacing.lg,
       paddingBottom: theme.spacing.xxl + 96 + insets.bottom,
-      gap: theme.spacing.lg,
+      gap: theme.screen.isSmallDevice ? theme.spacing.md : theme.spacing.lg,
     },
     header: {
       gap: theme.spacing.xs,
@@ -970,11 +1157,11 @@ const createStyles = (
     },
     hello: {
       ...theme.typography.title,
-      fontSize: 24,
+      fontSize: theme.screen.isSmallDevice ? 20 : 24,
     },
     subtitle: {
       ...theme.typography.subtitle,
-      fontSize: 14,
+      fontSize: theme.screen.isSmallDevice ? 13 : 14,
     },
     syncButton: {
       flexDirection: 'row',
@@ -1016,16 +1203,16 @@ const createStyles = (
       opacity: 0.6,
     },
     accountChipTitle: {
-      fontSize: 13,
+      fontSize: theme.screen.isSmallDevice ? 12 : 13,
       fontWeight: "600",
       color: theme.colors.text,
     },
     accountChipBalance: {
-      fontSize: 12,
+      fontSize: theme.screen.isSmallDevice ? 11 : 12,
       color: theme.colors.textMuted,
     },
     balanceCard: {
-      gap: theme.spacing.lg,
+      gap: theme.screen.isSmallDevice ? theme.spacing.md : theme.spacing.lg,
     },
     balanceHeader: {
       flexDirection: "row",
@@ -1035,11 +1222,11 @@ const createStyles = (
     balanceLabel: {
       ...theme.typography.subtitle,
       textTransform: "uppercase",
-      letterSpacing: 1.2,
-      fontSize: 12,
+      letterSpacing: theme.screen.isSmallDevice ? 0.8 : 1.2,
+      fontSize: theme.screen.isSmallDevice ? 11 : 12,
     },
     balanceValue: {
-      fontSize: 36,
+      fontSize: theme.screen.isSmallDevice ? 28 : 36,
       fontWeight: "700",
       color: theme.colors.text,
     },
@@ -1177,7 +1364,7 @@ const createStyles = (
     trendCaption: {
       ...theme.typography.subtitle,
       fontSize: 13,
-      marginTop: 2,
+      marginTop:4 ,
       textAlign: "right",
     },
     chartSwitch: {
@@ -1451,5 +1638,103 @@ const createStyles = (
       fontWeight: "600",
       minWidth: 96,
       textAlign: "right",
+    },
+    addAccountChip: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 6,
+    },
+    modalFlex: {
+      flex: 1,
+    },
+    modalHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      paddingHorizontal: 24,
+      paddingVertical: 16,
+    },
+    modalTitle: {
+      fontSize: 18,
+      fontWeight: "600",
+      color: theme.colors.text,
+    },
+    modalClose: {
+      padding: 8,
+    },
+    modalBody: {
+      flex: 1,
+    },
+    modalContent: {
+      padding: 24,
+      gap: 20,
+    },
+    fieldGroup: {
+      marginBottom: 0,
+    },
+    fieldLabel: {
+      fontSize: 14,
+      fontWeight: "600",
+      color: theme.colors.text,
+      marginBottom: 8,
+    },
+    textInput: {
+      paddingHorizontal: 16,
+      paddingVertical: 14,
+      borderRadius: 12,
+      fontSize: 16,
+    },
+    accountTypeGrid: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 12,
+    },
+    accountTypeCard: {
+      flex: 1,
+      minWidth: "45%",
+      padding: 16,
+      borderRadius: 12,
+      alignItems: "center",
+      gap: 8,
+      borderWidth: 1,
+      borderColor: "transparent",
+    },
+    accountTypeCardText: {
+      fontSize: 14,
+    },
+    rowFields: {
+      flexDirection: "row",
+      gap: 12,
+    },
+    flexField: {
+      flex: 1,
+    },
+    switchField: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: 16,
+    },
+    switchLabelContainer: {
+      flex: 1,
+    },
+    fieldHelperText: {
+      fontSize: 12,
+      marginTop: 4,
+    },
+    modalFooter: {
+      padding: 24,
+      paddingTop: 12,
+    },
+    saveButton: {
+      paddingVertical: 16,
+      borderRadius: 12,
+      alignItems: "center",
+    },
+    saveButtonText: {
+      color: "#fff",
+      fontSize: 16,
+      fontWeight: "600",
     },
   });

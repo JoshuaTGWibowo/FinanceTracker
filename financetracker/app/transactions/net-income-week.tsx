@@ -8,7 +8,7 @@ import dayjs from "dayjs";
 import { useAppTheme } from "../../theme";
 import { useFinanceStore } from "../../lib/store";
 import { filterTransactionsByAccount, getTransactionVisualState } from "../../lib/transactions";
-import { truncateWords } from "../../lib/text";
+import { truncateWords, formatDate } from "../../lib/text";
 
 interface Params {
   start?: string;
@@ -47,6 +47,7 @@ export default function NetIncomeWeekScreen() {
   const transactions = useFinanceStore((state) => state.transactions);
   const accounts = useFinanceStore((state) => state.accounts);
   const currency = useFinanceStore((state) => state.profile.currency) || "USD";
+  const dateFormat = useFinanceStore((state) => state.preferences.dateFormat);
 
   const start = useMemo(() => dayjs(startParam ?? undefined).startOf("day"), [startParam]);
   const end = useMemo(() => dayjs(endParam ?? undefined).endOf("day"), [endParam]);
@@ -123,7 +124,7 @@ export default function NetIncomeWeekScreen() {
       .forEach((transaction) => {
         const key = dayjs(transaction.date).format("YYYY-MM-DD");
         const existing =
-          grouped.get(key) ?? { title: dayjs(transaction.date).format("dddd, MMM D"), transactions: [], income: 0, expense: 0, net: 0 };
+          grouped.get(key) ?? { title: `${dayjs(transaction.date).format("dddd")}, ${formatDate(transaction.date, dateFormat)}`, transactions: [], income: 0, expense: 0, net: 0 };
 
         existing.transactions.push(transaction);
         if (transaction.type === "income") {
@@ -330,8 +331,8 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>, insets: { top: numb
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "space-between",
-      paddingHorizontal: theme.spacing.xl,
-      paddingVertical: theme.spacing.lg,
+      paddingHorizontal: theme.screen.isSmallDevice ? theme.spacing.lg : theme.spacing.xl,
+      paddingVertical: theme.screen.isSmallDevice ? theme.spacing.md : theme.spacing.lg,
     },
     iconButton: {
       width: 40,
@@ -346,12 +347,12 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>, insets: { top: numb
       height: 40,
     },
     title: {
-      fontSize: 18,
+      fontSize: theme.screen.isSmallDevice ? 16 : 18,
       fontWeight: "700",
       color: theme.colors.text,
     },
     listContent: {
-      paddingHorizontal: theme.spacing.xl,
+      paddingHorizontal: theme.screen.isSmallDevice ? theme.spacing.lg : theme.spacing.xl,
       paddingBottom: Math.max(theme.spacing.xl * 2, insets.bottom + theme.spacing.lg),
     },
     summaryCard: {

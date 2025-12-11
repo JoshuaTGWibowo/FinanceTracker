@@ -1,11 +1,14 @@
 import { useMemo, useState, useRef, useEffect, useCallback } from "react";
 import {
+  Alert,
+  KeyboardAvoidingView,
   Modal,
   Platform,
   Pressable,
   ScrollView,
   SectionList,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   View,
@@ -22,9 +25,10 @@ import {
   filterTransactionsByAccount,
   getTransactionDelta,
   getTransactionVisualState,
+  sortTransactionsByRecency,
   type TransactionVisualVariant,
 } from "../../lib/transactions";
-import { truncateWords } from "../../lib/text";
+import { truncateWords, formatDate } from "../../lib/text";
 import { buildMonthlyPeriods } from "../../lib/periods";
 
 const formatCurrency = (
@@ -96,12 +100,13 @@ export default function TransactionsScreen() {
   const theme = useAppTheme();
   const transactions = useFinanceStore((state) => state.transactions);
   const currency = useFinanceStore((state) => state.profile.currency);
+  const dateFormat = useFinanceStore((state) => state.preferences.dateFormat);
   const categories = useFinanceStore((state) => state.preferences.categories);
   const recurringTransactions = useFinanceStore((state) => state.recurringTransactions);
   const logRecurringTransaction = useFinanceStore((state) => state.logRecurringTransaction);
   const accounts = useFinanceStore((state) => state.accounts);
   const router = useRouter();
-  const { category: categoryParam } = useLocalSearchParams<{ category?: string | string[] }>();
+  const { category: categoryParam, date: dateParam } = useLocalSearchParams<{ category?: string | string[]; date?: string }>();
 
   const baseCurrency = currency || "USD";
 
@@ -170,6 +175,14 @@ export default function TransactionsScreen() {
   const [showEndPicker, setShowEndPicker] = useState(false);
   const selectedAccountId = useFinanceStore((state) => state.selectedAccountId);
   const setSelectedAccountId = useFinanceStore((state) => state.setSelectedAccountId);
+  const addAccount = useFinanceStore((state) => state.addAccount);
+
+  const [createAccountModalVisible, setCreateAccountModalVisible] = useState(false);
+  const [accountFormName, setAccountFormName] = useState("");
+  const [accountFormType, setAccountFormType] = useState<"cash" | "bank" | "card" | "investment">("bank");
+  const [accountFormCurrency, setAccountFormCurrency] = useState(currency);
+  const [accountFormInitialBalance, setAccountFormInitialBalance] = useState("");
+  const [accountFormExcludeFromTotal, setAccountFormExcludeFromTotal] = useState(false);
   const [recurringExpanded, setRecurringExpanded] = useState(false);
 
   useEffect(() => {
@@ -194,6 +207,30 @@ export default function TransactionsScreen() {
     }
   }, [categories, categoryParam]);
 
+  // Handle date parameter from calendar navigation
+  useEffect(() => {
+    if (!dateParam) {
+      return;
+    }
+
+    const date = dayjs(dateParam);
+    if (!date.isValid()) {
+      return;
+    }
+
+    // Set both start and end date to the same date for single-day filter
+    setStartDate(date);
+    setEndDate(date);
+    setFiltersExpanded(true);
+
+    // Set the period to the month containing this date
+    const monthKey = date.startOf("month").format("YYYY-MM");
+    setSelectedPeriod(monthKey);
+
+    // Clear the date param from URL after applying the filter
+    router.replace("/(tabs)/transactions");
+  }, [dateParam, router]);
+
   const insets = useSafeAreaInsets();
   const styles = useMemo(() => createStyles(theme, insets), [theme, insets]);
 
@@ -217,6 +254,37 @@ export default function TransactionsScreen() {
 
   const normalizeCategoryType = (type?: Category["type"]): Extract<TransactionType, "expense" | "income"> =>
     type === "income" ? "income" : "expense";
+
+  const handleSaveAccount = useCallback(async () => {
+    if (!accountFormName.trim()) {
+      Alert.alert("Heads up", "Give the account a name first.");
+      return;
+    }
+
+    if (!accountFormCurrency.trim()) {
+      Alert.alert("Heads up", "Currency code cannot be empty.");
+      return;
+    }
+
+    const sanitizedBalance = accountFormInitialBalance.replace(/[^0-9.-]/g, "");
+    const parsedInitial = sanitizedBalance ? Number(sanitizedBalance) : 0;
+    const initialBalanceValue = Number.isNaN(parsedInitial) ? 0 : parsedInitial;
+    const normalizedCurrency = accountFormCurrency.trim().toUpperCase();
+
+    const newAccountId = await addAccount({
+      name: accountFormName,
+      type: accountFormType,
+      currency: normalizedCurrency,
+      initialBalance: initialBalanceValue,
+      excludeFromTotal: accountFormExcludeFromTotal,
+    });
+
+    setCreateAccountModalVisible(false);
+    
+    if (newAccountId) {
+      setSelectedAccountId(newAccountId);
+    }
+  }, [accountFormName, accountFormType, accountFormCurrency, accountFormInitialBalance, accountFormExcludeFromTotal, addAccount, setSelectedAccountId]);
 
   const selectedCategory = useMemo(
     () => (selectedCategoryId ? categories.find((category) => category.id === selectedCategoryId) ?? null : null),
@@ -329,10 +397,10 @@ export default function TransactionsScreen() {
       });
     }
     if (startDate) {
-      filters.push({ key: "start", label: startDate.format("MMM D"), type: "start" });
+      filters.push({ key: "start", label: formatDate(startDate.toDate(), dateFormat), type: "start" });
     }
     if (endDate) {
-      filters.push({ key: "end", label: endDate.format("MMM D"), type: "end" });
+      filters.push({ key: "end", label: formatDate(endDate.toDate(), dateFormat), type: "end" });
     }
     if (categoryTypeFilter) {
       filters.push({
@@ -426,35 +494,6 @@ export default function TransactionsScreen() {
     });
 
     const reportable = periodTransactions.filter((transaction) => !transaction.excludeFromReports);
-
-    const parseTransactionId = (id: string) => {
-      const match = id.match(/(\d+)$/);
-      return match ? Number(match[1]) : null;
-    };
-
-    const sortTransactionsByRecency = (a: Transaction, b: Transaction) => {
-      const dateDiff = dayjs(b.date).valueOf() - dayjs(a.date).valueOf();
-      if (dateDiff !== 0) {
-        return dateDiff;
-      }
-
-      const aId = parseTransactionId(a.id);
-      const bId = parseTransactionId(b.id);
-
-      if (aId !== null && bId !== null && aId !== bId) {
-        return bId - aId;
-      }
-
-      if (bId !== null && aId === null) {
-        return 1;
-      }
-
-      if (aId !== null && bId === null) {
-        return -1;
-      }
-
-      return 0;
-    };
 
     // Group by date with daily totals
     const grouped = new Map<
@@ -804,6 +843,20 @@ export default function TransactionsScreen() {
                   </Pressable>
                 );
               })}
+              <Pressable
+                onPress={() => {
+                  setAccountFormName("");
+                  setAccountFormType("bank");
+                  setAccountFormCurrency(currency);
+                  setAccountFormInitialBalance("");
+                  setAccountFormExcludeFromTotal(false);
+                  setCreateAccountModalVisible(true);
+                }}
+                style={[styles.accountChip, styles.addAccountChip]}
+              >
+                <Ionicons name="add-circle" size={20} color={theme.colors.primary} />
+                <Text style={[styles.accountChipTitle, { color: theme.colors.primary }]}>Add Account</Text>
+              </Pressable>
             </ScrollView>
 
             {/* Recurring Transactions */}
@@ -833,7 +886,7 @@ export default function TransactionsScreen() {
                           </Text>
                         ) : null}
                         <Text style={styles.recurringDate}>
-                          {dayjs(item.nextOccurrence).format("MMM D")} • {item.frequency}
+                          {formatDate(item.nextOccurrence, dateFormat)} • {item.frequency}
                         </Text>
                       </View>
                       <Pressable
@@ -997,7 +1050,7 @@ export default function TransactionsScreen() {
                     style={styles.dateButton}
                   >
                     <Text style={styles.dateButtonText}>
-                      {startDate ? startDate.format("MMM D") : "Start"}
+                      {startDate ? formatDate(startDate.toDate(), dateFormat) : "Start"}
                     </Text>
                   </Pressable>
                   <Text style={styles.filterSeparator}>to</Text>
@@ -1006,7 +1059,7 @@ export default function TransactionsScreen() {
                     style={styles.dateButton}
                   >
                     <Text style={styles.dateButtonText}>
-                      {endDate ? endDate.format("MMM D") : "End"}
+                      {endDate ? formatDate(endDate.toDate(), dateFormat) : "End"}
                     </Text>
                   </Pressable>
                 </View>
@@ -1299,6 +1352,141 @@ export default function TransactionsScreen() {
           }}
         />
       )}
+
+      {/* Create Account Modal */}
+      <Modal
+        visible={createAccountModalVisible}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setCreateAccountModalVisible(false)}
+      >
+        <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.colors.background }]}>
+          <KeyboardAvoidingView
+            style={styles.modalFlex}
+            behavior={Platform.OS === "ios" ? "padding" : undefined}
+            keyboardVerticalOffset={24}
+          >
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>New Account</Text>
+              <Pressable style={styles.modalClose} onPress={() => setCreateAccountModalVisible(false)}>
+                <Ionicons name="close" size={22} color={theme.colors.text} />
+              </Pressable>
+            </View>
+
+            <ScrollView
+              style={styles.modalBody}
+              contentContainerStyle={styles.modalContent}
+              showsVerticalScrollIndicator={false}
+            >
+              <View style={styles.fieldGroup}>
+                <Text style={styles.fieldLabel}>Account Name</Text>
+                <TextInput
+                  value={accountFormName}
+                  onChangeText={setAccountFormName}
+                  placeholder="e.g., Main Checking"
+                  placeholderTextColor={theme.colors.textMuted}
+                  style={[styles.textInput, theme.components.surface, { color: theme.colors.text }]}
+                />
+              </View>
+
+              <View style={styles.fieldGroup}>
+                <Text style={styles.fieldLabel}>Type</Text>
+                <View style={styles.accountTypeGrid}>
+                  {(["cash", "bank", "card", "investment"] as const).map((type) => {
+                    const active = accountFormType === type;
+                    const iconName =
+                      type === "cash"
+                        ? "cash"
+                        : type === "bank"
+                        ? "business"
+                        : type === "card"
+                        ? "card"
+                        : "trending-up";
+                    const label = type === "cash" ? "Cash" : type === "bank" ? "Bank" : type === "card" ? "Card" : "Investment";
+                    return (
+                      <Pressable
+                        key={type}
+                        style={[
+                          styles.accountTypeCard,
+                          theme.components.surface,
+                          active && { borderColor: theme.colors.primary, borderWidth: 2 }
+                        ]}
+                        onPress={() => setAccountFormType(type)}
+                      >
+                        <Ionicons
+                          name={iconName}
+                          size={20}
+                          color={active ? theme.colors.primary : theme.colors.textMuted}
+                        />
+                        <Text
+                          style={[
+                            styles.accountTypeCardText,
+                            { color: theme.colors.text },
+                            active && { color: theme.colors.primary, fontWeight: "600" }
+                          ]}
+                        >
+                          {label}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
+
+              <View style={styles.rowFields}>
+                <View style={[styles.fieldGroup, styles.flexField]}>
+                  <Text style={styles.fieldLabel}>Currency</Text>
+                  <TextInput
+                    value={accountFormCurrency}
+                    onChangeText={(text) => setAccountFormCurrency(text.toUpperCase())}
+                    placeholder="USD"
+                    placeholderTextColor={theme.colors.textMuted}
+                    autoCapitalize="characters"
+                    maxLength={3}
+                    style={[styles.textInput, theme.components.surface, { color: theme.colors.text }]}
+                  />
+                </View>
+
+                <View style={[styles.fieldGroup, styles.flexField]}>
+                  <Text style={styles.fieldLabel}>Initial Balance</Text>
+                  <TextInput
+                    value={accountFormInitialBalance}
+                    onChangeText={setAccountFormInitialBalance}
+                    placeholder="0.00"
+                    placeholderTextColor={theme.colors.textMuted}
+                    keyboardType="decimal-pad"
+                    style={[styles.textInput, theme.components.surface, { color: theme.colors.text }]}
+                  />
+                </View>
+              </View>
+
+              <View style={[styles.fieldGroup, styles.switchField]}>
+                <View style={styles.switchLabelContainer}>
+                  <Text style={styles.fieldLabel}>Exclude from Total</Text>
+                  <Text style={[styles.fieldHelperText, { color: theme.colors.textMuted }]}>
+                    Don&apos;t include this account in your net worth
+                  </Text>
+                </View>
+                <Switch
+                  value={accountFormExcludeFromTotal}
+                  onValueChange={setAccountFormExcludeFromTotal}
+                  trackColor={{ false: theme.colors.border, true: theme.colors.primary }}
+                  thumbColor={theme.colors.background}
+                />
+              </View>
+            </ScrollView>
+
+            <View style={styles.modalFooter}>
+              <Pressable
+                style={[styles.saveButton, { backgroundColor: theme.colors.primary }]}
+                onPress={handleSaveAccount}
+              >
+                <Text style={styles.saveButtonText}>Create Account</Text>
+              </Pressable>
+            </View>
+          </KeyboardAvoidingView>
+        </SafeAreaView>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -1313,16 +1501,16 @@ const createStyles = (theme: any, insets: any) =>
       paddingBottom: 100,
     },
     header: {
-      paddingHorizontal: 12,
-      paddingTop: 16,
+      paddingHorizontal: theme.screen.isSmallDevice ? 12 : 16,
+      paddingTop: theme.screen.isSmallDevice ? 12 : 16,
     },
     
     // Balance Card
     balanceCard: {
       backgroundColor: theme.colors.surface,
-      borderRadius: 20,
-      padding: 20,
-      marginBottom: 16,
+      borderRadius: theme.screen.isSmallDevice ? 16 : 20,
+      padding: theme.screen.isSmallDevice ? 16 : 20,
+      marginBottom: theme.screen.isSmallDevice ? 12 : 16,
       shadowColor: "#000",
       shadowOffset: { width: 0, height: 2 },
       shadowOpacity: 0.05,
@@ -1333,7 +1521,7 @@ const createStyles = (theme: any, insets: any) =>
       flexDirection: "row",
       justifyContent: "space-between",
       alignItems: "flex-start",
-      marginBottom: 20,
+      marginBottom: theme.screen.isSmallDevice ? 16 : 20,
     },
     balanceLabel: {
       fontSize: 12,
@@ -1557,6 +1745,12 @@ const createStyles = (theme: any, insets: any) =>
       fontSize: 12,
       color: theme.colors.textMuted,
     },
+    addAccountChip: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 6,
+    },
     
     // Recurring Section
     recurringSection: {
@@ -1686,9 +1880,9 @@ const createStyles = (theme: any, insets: any) =>
       flex: 1,
     },
     categoryIcon: (variant: TransactionVisualVariant) => ({
-      width: 36,
-      height: 36,
-      borderRadius: 10,
+      width: theme.screen.isSmallDevice ? 32 : 36,
+      height: theme.screen.isSmallDevice ? 32 : 36,
+      borderRadius: theme.screen.isSmallDevice ? 8 : 10,
       backgroundColor:
         variant === "income"
           ? `${theme.colors.success}20`
@@ -1708,7 +1902,7 @@ const createStyles = (theme: any, insets: any) =>
       gap: 4,
     },
     transactionCategory: {
-      fontSize: 14,
+      fontSize: theme.screen.isSmallDevice ? 13 : 14,
       fontWeight: "600",
       color: theme.colors.text,
     },
@@ -2123,5 +2317,93 @@ const createStyles = (theme: any, insets: any) =>
       fontSize: 15,
       fontWeight: "600",
       color: "#fff",
+    },
+    modalFlex: {
+      flex: 1,
+    },
+    accountModalHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      paddingHorizontal: 24,
+      paddingVertical: 16,
+    },
+    accountModalTitle: {
+      fontSize: 18,
+      fontWeight: "600",
+      color: theme.colors.text,
+    },
+    accountModalClose: {
+      padding: 8,
+    },
+    modalBody: {
+      flex: 1,
+    },
+    accountModalContent: {
+      padding: 24,
+      gap: 20,
+    },
+    fieldGroup: {
+      marginBottom: 0,
+    },
+    fieldLabel: {
+      fontSize: 14,
+      fontWeight: "600",
+      color: theme.colors.text,
+      marginBottom: 8,
+    },
+    textInput: {
+      paddingHorizontal: 16,
+      paddingVertical: 14,
+      borderRadius: 12,
+      fontSize: 16,
+    },
+    accountTypeGrid: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 12,
+    },
+    accountTypeCard: {
+      flex: 1,
+      minWidth: "45%",
+      padding: 16,
+      borderRadius: 12,
+      alignItems: "center",
+      gap: 8,
+      borderWidth: 1,
+      borderColor: "transparent",
+    },
+    accountTypeCardText: {
+      fontSize: 14,
+    },
+    rowFields: {
+      flexDirection: "row",
+      gap: 12,
+    },
+    flexField: {
+      flex: 1,
+    },
+    switchField: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: 16,
+    },
+    switchLabelContainer: {
+      flex: 1,
+    },
+    fieldHelperText: {
+      fontSize: 12,
+      marginTop: 4,
+    },
+    saveButton: {
+      paddingVertical: 16,
+      borderRadius: 12,
+      alignItems: "center",
+    },
+    saveButtonText: {
+      color: "#fff",
+      fontSize: 16,
+      fontWeight: "600",
     },
   });

@@ -185,7 +185,7 @@ export default function EditCategoryScreen() {
         <View style={styles.helperCard}>
           <Ionicons name="information-circle" size={18} color={theme.colors.textMuted} />
           <Text style={styles.helperText}>
-            Inactive wallet transactions will still appear in reports but you can't use this category for new transactions
+            Inactive wallet transactions will still appear in reports but you can&apos;t use this category for new transactions
           </Text>
         </View>
       </ScrollView>
@@ -213,8 +213,8 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>) =>
       backgroundColor: theme.colors.background,
     },
     headerContainer: {
-      paddingHorizontal: theme.spacing.md,
-      paddingTop: theme.spacing.md,
+      paddingHorizontal: theme.screen.isSmallDevice ? theme.spacing.sm : theme.spacing.md,
+      paddingTop: theme.screen.isSmallDevice ? theme.spacing.sm : theme.spacing.md,
       paddingBottom: theme.spacing.md,
       gap: theme.spacing.sm,
     },
@@ -230,7 +230,7 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>) =>
       gap: 4,
     },
     title: {
-      fontSize: 24,
+      fontSize: theme.screen.isSmallDevice ? 20 : 24,
       fontWeight: "700",
       color: theme.colors.text,
     },
@@ -246,9 +246,9 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>) =>
       gap: theme.spacing.md,
     },
     content: {
-      paddingHorizontal: theme.spacing.md,
+      paddingHorizontal: theme.screen.isSmallDevice ? theme.spacing.sm : theme.spacing.md,
       paddingBottom: 120,
-      gap: theme.spacing.md,
+      gap: theme.screen.isSmallDevice ? theme.spacing.sm : theme.spacing.md,
     },
     formSection: {
       padding: theme.spacing.md,

@@ -1,4 +1,4 @@
-import { supabase, getCurrentUserId } from './supabase';
+import { supabase, getCurrentUserId, isAuthenticated } from './supabase';
 import type { LeaderboardStats } from './supabase-types';
 import type { Transaction, BudgetGoal } from './types';
 
@@ -205,14 +205,18 @@ export function calculateAnonymizedMetrics(
  * This is the ONLY data sent to the cloud - no actual amounts or sensitive info
  */
 export async function syncMetricsToSupabase(
-  transactions: Transaction[],
-  budgetGoals: BudgetGoal[]
+  transactions?: Transaction[],
+  budgetGoals?: BudgetGoal[]
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const userId = await getCurrentUserId();
     if (!userId) {
       return { success: false, error: 'User not authenticated' };
     }
+
+    // Use provided data or default to empty arrays
+    const txData = transactions || [];
+    const budgetData = budgetGoals || [];
 
     // Calculate metrics for all periods
     const periods: Array<'daily' | 'weekly' | 'monthly' | 'all_time'> = [
@@ -223,7 +227,7 @@ export async function syncMetricsToSupabase(
     ];
 
     for (const period of periods) {
-      const metrics = calculateAnonymizedMetrics(transactions, budgetGoals, period);
+      const metrics = calculateAnonymizedMetrics(txData, budgetData, period);
 
       const statsData: Partial<LeaderboardStats> = {
         user_id: userId,
@@ -261,13 +265,137 @@ export async function syncMetricsToSupabase(
 }
 
 /**
- * Fetch leaderboard data from Supabase
+ * Auto-sync manager with debouncing and periodic sync
+ */
+let autoSyncTimer: ReturnType<typeof setInterval> | null = null;
+let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+let lastSyncTime = 0;
+const SYNC_INTERVAL = 5 * 60 * 1000; // 5 minutes
+const DEBOUNCE_DELAY = 3000; // 3 seconds
+const MIN_SYNC_INTERVAL = 30 * 1000; // Minimum 30 seconds between syncs
+
+/**
+ * Start automatic periodic syncing
+ */
+export function startAutoSync(
+  getTransactions: () => Transaction[],
+  getBudgetGoals: () => BudgetGoal[]
+): void {
+  // Clear existing timer
+  if (autoSyncTimer) {
+    clearInterval(autoSyncTimer);
+  }
+
+  // Set up periodic sync every 5 minutes
+  autoSyncTimer = setInterval(async () => {
+    const now = Date.now();
+    if (now - lastSyncTime >= MIN_SYNC_INTERVAL) {
+      const isAuth = await isAuthenticated();
+      if (isAuth) {
+        const transactions = getTransactions();
+        const budgetGoals = getBudgetGoals();
+        await syncMetricsToSupabase(transactions, budgetGoals);
+        lastSyncTime = now;
+      }
+    }
+  }, SYNC_INTERVAL);
+
+  console.log('Auto-sync enabled: syncing every 5 minutes');
+}
+
+/**
+ * Stop automatic syncing
+ */
+export function stopAutoSync(): void {
+  if (autoSyncTimer) {
+    clearInterval(autoSyncTimer);
+    autoSyncTimer = null;
+  }
+  if (debounceTimer) {
+    clearTimeout(debounceTimer);
+    debounceTimer = null;
+  }
+  console.log('Auto-sync disabled');
+}
+
+/**
+ * Trigger an immediate sync with debouncing
+ * Called after user actions like adding/editing transactions
+ */
+export async function triggerSync(
+  transactions: Transaction[],
+  budgetGoals: BudgetGoal[]
+): Promise<void> {
+  // Clear existing debounce timer
+  if (debounceTimer) {
+    clearTimeout(debounceTimer);
+  }
+
+  // Debounce: wait 3 seconds before syncing
+  debounceTimer = setTimeout(async () => {
+    const now = Date.now();
+    
+    // Respect minimum sync interval
+    if (now - lastSyncTime < MIN_SYNC_INTERVAL) {
+      console.log('Sync throttled: too soon since last sync');
+      return;
+    }
+
+    const isAuth = await isAuthenticated();
+    if (isAuth) {
+      await syncMetricsToSupabase(transactions, budgetGoals);
+      lastSyncTime = now;
+      console.log('Auto-sync triggered after user action');
+    }
+  }, DEBOUNCE_DELAY);
+}
+
+/**
+ * Fetch leaderboard data from Supabase (crew members only)
  */
 export async function fetchLeaderboard(
   period: 'daily' | 'weekly' | 'monthly' | 'all_time',
   limit = 100
 ): Promise<{ success: boolean; data?: any[]; error?: string }> {
   try {
+    const userId = await getCurrentUserId();
+    if (!userId) {
+      return { success: false, error: 'User not authenticated' };
+    }
+
+    // First, get the user's crew
+    const { data: crewData, error: crewError } = await supabase.rpc('get_user_crew');
+    
+    if (crewError) {
+      console.error('Error getting user crew:', crewError);
+      return { success: false, error: 'Not in a crew' };
+    }
+
+    if (!crewData || crewData.length === 0) {
+      // User not in a crew, return empty leaderboard
+      return { success: true, data: [] };
+    }
+
+    const crewId = crewData[0].crew_id;
+
+    // Get all crew members
+    const { data: members, error: membersError } = await supabase.rpc('get_crew_members', {
+      p_crew_id: crewId,
+    });
+
+    if (membersError) {
+      console.error('Error getting crew members:', membersError);
+      return { success: false, error: membersError.message };
+    }
+
+    if (!members || members.length === 0) {
+      return { success: true, data: [] };
+    }
+
+    // Get user IDs from crew members
+    const crewMemberIds = members.map((m: any) => m.user_id);
+
+    // Fetch leaderboard stats for crew members only
     const { data, error } = await supabase
       .from('leaderboard_stats')
       .select(`
@@ -279,6 +407,7 @@ export async function fetchLeaderboard(
         )
       `)
       .eq('period', period)
+      .in('user_id', crewMemberIds)
       .order('total_points', { ascending: false })
       .limit(limit);
 
@@ -297,7 +426,7 @@ export async function fetchLeaderboard(
 }
 
 /**
- * Get user's current rank in leaderboard
+ * Get user's current rank in leaderboard (within crew only)
  */
 export async function getUserRank(
   period: 'daily' | 'weekly' | 'monthly' | 'all_time'
@@ -307,6 +436,27 @@ export async function getUserRank(
     if (!userId) {
       return { success: false, error: 'User not authenticated' };
     }
+
+    // Get the user's crew
+    const { data: crewData, error: crewError } = await supabase.rpc('get_user_crew');
+    
+    if (crewError || !crewData || crewData.length === 0) {
+      return { success: false, error: 'Not in a crew' };
+    }
+
+    const crewId = crewData[0].crew_id;
+
+    // Get all crew members
+    const { data: members, error: membersError } = await supabase.rpc('get_crew_members', {
+      p_crew_id: crewId,
+    });
+
+    if (membersError || !members || members.length === 0) {
+      return { success: false, error: 'Could not fetch crew members' };
+    }
+
+    // Get user IDs from crew members
+    const crewMemberIds = members.map((m: any) => m.user_id);
 
     // Get user's points
     const { data: userStats, error: userError } = await supabase
@@ -320,18 +470,19 @@ export async function getUserRank(
       return { success: false, error: 'User stats not found' };
     }
 
-    // Count how many users have more points
+    // Count how many CREW MEMBERS have more points
     const { count, error: countError } = await supabase
       .from('leaderboard_stats')
       .select('*', { count: 'exact', head: true })
       .eq('period', period)
+      .in('user_id', crewMemberIds)
       .gt('total_points', userStats.total_points);
 
     if (countError) {
       return { success: false, error: countError.message };
     }
 
-    // Rank is count of users with more points + 1
+    // Rank is count of crew members with more points + 1
     const rank = (count || 0) + 1;
 
     return { success: true, rank };

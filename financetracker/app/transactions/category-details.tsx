@@ -424,8 +424,8 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>) =>
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "space-between",
-      paddingHorizontal: theme.spacing.xl,
-      paddingVertical: theme.spacing.lg,
+      paddingHorizontal: theme.screen.isSmallDevice ? theme.spacing.lg : theme.spacing.xl,
+      paddingVertical: theme.screen.isSmallDevice ? theme.spacing.md : theme.spacing.lg,
     },
     iconButton: {
       width: 40,
@@ -440,14 +440,14 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>) =>
       height: 40,
     },
     title: {
-      fontSize: 18,
+      fontSize: theme.screen.isSmallDevice ? 16 : 18,
       fontWeight: "700",
       color: theme.colors.text,
     },
     content: {
-      paddingHorizontal: theme.spacing.md,
+      paddingHorizontal: theme.screen.isSmallDevice ? theme.spacing.sm : theme.spacing.md,
       paddingBottom: theme.spacing.xl * 2,
-      gap: theme.spacing.lg,
+      gap: theme.screen.isSmallDevice ? theme.spacing.md : theme.spacing.lg,
     },
     periodScroller: {
       marginBottom: theme.spacing.sm,

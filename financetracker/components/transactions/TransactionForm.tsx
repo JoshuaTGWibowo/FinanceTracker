@@ -19,6 +19,8 @@ import dayjs from "dayjs";
 import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { useRouter } from "expo-router";
+
 import { useAppTheme } from "../../theme";
 import {
   Category,
@@ -30,7 +32,7 @@ import {
   useFinanceStore,
 } from "../../lib/store";
 import { isCategoryActiveForAccount } from "../../lib/categoryUtils";
-import { AccountPicker } from "../accounts/AccountPicker";
+import { formatDate } from "../../lib/text";
 
 interface TransactionFormProps {
   title: string;
@@ -211,7 +213,9 @@ export function TransactionForm({
   enableRecurringOption = false,
   onSubmitRecurring,
 }: TransactionFormProps) {
+  const router = useRouter();
   const theme = useAppTheme();
+  const dateFormat = useFinanceStore((state) => state.preferences.dateFormat);
   const insets = useSafeAreaInsets();
   const styles = useMemo(() => createStyles(theme, insets), [theme, insets]);
   const currency = useFinanceStore((state) => state.profile.currency);
@@ -250,14 +254,14 @@ export function TransactionForm({
   );
   const [note, setNote] = useState(initialValues?.note ?? "");
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(findInitialCategory);
-  const normalizeCategoryType = (type?: Category["type"]): TransactionType =>
-    type === "income" ? "income" : "expense";
+  const normalizeCategoryType = (type?: Category["type"] | "transfer"): TransactionType =>
+    type === "income" ? "income" : type === "transfer" ? "transfer" : "expense";
   const [transactionType, setTransactionType] = useState<TransactionType>(() => {
     if (initialValues?.type) {
       return initialValues.type;
     }
     const initialCategory = findInitialCategory();
-    return normalizeCategoryType(initialCategory?.type);
+    return normalizeCategoryType(initialCategory?.type) as TransactionType;
   });
   const [categoryModalVisible, setCategoryModalVisible] = useState(false);
   const [categorySearch, setCategorySearch] = useState("");
@@ -266,7 +270,6 @@ export function TransactionForm({
     base.setHours(0, 0, 0, 0);
     return base;
   });
-  const [showDatePicker, setShowDatePicker] = useState(Platform.OS === "ios");
   const [detailsExpanded, setDetailsExpanded] = useState(() =>
     Boolean(
       initialValues?.participants?.length ||
@@ -288,6 +291,9 @@ export function TransactionForm({
   const [recurringFrequency, setRecurringFrequency] = useState<
     RecurringTransaction["frequency"]
   >("monthly");
+  const [accountPickerVisible, setAccountPickerVisible] = useState(false);
+  const [toAccountPickerVisible, setToAccountPickerVisible] = useState(false);
+  const [calendarVisible, setCalendarVisible] = useState(false);
 
   const inheritedCategory = useMemo(() => {
     if (!initialValues?.category) {
@@ -339,10 +345,6 @@ export function TransactionForm({
       setSelectedCategory(null);
     }
   }, [accountId, activeAccounts, isCategoryActiveInAccount, selectedCategory]);
-
-  const selectedCategoryTransactionType = selectedCategory
-    ? normalizeCategoryType(selectedCategory.type)
-    : null;
 
   const groupedCategories = useMemo(() => {
     const query = categorySearch.trim().toLowerCase();
@@ -457,13 +459,16 @@ export function TransactionForm({
   };
 
   const handleChangeType = (nextType: TransactionType) => {
+    const wasTransfer = transactionType === "transfer";
     setTransactionType(nextType);
+    
     if (nextType === "transfer") {
       setSelectedCategory(null);
       return;
     }
 
-    if (transactionType === "transfer" && nextType !== "transfer") {
+    // Switching from transfer to expense/income - clear category
+    if (wasTransfer) {
       setSelectedCategory(null);
     }
 
@@ -478,6 +483,11 @@ export function TransactionForm({
     },
     [groupingFormatter, separators],
   );
+
+  const handleOpenCreateCategory = () => {
+    const categoryType = transactionType === "income" ? "income" : "expense";
+    router.push(`/categories/new?type=${categoryType}`);
+  };
 
   const handleSubmit = async () => {
     const parsedAmount = parseAmountInput(amount);
@@ -529,7 +539,7 @@ export function TransactionForm({
       amount: parsedAmount,
       note: trimmedNote || fallbackNote,
       category: resolvedCategory,
-      type: transactionType === "transfer" ? "transfer" : (selectedCategory?.type ?? transactionType),
+      type: transactionType === "transfer" ? "transfer" : normalizeCategoryType(selectedCategory?.type) ?? transactionType,
       date: date.toISOString(),
       participants: cleanedParticipants,
       location: location.trim() || undefined,
@@ -549,23 +559,51 @@ export function TransactionForm({
     }
   };
 
+  const handleDateChange = (direction: 'prev' | 'next') => {
+    const newDate = new Date(date);
+    if (direction === 'prev') {
+      newDate.setDate(newDate.getDate() - 1);
+    } else {
+      newDate.setDate(newDate.getDate() + 1);
+    }
+    newDate.setHours(0, 0, 0, 0);
+    setDate(newDate);
+  };
+
+  const isFormValid = useMemo(() => {
+    const parsedAmount = parseAmountInput(amount);
+    if (Number.isNaN(parsedAmount) || parsedAmount <= 0) {
+      return false;
+    }
+    if (!accountId) {
+      return false;
+    }
+    if (transactionType === "transfer") {
+      return Boolean(toAccountId && toAccountId !== accountId);
+    }
+    return Boolean(selectedCategory);
+  }, [amount, accountId, transactionType, selectedCategory, toAccountId]);
+
   return (
     <SafeAreaView style={styles.safeArea}>
-      <View style={styles.backgroundAccent} pointerEvents="none">
-        <View style={styles.accentBlobPrimary} />
-        <View style={styles.accentBlobSecondary} />
-      </View>
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
-        keyboardVerticalOffset={32 + insets.top}
+        keyboardVerticalOffset={insets.top}
       >
         <View style={styles.header}>
-          <Pressable onPress={onCancel} style={styles.closeButton} accessibilityRole="button">
-            <Ionicons name="chevron-down" size={24} color={theme.colors.text} />
+          <Pressable onPress={onCancel} accessibilityRole="button">
+            <Text style={styles.cancelButton}>Cancel</Text>
           </Pressable>
           <Text style={styles.title}>{title}</Text>
-          <View style={styles.headerSpacer} />
+          <Pressable
+            style={styles.autoAddButton}
+            onPress={() => router.push('/transactions/auto-add')}
+            accessibilityRole="button"
+            accessibilityLabel="Auto add transaction from receipt"
+          >
+            <Ionicons name="sparkles" size={20} color={theme.colors.primary} />
+          </Pressable>
         </View>
 
         <ScrollView
@@ -575,232 +613,159 @@ export function TransactionForm({
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          <View style={styles.heroCard}>
-            <View style={styles.heroHeader}>
-              <View>
-                <Text style={styles.heroLabel}>Amount</Text>
-              </View>
-              <View style={styles.currencyBadge}>
-                <Ionicons name="cash-outline" size={16} color={theme.colors.primary} />
-                <Text style={styles.currencyBadgeText}>{currency}</Text>
-              </View>
-            </View>
-            <View style={styles.heroAmountRow}>
-              <TextInput
-                value={amount}
-                onChangeText={handleAmountChange}
-                keyboardType="decimal-pad"
-                placeholder="0.00"
-                placeholderTextColor={theme.colors.textMuted}
-                style={styles.heroAmountInput}
-              />
-            </View>
+          {/* Type Tabs */}
+          <View style={styles.typeTabsContainer}>
+            {(["expense", "income", "transfer"] as TransactionType[]).map((typeOption) => {
+              const active = transactionType === typeOption;
+              return (
+                <Pressable
+                  key={typeOption}
+                  style={styles.typeTab(active)}
+                  onPress={() => handleChangeType(typeOption)}
+                >
+                  <Text style={styles.typeTabText(active)}>
+                    {typeOption === "expense"
+                      ? "Expense"
+                      : typeOption === "income"
+                        ? "Income"
+                        : "Transfer"}
+                  </Text>
+                </Pressable>
+              );
+            })}
           </View>
 
-          <View style={styles.sectionCard}>
-            <View style={styles.sectionHeader}>
-              <View>
-                <Text style={styles.sectionTitle}>Type & category</Text>
+          {/* Main Transaction Card */}
+          <View style={styles.mainCard}>
+            {/* Account Row */}
+            <Pressable
+              style={styles.compactRow}
+              onPress={() => setAccountPickerVisible(true)}
+            >
+              <View style={styles.compactRowIcon}>
+                <Ionicons name="wallet" size={20} color={theme.colors.primary} />
               </View>
-              <Ionicons name="pricetag-outline" size={20} color={theme.colors.textMuted} />
+              <Text style={styles.compactRowText}>
+                {activeAccounts.find((acc) => acc.id === accountId)?.name || "Select account"}
+              </Text>
+              <Ionicons name="chevron-forward" size={20} color={theme.colors.textMuted} />
+            </Pressable>
+
+            {/* Amount Row */}
+            <View style={styles.amountRow}>
+            <View style={styles.currencyBadge}>
+              <Text style={styles.currencyText}>{currency}</Text>
             </View>
+            <TextInput
+              value={amount}
+              onChangeText={handleAmountChange}
+              keyboardType="decimal-pad"
+              placeholder="0"
+              placeholderTextColor={theme.colors.textMuted}
+              style={styles.amountInput}
+            />
+          </View>
 
-            <View style={styles.typeRow}>
-              {(["expense", "income", "transfer"] as TransactionType[]).map((typeOption) => {
-                const active = transactionType === typeOption;
-                return (
-                  <Pressable
-                    key={typeOption}
-                    style={styles.typeChip(active, typeOption)}
-                    onPress={() => handleChangeType(typeOption)}
-                  >
-                    <Text style={styles.typeChipText(active)}>
-                      {typeOption === "expense"
-                        ? "Expense"
-                        : typeOption === "income"
-                          ? "Income"
-                          : "Transfer"}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-
-            {transactionType !== "transfer" && (
-              <Pressable
-                style={styles.selectionTile}
-                onPress={() => setCategoryModalVisible(true)}
-                accessibilityRole="button"
-              >
-                <View style={styles.selectionTileInfo}>
-                  <Text style={styles.selectionLabel}>Category</Text>
-                  <Text style={styles.selectionValue}>
-                    {selectedCategory ? selectedCategory.name : "Choose a category"}
-                  </Text>
-                </View>
-                <View style={styles.selectionIcon}>
-                  <Ionicons name="chevron-forward" size={20} color={theme.colors.text} />
-                </View>
-              </Pressable>
-            )}
-
-            {transactionType !== "transfer" && selectedCategory && (
-              <View style={styles.selectionBadgeRow}>
-                <View style={styles.typeBadge(selectedCategoryTransactionType ?? transactionType)}>
+          {/* Category Row */}
+          {transactionType !== "transfer" && (
+            <Pressable
+              style={styles.compactRow}
+              onPress={() => setCategoryModalVisible(true)}
+              accessibilityRole="button"
+            >
+              <View style={styles.compactRowIcon}>
+                {selectedCategory ? (
                   <Ionicons
-                    name={selectedCategoryTransactionType === "income" ? "arrow-down-circle" : "arrow-up-circle"}
-                    size={14}
+                    name={toIconName(selectedCategory.icon)}
+                    size={20}
                     color={theme.colors.text}
                   />
-                  <Text style={styles.typeBadgeText}>
-                    {selectedCategoryTransactionType === "income" ? "Income" : "Expense"}
-                  </Text>
-                </View>
+                ) : (
+                  <View style={styles.emptyCategoryIcon} />
+                )}
               </View>
-            )}
-          </View>
+              <Text style={styles.compactRowText}>
+                {selectedCategory ? selectedCategory.name : "Select category"}
+              </Text>
+              <Ionicons name="chevron-forward" size={20} color={theme.colors.textMuted} />
+            </Pressable>
+          )}
 
-          <View style={styles.sectionCard}>
-            <View style={styles.sectionHeader}>
-              <View>
-                <Text style={styles.sectionTitle}>Accounts</Text>
+          {/* To Account Row for Transfer */}
+          {transactionType === "transfer" && (
+            <Pressable
+              style={styles.compactRow}
+              onPress={() => setToAccountPickerVisible(true)}
+            >
+              <View style={styles.compactRowIcon}>
+                <Ionicons name="arrow-forward" size={20} color={theme.colors.success} />
               </View>
-              <Ionicons name="wallet-outline" size={20} color={theme.colors.textMuted} />
-            </View>
-
-            <AccountPicker
-              label="From account"
-              value={accountId}
-              onChange={setAccountId}
-              currency={currency}
-            />
-
-            {transactionType === "transfer" && (
-              <AccountPicker
-                label="To account"
-                value={toAccountId}
-                onChange={setToAccountId}
-                placeholder="Choose a destination account"
-                currency={currency}
-                excludeAccountIds={accountId ? [accountId] : undefined}
-              />
-            )}
-          </View>
-
-          <View style={styles.sectionCard}>
-            <View style={styles.sectionHeader}>
-              <View>
-                <Text style={styles.sectionTitle}>Notes & schedule</Text>
+              <View style={styles.toAccountLabel}>
+                <Text style={styles.toAccountLabelText}>To account</Text>
+                <Text style={styles.compactRowText}>
+                  {toAccountId 
+                    ? activeAccounts.find((acc) => acc.id === toAccountId)?.name || "Select account"
+                    : "Choose a destination account"}
+                </Text>
               </View>
-              <Ionicons name="calendar-outline" size={20} color={theme.colors.textMuted} />
-            </View>
+              <Ionicons name="chevron-forward" size={20} color={theme.colors.textMuted} />
+            </Pressable>
+          )}
 
-            <View style={styles.fieldGroup}>
-              <Text style={styles.label}>Note</Text>
-              <TextInput
-                value={note}
-                onChangeText={handleNoteChange}
-                placeholder="Add a short note"
-                placeholderTextColor={theme.colors.textMuted}
-                multiline
-                style={[styles.input, styles.noteInput]}
-              />
-            </View>
-
-            <View style={styles.sectionDivider} />
-
-            <View style={styles.fieldGroup}>
-              <Text style={styles.label}>Date</Text>
-              <Pressable
-                style={[styles.input, styles.dateButton]}
-                onPress={() => setShowDatePicker((prev) => (Platform.OS === "ios" ? prev : !prev))}
-              >
-                <Text style={styles.dateText}>{dayjs(date).format("MMM D, YYYY")}</Text>
-                <Ionicons name="calendar" size={20} color={theme.colors.textMuted} />
-              </Pressable>
-              {showDatePicker && (
-                <DateTimePicker
-                  value={date}
-                  mode="date"
-                  display={Platform.OS === "ios" ? "inline" : "default"}
-                  onChange={(_, selectedDate) => {
-                    if (selectedDate) {
-                      const next = new Date(selectedDate);
-                      next.setHours(0, 0, 0, 0);
-                      setDate(next);
-                    }
-                    if (Platform.OS !== "ios") {
-                      setShowDatePicker(false);
-                    }
-                  }}
-                />
-              )}
-            </View>
-
-            {enableRecurringOption && (
-              <>
-                <View style={styles.sectionDivider} />
-                <View style={styles.recurringSection}>
-                  <View style={styles.recurringHeader}>
-                    <View style={styles.flex}>
-                      <Text style={styles.label}>Make recurring</Text>
-                      <Text style={styles.helperText}>
-                        Repeat this transaction automatically on a schedule.
-                      </Text>
-                    </View>
-                    <Switch
-                      value={isRecurring}
-                      onValueChange={setIsRecurring}
-                      thumbColor={isRecurring ? theme.colors.primary : theme.colors.surface}
-                      trackColor={{ true: `${theme.colors.primary}55`, false: theme.colors.border }}
-                    />
-                  </View>
-
-                  {isRecurring && (
-                    <View style={styles.recurringBody}>
-                      <Text style={styles.label}>Repeats</Text>
-                      <View style={styles.frequencyRow}>
-                        {recurringOptions.map((option) => {
-                          const active = recurringFrequency === option.value;
-                          return (
-                            <Pressable
-                              key={option.value}
-                              style={styles.frequencyPill(active)}
-                              onPress={() => setRecurringFrequency(option.value)}
-                            >
-                              <Text style={styles.frequencyPillText(active)}>{option.label}</Text>
-                            </Pressable>
-                          );
-                        })}
-                      </View>
-                    </View>
-                  )}
-                </View>
-              </>
-            )}
-          </View>
-
+          {/* Note Row */}
           <Pressable
-            style={styles.detailsToggle}
+            style={styles.compactRow}
+            onPress={() => {
+              // For now just focus on the note field
+            }}
+          >
+            <View style={styles.compactRowIcon}>
+              <Ionicons name="menu" size={20} color={theme.colors.textMuted} />
+            </View>
+            <TextInput
+              value={note}
+              onChangeText={handleNoteChange}
+              placeholder="Note"
+              placeholderTextColor={theme.colors.textMuted}
+              style={styles.noteInputCompact}
+            />
+            <Ionicons name="chevron-forward" size={20} color={theme.colors.textMuted} />
+          </Pressable>
+
+            {/* Date Row with Navigation */}
+            <View style={styles.dateRow}>
+              <Pressable
+                style={styles.dateNavButton}
+                onPress={() => handleDateChange('prev')}
+              >
+                <Ionicons name="chevron-back" size={20} color={theme.colors.text} />
+              </Pressable>
+              <Pressable
+                style={styles.dateCenterButton}
+                onPress={() => setCalendarVisible(true)}
+              >
+                <Ionicons name="calendar-outline" size={20} color={theme.colors.textMuted} />
+                <Text style={styles.dateTextCompact}>{dayjs(date).format("dddd")}, {formatDate(date, dateFormat)}</Text>
+              </Pressable>
+              <Pressable
+                style={styles.dateNavButton}
+                onPress={() => handleDateChange('next')}
+              >
+                <Ionicons name="chevron-forward" size={20} color={theme.colors.text} />
+              </Pressable>
+            </View>
+          </View>
+
+          {/* Add More Details Button */}
+          <Pressable
+            style={styles.addMoreButton}
             onPress={() => setDetailsExpanded((prev) => !prev)}
           >
-            <View>
-              <Text style={styles.detailsToggleTitle}>Add more details</Text>
-              <Text style={styles.detailsToggleSubtitle}>
-                With, location, photos and reporting preferences
-              </Text>
-            </View>
-            <View style={styles.detailsToggleIcon}>
-              <Ionicons
-                name={detailsExpanded ? "chevron-up" : "chevron-down"}
-                size={18}
-                color={theme.colors.primary}
-              />
-            </View>
+            <Text style={styles.addMoreButtonText}>Add more details</Text>
           </Pressable>
 
           {detailsExpanded && (
-            <View style={[styles.sectionCard, styles.detailsCard]}>
+            <View style={styles.detailsSection}>
               <View style={styles.fieldGroup}>
                 <Text style={styles.label}>With (optional)</Text>
                 <View style={styles.participantRow}>
@@ -883,12 +848,58 @@ export function TransactionForm({
                   trackColor={{ true: `${theme.colors.primary}55`, false: theme.colors.border }}
                 />
               </View>
+
+              {enableRecurringOption && (
+                <>
+                  <View style={styles.sectionDivider} />
+                  <View style={styles.recurringSection}>
+                    <View style={styles.recurringHeader}>
+                      <View style={styles.flex}>
+                        <Text style={styles.label}>Make recurring</Text>
+                        <Text style={styles.helperText}>
+                          Repeat this transaction automatically on a schedule.
+                        </Text>
+                      </View>
+                      <Switch
+                        value={isRecurring}
+                        onValueChange={setIsRecurring}
+                        thumbColor={isRecurring ? theme.colors.primary : theme.colors.surface}
+                        trackColor={{ true: `${theme.colors.primary}55`, false: theme.colors.border }}
+                      />
+                    </View>
+
+                    {isRecurring && (
+                      <View style={styles.recurringBody}>
+                        <Text style={styles.label}>Repeats</Text>
+                        <View style={styles.frequencyRow}>
+                          {recurringOptions.map((option) => {
+                            const active = recurringFrequency === option.value;
+                            return (
+                              <Pressable
+                                key={option.value}
+                                style={styles.frequencyPill(active)}
+                                onPress={() => setRecurringFrequency(option.value)}
+                              >
+                                <Text style={styles.frequencyPillText(active)}>{option.label}</Text>
+                              </Pressable>
+                            );
+                          })}
+                        </View>
+                      </View>
+                    )}
+                  </View>
+                </>
+              )}
             </View>
           )}
         </ScrollView>
 
-        <Pressable style={styles.submitButton} onPress={handleSubmit}>
-          <Text style={styles.submitButtonText}>{submitLabel}</Text>
+        <Pressable 
+          style={styles.submitButton(isFormValid)} 
+          onPress={handleSubmit}
+          disabled={!isFormValid}
+        >
+          <Text style={styles.submitButtonText(isFormValid)}>{submitLabel}</Text>
         </Pressable>
       </KeyboardAvoidingView>
 
@@ -933,7 +944,7 @@ export function TransactionForm({
               </View>
               <Text style={styles.categoryHeroTitle}>Pick the best fit</Text>
               <Text style={styles.helperText}>
-                Categories shown here respect the wallet you're using.
+                Categories shown here respect the wallet you&apos;re using.
               </Text>
             </View>
 
@@ -952,6 +963,18 @@ export function TransactionForm({
                 </Pressable>
               ) : null}
             </View>
+
+            <Pressable
+              style={styles.addCategoryButton}
+              onPress={handleOpenCreateCategory}
+              accessibilityRole="button"
+            >
+              <View style={styles.addCategoryIcon}>
+                <Ionicons name="add-circle" size={20} color={theme.colors.primary} />
+              </View>
+              <Text style={styles.addCategoryText}>Add New Category</Text>
+              <Ionicons name="chevron-forward" size={18} color={theme.colors.textMuted} />
+            </Pressable>
 
             <View style={styles.categoryGroupGrid}>
               {groupedCategories.length === 0 ? (
@@ -1029,6 +1052,136 @@ export function TransactionForm({
           </ScrollView>
         </SafeAreaView>
       </Modal>
+
+      <Modal
+        visible={accountPickerVisible}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setAccountPickerVisible(false)}
+      >
+        <SafeAreaView style={styles.modal}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Select account</Text>
+            <Pressable
+              onPress={() => setAccountPickerVisible(false)}
+              style={styles.modalClose}
+              accessibilityRole="button"
+            >
+              <Ionicons name="close" size={20} color={theme.colors.text} />
+            </Pressable>
+          </View>
+          <ScrollView contentContainerStyle={styles.modalContent}>
+            {activeAccounts.map((account) => {
+              const active = account.id === accountId;
+              const balance = account.balance || 0;
+              return (
+                <Pressable
+                  key={account.id}
+                  style={styles.accountRow(active)}
+                  onPress={() => {
+                    setAccountId(account.id);
+                    setAccountPickerVisible(false);
+                  }}
+                >
+                  <View style={styles.accountIconWrapper}>
+                    <Ionicons name="wallet" size={20} color={theme.colors.text} />
+                  </View>
+                  <View style={styles.accountInfo}>
+                    <Text style={styles.accountName}>{account.name}</Text>
+                    <Text style={styles.accountMeta}>
+                      {account.type.charAt(0).toUpperCase() + account.type.slice(1)} • {currency} {balance.toFixed(2)}
+                    </Text>
+                  </View>
+                  {active && <Ionicons name="checkmark-circle" size={20} color={theme.colors.primary} />}
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+        </SafeAreaView>
+      </Modal>
+
+      <Modal
+        visible={toAccountPickerVisible}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setToAccountPickerVisible(false)}
+      >
+        <SafeAreaView style={styles.modal}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Select destination account</Text>
+            <Pressable
+              onPress={() => setToAccountPickerVisible(false)}
+              style={styles.modalClose}
+              accessibilityRole="button"
+            >
+              <Ionicons name="close" size={20} color={theme.colors.text} />
+            </Pressable>
+          </View>
+          <ScrollView contentContainerStyle={styles.modalContent}>
+            {activeAccounts
+              .filter((acc) => acc.id !== accountId)
+              .map((account) => {
+                const active = account.id === toAccountId;
+                const balance = account.balance || 0;
+                return (
+                  <Pressable
+                    key={account.id}
+                    style={styles.accountRow(active)}
+                    onPress={() => {
+                      setToAccountId(account.id);
+                      setToAccountPickerVisible(false);
+                    }}
+                  >
+                    <View style={styles.accountIconWrapper}>
+                      <Ionicons name="wallet" size={20} color={theme.colors.text} />
+                    </View>
+                    <View style={styles.accountInfo}>
+                      <Text style={styles.accountName}>{account.name}</Text>
+                      <Text style={styles.accountMeta}>
+                        {account.type.charAt(0).toUpperCase() + account.type.slice(1)} • {currency} {balance.toFixed(2)}
+                      </Text>
+                    </View>
+                    {active && <Ionicons name="checkmark-circle" size={20} color={theme.colors.primary} />}
+                  </Pressable>
+                );
+              })}
+          </ScrollView>
+        </SafeAreaView>
+      </Modal>
+
+      {calendarVisible && (
+        <View style={styles.calendarOverlay}>
+          <Pressable
+            style={styles.calendarBackdrop}
+            onPress={() => setCalendarVisible(false)}
+          />
+          <View style={styles.calendarCard}>
+            <View style={styles.calendarHeader}>
+              <Text style={styles.calendarTitle}>Select date</Text>
+              <Pressable
+                onPress={() => setCalendarVisible(false)}
+                style={styles.calendarCloseButton}
+              >
+                <Ionicons name="close" size={20} color={theme.colors.text} />
+              </Pressable>
+            </View>
+            <DateTimePicker
+              value={date}
+              mode="date"
+              display="inline"
+              onChange={(_, selectedDate) => {
+                if (selectedDate) {
+                  const next = new Date(selectedDate);
+                  next.setHours(0, 0, 0, 0);
+                  setDate(next);
+                  setCalendarVisible(false);
+                }
+              }}
+              themeVariant={theme.colors.background === "#050608" ? "dark" : "light"}
+            />
+          </View>
+        </View>
+      )}
     </SafeAreaView>
   );
 }
@@ -1036,141 +1189,203 @@ export function TransactionForm({
 const createStyles = (
   theme: ReturnType<typeof useAppTheme>,
   insets: ReturnType<typeof useSafeAreaInsets>,
-) =>
-  StyleSheet.create({
+) => {
+  const baseStyles = StyleSheet.create({
     safeArea: {
       flex: 1,
       backgroundColor: theme.colors.background,
-      position: "relative",
-    },
-    backgroundAccent: {
-      position: "absolute",
-      top: 0,
-      left: 0,
-      right: 0,
-      height: 220,
-      overflow: "hidden",
-    },
-    accentBlobPrimary: {
-      position: "absolute",
-      top: -120,
-      right: -40,
-      width: 260,
-      height: 260,
-      borderRadius: 200,
-      backgroundColor: `${theme.colors.primary}25`,
-      transform: [{ rotate: "12deg" }],
-    },
-    accentBlobSecondary: {
-      position: "absolute",
-      top: -40,
-      left: -60,
-      width: 200,
-      height: 200,
-      borderRadius: 160,
-      backgroundColor: `${theme.colors.accent}18`,
     },
     flex: {
       flex: 1,
     },
     header: {
-      paddingHorizontal: theme.spacing.md,
-      paddingVertical: theme.spacing.lg,
+      paddingHorizontal: theme.screen.isSmallDevice ? theme.spacing.md : theme.spacing.xl,
+      paddingTop: theme.spacing.md,
+      paddingBottom: theme.spacing.lg,
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "space-between",
+      backgroundColor: theme.colors.background,
     },
-    closeButton: {
+    cancelButton: {
+      fontSize: theme.screen.isSmallDevice ? 16 : 17,
+      color: theme.colors.primary,
+      fontWeight: "500",
+    },
+    headerSpacer: {
+      width: theme.screen.isSmallDevice ? 50 : 60,
+    },
+    autoAddButton: {
+      width: theme.screen.isSmallDevice ? 40 : 44,
+      height: theme.screen.isSmallDevice ? 40 : 44,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderRadius: theme.radii.pill,
+      backgroundColor: `${theme.colors.primary}15`,
+    },
+    title: {
+      fontSize: theme.screen.isSmallDevice ? 16 : 18,
+      fontWeight: "700",
+      color: theme.colors.text,
+      letterSpacing: 0.3,
+    },
+    content: {
+      paddingHorizontal: theme.screen.isSmallDevice ? theme.spacing.md : theme.spacing.xl,
+      paddingBottom: (theme.screen.isSmallDevice ? theme.spacing.lg : theme.spacing.xl) + insets.bottom,
+      paddingTop: theme.spacing.xs,
+      gap: theme.spacing.xs,
+    },
+    typeTabsContainer: {
+      flexDirection: "row",
+      backgroundColor: theme.colors.surface,
+      borderRadius: 16,
+      padding: 4,
+      marginBottom: theme.spacing.md,
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.1,
+      shadowRadius: 8,
+      elevation: 2,
+    },
+    mainCard: {
+      backgroundColor: theme.colors.surface,
+      borderRadius: 20,
+      overflow: "hidden",
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.1,
+      shadowRadius: 8,
+      elevation: 2,
+    },
+    compactRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      paddingVertical: theme.spacing.lg,
+      paddingHorizontal: theme.spacing.md,
+      borderBottomWidth: 1,
+      borderBottomColor: `${theme.colors.border}80`,
+      gap: theme.spacing.md,
+    },
+    compactRowIcon: {
       width: 32,
       height: 32,
       alignItems: "center",
       justifyContent: "center",
-      borderRadius: theme.radii.md,
-      backgroundColor: theme.colors.surface,
     },
-    headerSpacer: {
-      width: 32,
+    emptyCategoryIcon: {
+      width: 24,
+      height: 24,
+      borderRadius: 12,
+      backgroundColor: theme.colors.surfaceElevated,
     },
-    title: {
-      ...theme.typography.title,
-      fontSize: 22,
+    compactRowText: {
+      flex: 1,
+      fontSize: 16,
+      color: theme.colors.text,
+      fontWeight: "500",
     },
-    content: {
-      paddingHorizontal: theme.spacing.md,
-      paddingBottom: theme.spacing.xl + insets.bottom,
-      paddingTop: theme.spacing.lg,
-      gap: theme.spacing.lg,
-    },
-    heroCard: {
-      ...theme.components.card,
-      padding: theme.spacing.xl,
-      borderRadius: theme.radii.lg,
-      gap: theme.spacing.md,
-      borderWidth: 1,
-      borderColor: `${theme.colors.primary}22`,
-      shadowColor: theme.colors.primary,
-      shadowOpacity: 0.1,
-      shadowRadius: 20,
-      elevation: 4,
-    },
-    heroHeader: {
+    amountRow: {
       flexDirection: "row",
       alignItems: "center",
-      justifyContent: "space-between",
-    },
-    heroLabel: {
-      fontSize: 14,
-      fontWeight: "600",
-      color: theme.colors.text,
+      paddingVertical: theme.spacing.lg,
+      paddingHorizontal: theme.spacing.lg,
+      borderBottomWidth: 1,
+      borderBottomColor: `${theme.colors.border}80`,
+      gap: theme.spacing.md,
+      backgroundColor: `${theme.colors.primary}08`,
     },
     currencyBadge: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: theme.spacing.xs,
-      backgroundColor: `${theme.colors.primary}15`,
-      paddingHorizontal: theme.spacing.md,
-      paddingVertical: theme.spacing.xs,
-      borderRadius: theme.radii.pill,
-    },
-    currencyBadgeText: {
-      fontSize: 13,
-      fontWeight: "600",
-      color: theme.colors.primary,
-    },
-    heroAmountRow: {
-      flexDirection: "row",
-      alignItems: "center",
-      borderRadius: theme.radii.md,
-      backgroundColor: theme.colors.surfaceElevated,
-      borderWidth: 1,
-      borderColor: `${theme.colors.primary}33`,
       paddingHorizontal: theme.spacing.md,
       paddingVertical: theme.spacing.sm,
+      backgroundColor: `${theme.colors.primary}22`,
+      borderRadius: theme.radii.md,
+      borderWidth: 1,
+      borderColor: `${theme.colors.primary}44`,
     },
-    heroAmountInput: {
+    currencyText: {
+      fontSize: 15,
+      fontWeight: "700",
+      color: theme.colors.primary,
+      letterSpacing: 0.5,
+    },
+    amountInput: {
       flex: 1,
       fontSize: 36,
       fontWeight: "700",
       color: theme.colors.text,
-      textAlign: "center",
-      paddingVertical: theme.spacing.sm,
+      letterSpacing: 1,
     },
-    sectionCard: {
-      ...theme.components.card,
-      borderRadius: theme.radii.lg,
-      padding: theme.spacing.xl,
-      gap: theme.spacing.lg,
+    noteInputCompact: {
+      flex: 1,
+      fontSize: 16,
+      color: theme.colors.text,
+      fontWeight: "500",
     },
-    sectionHeader: {
+    dateRow: {
       flexDirection: "row",
       alignItems: "center",
-      justifyContent: "space-between",
-      gap: theme.spacing.md,
+      paddingVertical: theme.spacing.lg,
+      paddingHorizontal: theme.spacing.md,
+      gap: theme.spacing.sm,
     },
-    sectionTitle: {
-      fontSize: 16,
-      fontWeight: "700",
+    dateNavButton: {
+      width: 36,
+      height: 36,
+      alignItems: "center",
+      justifyContent: "center",
+      borderRadius: theme.radii.pill,
+      backgroundColor: theme.colors.surfaceElevated,
+    },
+    dateCenterButton: {
+      flex: 1,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: theme.spacing.sm,
+      paddingVertical: theme.spacing.sm,
+    },
+    dateTextCompact: {
+      fontSize: 15,
       color: theme.colors.text,
+      fontWeight: "600",
+      letterSpacing: 0.2,
+    },
+    addMoreButton: {
+      marginTop: theme.spacing.md,
+      marginBottom: theme.spacing.md,
+      paddingVertical: theme.spacing.lg,
+      alignItems: "center",
+      justifyContent: "center",
+      borderRadius: 20,
+      backgroundColor: theme.colors.surface,
+      borderWidth: 2,
+      borderColor: `${theme.colors.primary}33`,
+      borderStyle: "dashed",
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.05,
+      shadowRadius: 4,
+      elevation: 1,
+    },
+    addMoreButtonText: {
+      fontSize: 15,
+      fontWeight: "600",
+      color: theme.colors.text,
+      letterSpacing: 0.3,
+    },
+    detailsSection: {
+      marginTop: theme.spacing.sm,
+      gap: theme.spacing.lg,
+      padding: theme.spacing.xl,
+      backgroundColor: theme.colors.surface,
+      borderRadius: 20,
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.1,
+      shadowRadius: 8,
+      elevation: 2,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
     },
     fieldGroup: {
       gap: theme.spacing.sm,
@@ -1181,114 +1396,18 @@ const createStyles = (
       textTransform: "uppercase",
       letterSpacing: 1.2,
     },
-    typeRow: {
-      flexDirection: "row",
-      flexWrap: "wrap",
-      gap: theme.spacing.sm,
-    },
-    typeChip: (active: boolean, type: TransactionType) => ({
-      paddingHorizontal: theme.spacing.lg,
-      paddingVertical: theme.spacing.sm,
-      borderRadius: theme.radii.pill,
-      borderWidth: 1,
-      borderColor: active ? theme.colors.primary : theme.colors.border,
-      backgroundColor: active
-        ? type === "income"
-          ? `${theme.colors.success}22`
-          : type === "expense"
-            ? `${theme.colors.danger}22`
-            : `${theme.colors.primary}22`
-        : theme.colors.surface,
-    }),
-    typeChipText: (active: boolean) => ({
-      fontSize: 14,
-      fontWeight: "600",
-      color: active ? theme.colors.text : theme.colors.textMuted,
-    }),
     input: {
       ...theme.components.input,
       fontSize: 16,
-    },
-    selectionTile: {
-      flexDirection: "row",
-      alignItems: "center",
-      justifyContent: "space-between",
-      borderRadius: theme.radii.md,
-      borderWidth: 1,
-      borderColor: theme.colors.border,
-      backgroundColor: theme.colors.surfaceElevated,
-      paddingHorizontal: theme.spacing.lg,
-      paddingVertical: theme.spacing.md,
-      gap: theme.spacing.md,
-    },
-    selectionTileInfo: {
-      flex: 1,
-      gap: 4,
-    },
-    selectionLabel: {
-      fontSize: 12,
-      textTransform: "uppercase",
-      letterSpacing: 1,
-      color: theme.colors.textMuted,
-    },
-    selectionValue: {
-      fontSize: 16,
-      fontWeight: "600",
-      color: theme.colors.text,
-    },
-    selectionIcon: {
-      width: 32,
-      height: 32,
-      borderRadius: theme.radii.md,
-      backgroundColor: theme.colors.surface,
-      alignItems: "center",
-      justifyContent: "center",
-    },
-    selectionBadgeRow: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: theme.spacing.sm,
     },
     sectionDivider: {
       height: 1,
       backgroundColor: theme.colors.border,
       opacity: 0.5,
     },
-    typeBadge: (type: TransactionType) => ({
-      flexDirection: "row",
-      alignItems: "center",
-      gap: theme.spacing.xs,
-      alignSelf: "flex-start",
-      paddingHorizontal: theme.spacing.md,
-      paddingVertical: theme.spacing.xs,
-      borderRadius: theme.radii.pill,
-      backgroundColor:
-        type === "income" ? `${theme.colors.success}22` : `${theme.colors.danger}22`,
-    }),
-    typeBadgeText: {
-      fontSize: 12,
-      fontWeight: "600",
-      color: theme.colors.text,
-      textTransform: "uppercase",
-      letterSpacing: 1,
-    },
     helperText: {
       fontSize: 12,
       color: theme.colors.textMuted,
-    },
-    noteInput: {
-      minHeight: 90,
-      textAlignVertical: "top",
-    },
-    dateButton: {
-      flexDirection: "row",
-      alignItems: "center",
-      justifyContent: "space-between",
-    },
-    dateText: {
-      color: theme.colors.text,
-      fontSize: 16,
-      fontWeight: "600",
     },
     recurringSection: {
       gap: theme.spacing.md,
@@ -1306,51 +1425,6 @@ const createStyles = (
       flexDirection: "row",
       flexWrap: "wrap",
       gap: theme.spacing.sm,
-    },
-    frequencyPill: (active: boolean) => ({
-      paddingHorizontal: theme.spacing.lg,
-      paddingVertical: theme.spacing.sm,
-      borderRadius: theme.radii.pill,
-      borderWidth: 1,
-      borderColor: active ? theme.colors.primary : theme.colors.border,
-      backgroundColor: active ? `${theme.colors.primary}22` : theme.colors.surface,
-    }),
-    frequencyPillText: (active: boolean) => ({
-      fontSize: 13,
-      fontWeight: "600",
-      color: active ? theme.colors.text : theme.colors.textMuted,
-    }),
-    detailsToggle: {
-      flexDirection: "row",
-      alignItems: "center",
-      justifyContent: "space-between",
-      padding: theme.spacing.lg,
-      borderRadius: theme.radii.lg,
-      backgroundColor: theme.colors.surface,
-      borderWidth: 1,
-      borderColor: `${theme.colors.primary}33`,
-      gap: theme.spacing.md,
-    },
-    detailsToggleTitle: {
-      fontSize: 15,
-      fontWeight: "600",
-      color: theme.colors.text,
-    },
-    detailsToggleSubtitle: {
-      fontSize: 12,
-      color: theme.colors.textMuted,
-      marginTop: 2,
-    },
-    detailsToggleIcon: {
-      width: 36,
-      height: 36,
-      borderRadius: theme.radii.md,
-      backgroundColor: `${theme.colors.primary}12`,
-      alignItems: "center",
-      justifyContent: "center",
-    },
-    detailsCard: {
-      gap: theme.spacing.lg,
     },
     participantRow: {
       flexDirection: "row",
@@ -1445,15 +1519,6 @@ const createStyles = (
       justifyContent: "space-between",
       gap: theme.spacing.md,
     },
-    submitButton: {
-      ...theme.components.buttonPrimary,
-      marginTop: theme.spacing.lg,
-      marginHorizontal: theme.spacing.xl,
-      marginBottom: theme.spacing.xl + insets.bottom,
-    },
-    submitButtonText: {
-      ...theme.components.buttonPrimaryText,
-    },
     modal: {
       flex: 1,
       backgroundColor: theme.colors.background,
@@ -1485,7 +1550,7 @@ const createStyles = (
     },
     categoryHeroCard: {
       backgroundColor: theme.colors.surface,
-      borderRadius: theme.radii.xl,
+      borderRadius: theme.radii.lg,
       padding: theme.spacing.lg,
       gap: theme.spacing.sm,
       borderWidth: 1,
@@ -1535,7 +1600,7 @@ const createStyles = (
     },
     categoryGroupCard: {
       backgroundColor: theme.colors.surface,
-      borderRadius: theme.radii.xl,
+      borderRadius: theme.radii.lg,
       padding: theme.spacing.md,
       gap: theme.spacing.sm,
       borderWidth: 1,
@@ -1611,4 +1676,181 @@ const createStyles = (
       fontWeight: "700",
       color: theme.colors.text,
     },
+    addCategoryButton: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: theme.spacing.md,
+      backgroundColor: theme.colors.surface,
+      borderRadius: theme.radii.lg,
+      padding: theme.spacing.lg,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      shadowColor: theme.colors.primary,
+      shadowOpacity: 0.08,
+      shadowOffset: { width: 0, height: 4 },
+    },
+    addCategoryIcon: {
+      width: 44,
+      height: 44,
+      borderRadius: theme.radii.lg,
+      backgroundColor: `${theme.colors.primary}15`,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    addCategoryText: {
+      flex: 1,
+      fontSize: 16,
+      fontWeight: "700",
+      color: theme.colors.text,
+    },
+    accountIconWrapper: {
+      width: 44,
+      height: 44,
+      borderRadius: theme.radii.lg,
+      backgroundColor: theme.colors.surfaceElevated,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    accountInfo: {
+      flex: 1,
+      gap: 4,
+    },
+    accountName: {
+      fontSize: 16,
+      fontWeight: "700",
+      color: theme.colors.text,
+    },
+    accountMeta: {
+      fontSize: 12,
+      color: theme.colors.textMuted,
+    },
+    toAccountLabel: {
+      flex: 1,
+      gap: 4,
+    },
+    toAccountLabelText: {
+      fontSize: 11,
+      fontWeight: "600",
+      color: theme.colors.textMuted,
+      textTransform: "uppercase",
+      letterSpacing: 0.5,
+    },
+    calendarOverlay: {
+      position: "absolute",
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      zIndex: 1000,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    calendarBackdrop: {
+      position: "absolute",
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      backgroundColor: "rgba(0, 0, 0, 0.5)",
+    },
+    calendarCard: {
+      backgroundColor: theme.colors.surface,
+      borderRadius: 20,
+      padding: theme.spacing.xl,
+      marginHorizontal: theme.spacing.xl,
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 12 },
+      shadowOpacity: 0.4,
+      shadowRadius: 24,
+      elevation: 10,
+      borderWidth: 1,
+      borderColor: `${theme.colors.primary}22`,
+    },
+    calendarHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      marginBottom: theme.spacing.xl,
+      paddingBottom: theme.spacing.md,
+      borderBottomWidth: 1,
+      borderBottomColor: `${theme.colors.border}66`,
+    },
+    calendarTitle: {
+      fontSize: 20,
+      fontWeight: "700",
+      color: theme.colors.text,
+      letterSpacing: 0.3,
+    },
+    calendarCloseButton: {
+      width: 36,
+      height: 36,
+      alignItems: "center",
+      justifyContent: "center",
+      borderRadius: theme.radii.pill,
+      backgroundColor: theme.colors.surfaceElevated,
+    },
   });
+
+  return {
+    ...baseStyles,
+    typeTab: (active: boolean) => ({
+      flex: 1,
+      paddingVertical: theme.spacing.md,
+      alignItems: "center" as const,
+      justifyContent: "center" as const,
+      borderRadius: theme.radii.md,
+      backgroundColor: active ? theme.colors.primary : "transparent",
+    }),
+    typeTabText: (active: boolean) => ({
+      fontSize: 14,
+      fontWeight: "600" as const,
+      color: active ? "#FFFFFF" : theme.colors.textMuted,
+      letterSpacing: 0.2,
+    }),
+    frequencyPill: (active: boolean) => ({
+      paddingHorizontal: theme.spacing.lg,
+      paddingVertical: theme.spacing.sm,
+      borderRadius: theme.radii.pill,
+      borderWidth: 1,
+      borderColor: active ? theme.colors.primary : theme.colors.border,
+      backgroundColor: active ? `${theme.colors.primary}22` : theme.colors.surface,
+    }),
+    frequencyPillText: (active: boolean) => ({
+      fontSize: 13,
+      fontWeight: "600" as const,
+      color: active ? theme.colors.text : theme.colors.textMuted,
+    }),
+    accountRow: (active: boolean) => ({
+      flexDirection: "row" as const,
+      alignItems: "center" as const,
+      gap: theme.spacing.md,
+      backgroundColor: active ? `${theme.colors.primary}15` : theme.colors.surface,
+      borderRadius: theme.radii.lg,
+      padding: theme.spacing.lg,
+      borderWidth: 1,
+      borderColor: active ? theme.colors.primary : theme.colors.border,
+    }),
+    submitButton: (isValid: boolean) => ({
+      ...theme.components.buttonPrimary,
+      marginHorizontal: theme.spacing.xl,
+      marginBottom: theme.spacing.xl + insets.bottom,
+      marginTop: theme.spacing.xl,
+      backgroundColor: isValid ? theme.colors.primary : theme.colors.surface,
+      opacity: isValid ? 1 : 0.4,
+      shadowColor: isValid ? theme.colors.primary : "#000",
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: isValid ? 0.3 : 0.05,
+      shadowRadius: isValid ? 12 : 4,
+      elevation: isValid ? 4 : 1,
+      borderWidth: isValid ? 0 : 1,
+      borderColor: theme.colors.border,
+    }),
+    submitButtonText: (isValid: boolean) => ({
+      ...theme.components.buttonPrimaryText,
+      color: isValid ? "#FFFFFF" : theme.colors.textMuted,
+      fontSize: 17,
+      fontWeight: "700" as const,
+      letterSpacing: 0.5,
+    }),
+  };
+};
