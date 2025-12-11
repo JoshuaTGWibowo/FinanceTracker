@@ -116,7 +116,7 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>) =>
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "space-between",
-      paddingHorizontal: theme.spacing.lg,
+      paddingHorizontal: theme.screen.isSmallDevice ? theme.spacing.sm : theme.spacing.md,
       paddingTop: theme.spacing.lg,
       paddingBottom: theme.spacing.md,
     },
@@ -136,13 +136,13 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>) =>
       flexDirection: "row",
       alignItems: "center",
       gap: theme.spacing.sm,
-      paddingHorizontal: theme.spacing.lg,
+      paddingHorizontal: theme.screen.isSmallDevice ? theme.spacing.sm : theme.spacing.md,
       paddingVertical: theme.spacing.sm,
       borderRadius: theme.radii.lg,
       backgroundColor: theme.colors.surfaceAlt,
       borderWidth: 1,
       borderColor: theme.colors.border,
-      marginHorizontal: theme.spacing.lg,
+      marginHorizontal: theme.screen.isSmallDevice ? theme.spacing.sm : theme.spacing.md,
       marginBottom: theme.spacing.md,
     },
     searchInput: {
@@ -151,7 +151,7 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>) =>
       paddingVertical: 4,
     },
     list: {
-      padding: theme.spacing.lg,
+      padding: theme.screen.isSmallDevice ? theme.spacing.sm : theme.spacing.md,
       gap: theme.spacing.sm,
     },
     option: {

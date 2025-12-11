@@ -97,7 +97,7 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>) =>
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "space-between",
-      paddingHorizontal: theme.spacing.lg,
+      paddingHorizontal: theme.screen.isSmallDevice ? theme.spacing.sm : theme.spacing.md,
       paddingTop: theme.spacing.lg,
       paddingBottom: theme.spacing.md,
     },
@@ -117,7 +117,7 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>) =>
       flexDirection: "row",
       flexWrap: "wrap",
       gap: theme.spacing.sm,
-      padding: theme.spacing.lg,
+      padding: theme.screen.isSmallDevice ? theme.spacing.sm : theme.spacing.md,
       justifyContent: "center",
     },
     iconPill: {

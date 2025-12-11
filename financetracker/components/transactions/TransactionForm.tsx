@@ -1199,9 +1199,9 @@ const createStyles = (
       flex: 1,
     },
     header: {
-      paddingHorizontal: theme.screen.isSmallDevice ? theme.spacing.md : theme.spacing.xl,
-      paddingTop: theme.spacing.md,
-      paddingBottom: theme.spacing.lg,
+      paddingHorizontal: theme.screen.isSmallDevice ? theme.spacing.sm : theme.spacing.md,
+      paddingTop: theme.spacing.lg,
+      paddingBottom: theme.spacing.md,
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "space-between",
@@ -1230,8 +1230,8 @@ const createStyles = (
       letterSpacing: 0.3,
     },
     content: {
-      paddingHorizontal: theme.screen.isSmallDevice ? theme.spacing.md : theme.spacing.xl,
-      paddingBottom: (theme.screen.isSmallDevice ? theme.spacing.lg : theme.spacing.xl) + insets.bottom,
+      paddingHorizontal: theme.screen.isSmallDevice ? theme.spacing.sm : theme.spacing.md,
+      paddingBottom: theme.spacing.xxl + 96 + insets.bottom,
       paddingTop: theme.spacing.xs,
       gap: theme.spacing.xs,
     },

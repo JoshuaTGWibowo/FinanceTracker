@@ -248,7 +248,7 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>) =>
       alignItems: "center",
       gap: theme.spacing.sm,
       paddingHorizontal: theme.screen.isSmallDevice ? theme.spacing.sm : theme.spacing.md,
-      paddingTop: theme.screen.isSmallDevice ? theme.spacing.md : theme.spacing.lg,
+      paddingTop: theme.spacing.lg,
       paddingBottom: theme.spacing.sm,
     },
     backButton: {

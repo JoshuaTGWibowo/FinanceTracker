@@ -194,7 +194,7 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>) =>
     },
     headerContainer: {
       paddingHorizontal: theme.screen.isSmallDevice ? theme.spacing.sm : theme.spacing.md,
-      paddingTop: theme.screen.isSmallDevice ? theme.spacing.sm : theme.spacing.md,
+      paddingTop: theme.spacing.lg,
       paddingBottom: theme.spacing.md,
       gap: theme.spacing.sm,
     },

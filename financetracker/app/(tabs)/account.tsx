@@ -415,10 +415,10 @@ const createStyles = (
     },
     content: {
       flexGrow: 1,
-      paddingTop: theme.spacing.xl,
+      paddingTop: theme.spacing.lg,
       paddingHorizontal: theme.screen.isSmallDevice ? theme.spacing.sm : theme.spacing.md,
-      paddingBottom: theme.spacing.xl + insets.bottom,
-      gap: theme.screen.isSmallDevice ? theme.spacing.lg : theme.spacing.xl,
+      paddingBottom: theme.spacing.xxl + 96 + insets.bottom,
+      gap: theme.screen.isSmallDevice ? theme.spacing.md : theme.spacing.lg,
     },
     header: {
       gap: theme.spacing.sm,

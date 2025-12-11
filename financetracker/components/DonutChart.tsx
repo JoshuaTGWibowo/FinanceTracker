@@ -1,6 +1,6 @@
 import { memo, useMemo } from "react";
 import { View, ViewStyle } from "react-native";
-import Svg, { G, Path, Text as SvgText } from "react-native-svg";
+import Svg, { G, Path, Circle, Text as SvgText } from "react-native-svg";
 
 import { useAppTheme } from "../theme";
 
@@ -28,6 +28,18 @@ const polarToCartesian = (centerX: number, centerY: number, radius: number, angl
 };
 
 const describeArc = (x: number, y: number, radius: number, startAngle: number, endAngle: number) => {
+  // Handle full circle case (or nearly full)
+  if (endAngle - startAngle >= 359.99) {
+    // For a full circle, we need to draw two half-circles
+    const mid = polarToCartesian(x, y, radius, startAngle + 180);
+    const start = polarToCartesian(x, y, radius, startAngle);
+    return [
+      `M ${start.x} ${start.y}`,
+      `A ${radius} ${radius} 0 1 1 ${mid.x} ${mid.y}`,
+      `A ${radius} ${radius} 0 1 1 ${start.x} ${start.y}`,
+    ].join(" ");
+  }
+
   const start = polarToCartesian(x, y, radius, endAngle);
   const end = polarToCartesian(x, y, radius, startAngle);
   const largeArcFlag = endAngle - startAngle <= 180 ? "0" : "1";
@@ -39,22 +51,33 @@ const DonutChartComponent = ({ data, style }: DonutChartProps) => {
   const theme = useAppTheme();
 
   const { segments, total } = useMemo(() => {
-    const totalValue = data.reduce((acc, item) => acc + Math.max(item.value, 0), 0);
+    // Filter out zero/negative values
+    const validData = data.filter(item => item.value > 0);
+    const totalValue = validData.reduce((acc, item) => acc + item.value, 0);
+    
+    if (totalValue === 0 || validData.length === 0) {
+      return { segments: [], total: 0 };
+    }
+
     let cumulativeAngle = 0;
 
-    const segments = data.map((item, index) => {
-      const normalizedValue = totalValue ? Math.max(item.value, 0) / totalValue : 0;
-      const startAngle = cumulativeAngle;
-      const sweepAngle = normalizedValue * 360;
-      cumulativeAngle += sweepAngle;
+    const colorPalette = [
+      theme.colors.primary,
+      theme.colors.accent,
+      theme.colors.success,
+      theme.colors.danger,
+      theme.colors.primaryMuted,
+    ];
 
-      const colorPalette = [
-        theme.colors.primary,
-        theme.colors.accent,
-        theme.colors.success,
-        theme.colors.danger,
-        theme.colors.primaryMuted,
-      ];
+    const segments = validData.map((item, index) => {
+      const normalizedValue = item.value / totalValue;
+      const startAngle = cumulativeAngle;
+      // Ensure the last segment ends exactly at 360 degrees
+      const isLastSegment = index === validData.length - 1;
+      const sweepAngle = isLastSegment 
+        ? 360 - startAngle  // Force last segment to complete the circle
+        : normalizedValue * 360;
+      cumulativeAngle += sweepAngle;
 
       const color = item.color ?? colorPalette[index % colorPalette.length];
 

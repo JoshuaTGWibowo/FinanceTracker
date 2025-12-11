@@ -465,7 +465,7 @@ const createStyles = (
       flexDirection: "row",
       alignItems: "center",
       gap: theme.spacing.sm,
-      paddingHorizontal: theme.spacing.md,
+      paddingHorizontal: theme.screen.isSmallDevice ? theme.spacing.sm : theme.spacing.md,
       paddingTop: theme.spacing.lg,
       paddingBottom: theme.spacing.sm,
     },
@@ -487,9 +487,9 @@ const createStyles = (
     },
     content: {
       flexGrow: 1,
-      paddingHorizontal: theme.spacing.md,
-      paddingBottom: theme.spacing.lg + insets.bottom,
-      gap: theme.spacing.md,
+      paddingHorizontal: theme.screen.isSmallDevice ? theme.spacing.sm : theme.spacing.md,
+      paddingBottom: theme.spacing.xxl + 96 + insets.bottom,
+      gap: theme.screen.isSmallDevice ? theme.spacing.md : theme.spacing.lg,
     },
     formCard: {
       gap: theme.spacing.md,

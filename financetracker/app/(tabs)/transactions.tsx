@@ -661,6 +661,7 @@ export default function TransactionsScreen() {
         sections={sections}
         keyExtractor={(item) => item.id}
         stickySectionHeadersEnabled={false}
+        showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.listContent}
         contentInsetAdjustmentBehavior="automatic"
         ListHeaderComponent={
@@ -1498,11 +1499,11 @@ const createStyles = (theme: any, insets: any) =>
       backgroundColor: theme.colors.background,
     },
     listContent: {
-      paddingBottom: 100,
+      paddingBottom: 100 + insets.bottom,
     },
     header: {
-      paddingHorizontal: theme.screen.isSmallDevice ? 12 : 16,
-      paddingTop: theme.screen.isSmallDevice ? 12 : 16,
+      paddingHorizontal: theme.screen.isSmallDevice ? theme.spacing.sm : theme.spacing.md,
+      paddingTop: theme.spacing.lg,
     },
     
     // Balance Card

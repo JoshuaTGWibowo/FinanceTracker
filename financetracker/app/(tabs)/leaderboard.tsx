@@ -675,9 +675,10 @@ const createStyles = (
       backgroundColor: theme.colors.background,
     },
     scrollContent: {
-      paddingTop: theme.screen.isSmallDevice ? theme.spacing.lg : theme.spacing.xl,
+      paddingTop: theme.spacing.lg,
       paddingHorizontal: theme.screen.isSmallDevice ? theme.spacing.sm : theme.spacing.md,
-      paddingBottom: theme.spacing.xxl * 3 + insets.bottom,
+      paddingBottom: theme.spacing.xxl + 96 + insets.bottom,
+      gap: theme.screen.isSmallDevice ? theme.spacing.md : theme.spacing.lg,
     },
     header: {
       gap: theme.spacing.sm,
