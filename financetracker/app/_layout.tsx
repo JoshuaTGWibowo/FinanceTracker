@@ -7,6 +7,7 @@ import { useAppTheme } from "../theme";
 import { useFinanceStore } from "../lib/store";
 import { startAutoSync, stopAutoSync } from "../lib/sync-service";
 import { LevelUpModal } from "../components/LevelUpModal";
+import { ErrorBoundary } from "../components/ErrorBoundary";
 import { updateDailyStreak } from "../lib/points-service";
 import { refreshExpiredMissions, initializeMissions } from "../lib/mission-refresh";
 
@@ -88,7 +89,7 @@ export default function RootLayout() {
   }
 
   return (
-    <>
+    <ErrorBoundary>
       <StatusBar style={statusBarStyle} />
       <Stack
         screenOptions={{
@@ -214,6 +215,6 @@ export default function RootLayout() {
         reason={levelUpData.reason}
         onClose={() => setLevelUpVisible(false)}
       />
-    </>
+    </ErrorBoundary>
   );
 }

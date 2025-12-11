@@ -7,7 +7,7 @@
     "icon": "./assets/images/icon.png",
     "scheme": "financetracker",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
+    "newArchEnabled": false,
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.joshuat723.financetracker",
@@ -48,8 +48,7 @@
       ]
     ],
     "experiments": {
-      "typedRoutes": true,
-      "reactCompiler": true
+      "typedRoutes": true
     },
     "extra": {
       "router": {},

@@ -2,6 +2,7 @@ import { SafeAreaView, StyleSheet, Text, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 
 import { TransactionForm } from "../../../components/transactions/TransactionForm";
+import { ErrorBoundary } from "../../../components/ErrorBoundary";
 import { useAppTheme } from "../../../theme";
 import { useFinanceStore } from "../../../lib/store";
 
@@ -28,16 +29,18 @@ export default function EditTransactionScreen() {
   }
 
   return (
-    <TransactionForm
-      title="Edit transaction"
-      submitLabel="Save changes"
-      initialValues={transaction}
-      onCancel={() => router.back()}
-      onSubmit={async (values) => {
-        await updateTransaction(transaction.id, values);
-        router.back();
-      }}
-    />
+    <ErrorBoundary>
+      <TransactionForm
+        title="Edit transaction"
+        submitLabel="Save changes"
+        initialValues={transaction}
+        onCancel={() => router.back()}
+        onSubmit={async (values) => {
+          await updateTransaction(transaction.id, values);
+          router.back();
+        }}
+      />
+    </ErrorBoundary>
   );
 }
 

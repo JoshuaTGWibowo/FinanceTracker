@@ -438,7 +438,7 @@ export function TransactionForm({
 
       const result = await ImagePicker.launchImageLibraryAsync({
         allowsMultipleSelection: false,
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        mediaTypes: ['images'] as unknown as ImagePicker.MediaTypeOptions,
         quality: 0.7,
       });
 
