@@ -1,6 +1,7 @@
 {
   "cli": {
-    "version": ">= 5.0.0"
+    "version": ">= 5.0.0",
+    "appVersionSource": "remote"
   },
   "build": {
     "development": {
@@ -24,7 +25,7 @@
     "production": {
       "ios": {
         "appleId": "jogratio@gmail.com",
-        "appleTeamId": "YOUR_APPLE_TEAM_ID"
+        "appleTeamId": "RD72HPBN9J"
       }
     }
   }
