@@ -1212,7 +1212,7 @@ const createStyles = (
       color: theme.colors.textMuted,
     },
     balanceCard: {
-      gap: theme.screen.isSmallDevice ? theme.spacing.md : theme.spacing.lg,
+      gap: theme.screen.isSmallDevice ? theme.spacing.sm : theme.spacing.md,
     },
     balanceHeader: {
       flexDirection: "row",
@@ -1222,7 +1222,7 @@ const createStyles = (
     balanceLabel: {
       ...theme.typography.subtitle,
       textTransform: "uppercase",
-      letterSpacing: theme.screen.isSmallDevice ? 0.8 : 1.2,
+      letterSpacing: theme.screen.isSmallDevice ? 0.9 : 1.3,
       fontSize: theme.screen.isSmallDevice ? 11 : 12,
     },
     balanceValue: {
@@ -1254,7 +1254,7 @@ const createStyles = (
     balanceBreakdown: {
       flexDirection: "row",
       justifyContent: "space-between",
-      gap: theme.spacing.lg,
+      gap: theme.spacing.md,
     },
     balanceColumn: {
       flex: 1,
