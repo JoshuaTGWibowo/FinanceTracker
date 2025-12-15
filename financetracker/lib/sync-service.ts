@@ -21,11 +21,13 @@ interface AnonymizedMetrics {
 /**
  * Calculate savings percentage from transactions (anonymized)
  * Returns percentage of income that was saved (not spent)
+ * @param convertAmount - Optional function to convert amounts to base currency
  */
 function calculateSavingsPercentage(
   transactions: Transaction[],
   periodStart: Date,
-  periodEnd: Date
+  periodEnd: Date,
+  convertAmount?: (t: Transaction) => number
 ): number | null {
   const periodTransactions = transactions.filter((t) => {
     const txDate = new Date(t.date);
@@ -34,11 +36,11 @@ function calculateSavingsPercentage(
 
   const totalIncome = periodTransactions
     .filter((t) => t.type === 'income')
-    .reduce((sum, t) => sum + t.amount, 0);
+    .reduce((sum, t) => sum + (convertAmount ? convertAmount(t) : t.amount), 0);
 
   const totalExpenses = periodTransactions
     .filter((t) => t.type === 'expense')
-    .reduce((sum, t) => sum + t.amount, 0);
+    .reduce((sum, t) => sum + (convertAmount ? convertAmount(t) : t.amount), 0);
 
   if (totalIncome === 0) return null;
 
@@ -51,12 +53,14 @@ function calculateSavingsPercentage(
 /**
  * Calculate budget adherence score (0-100)
  * Measures how well user stayed within their budget goals
+ * @param convertAmount - Optional function to convert amounts to base currency
  */
 function calculateBudgetAdherence(
   transactions: Transaction[],
   budgetGoals: BudgetGoal[],
   periodStart: Date,
-  periodEnd: Date
+  periodEnd: Date,
+  convertAmount?: (t: Transaction) => number
 ): number | null {
   if (budgetGoals.length === 0) return null;
 
@@ -74,7 +78,7 @@ function calculateBudgetAdherence(
           txDate <= periodEnd
         );
       })
-      .reduce((sum, t) => sum + t.amount, 0);
+      .reduce((sum, t) => sum + (convertAmount ? convertAmount(t) : t.amount), 0);
 
     if (goal.target > 0) {
       const adherence = Math.max(0, 100 - ((categorySpending - goal.target) / goal.target) * 100);

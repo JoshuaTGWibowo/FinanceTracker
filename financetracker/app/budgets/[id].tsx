@@ -33,6 +33,7 @@ export default function BudgetDetailScreen() {
   const dateFormat = useFinanceStore((state) => state.preferences.dateFormat);
   const accounts = useFinanceStore((state) => state.accounts);
   const removeBudgetGoal = useFinanceStore((state) => state.removeBudgetGoal);
+  const getTransactionAmountInBaseCurrency = useFinanceStore((state) => state.getTransactionAmountInBaseCurrency);
 
   const insets = useSafeAreaInsets();
   const styles = useMemo(() => createStyles(theme, insets), [theme, insets]);
@@ -80,7 +81,7 @@ export default function BudgetDetailScreen() {
       return isExpense && matchesCategory && inDateRange;
     });
 
-    const totalSpending = matching.reduce((sum, t) => sum + Math.abs(t.amount), 0);
+    const totalSpending = matching.reduce((sum, t) => sum + Math.abs(getTransactionAmountInBaseCurrency(t)), 0);
     const progressPercent = budget.target > 0 ? Math.min((totalSpending / budget.target) * 100, 100) : 0;
     const over = totalSpending > budget.target;
 
@@ -92,7 +93,7 @@ export default function BudgetDetailScreen() {
       progress: Math.round(progressPercent),
       isOverBudget: over,
     };
-  }, [budget, transactions, categories]);
+  }, [budget, transactions, categories, getTransactionAmountInBaseCurrency]);
 
   const handleDelete = () => {
     if (!budget) return;
@@ -282,7 +283,7 @@ export default function BudgetDetailScreen() {
                       </View>
                     </View>
                     <Text style={styles.transactionAmount}>
-                      {currency}{transaction.amount.toFixed(2)}
+                      {currency}{getTransactionAmountInBaseCurrency(transaction).toFixed(2)}
                     </Text>
                   </Pressable>
                 );

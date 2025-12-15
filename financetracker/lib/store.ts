@@ -22,10 +22,12 @@ import {
   deleteBudgetGoal,
   deleteTransaction,
   fetchFinanceState,
+  loadExchangeRates,
   saveAccount,
   saveBudgetGoal,
   saveCategory,
   saveDateFormat,
+  saveExchangeRates,
   saveProfile,
   saveRecurringTransaction,
   saveThemeMode,
@@ -37,6 +39,11 @@ import { awardTransactionPoints, updateDailyStreak, getLeaderboardStats } from "
 import { checkAllBudgets } from "./budget-tracking";
 import { checkAndUpdateAllMissions } from "./mission-service";
 import { refreshExpiredMissions } from "./mission-refresh";
+import {
+  convertCurrency,
+  fetchExchangeRates,
+  shouldAutoSyncRates,
+} from "./currency";
 
 export interface FinanceState {
   profile: Profile;
@@ -62,6 +69,17 @@ export interface FinanceState {
   stickyDateLastUsed: number | null;
   setStickyDate: (date: string | null) => void;
   getSuggestedCategoryForAmount: (amount: number, type: TransactionType) => string | null;
+  // Exchange rates
+  exchangeRates: Record<string, number>;
+  exchangeRatesBaseCurrency: string;
+  exchangeRatesLastUpdated: string | null;
+  exchangeRatesSyncing: boolean;
+  syncExchangeRates: () => Promise<boolean>;
+  convertToBaseCurrency: (amount: number, fromCurrency: string) => number;
+  getTransactionAmountInBaseCurrency: (transaction: Transaction) => number;
+  getTotalBalanceInBaseCurrency: () => number;
+  getAccountBalanceInBaseCurrency: (accountId: string) => number;
+  hasForeignCurrencyAccounts: () => boolean;
   hydrateFromDatabase: () => Promise<void>;
   addTransaction: (transaction: Omit<Transaction, "id">) => Promise<void>;
   updateTransaction: (
@@ -294,6 +312,178 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
   stickyDate: null,
   stickyDateLastUsed: null,
   setStickyDate: (date) => set({ stickyDate: date, stickyDateLastUsed: date ? Date.now() : null }),
+  // Exchange rates state
+  exchangeRates: {},
+  exchangeRatesBaseCurrency: "USD",
+  exchangeRatesLastUpdated: null,
+  exchangeRatesSyncing: false,
+  syncExchangeRates: async () => {
+    const baseCurrency = get().profile.currency || "USD";
+    console.log(`[Currency] Fetching exchange rates for base: ${baseCurrency}`);
+    set({ exchangeRatesSyncing: true });
+    
+    try {
+      const result = await fetchExchangeRates(baseCurrency);
+      if (result) {
+        console.log(`[Currency] Received ${Object.keys(result.rates).length} exchange rates`);
+        await saveExchangeRates(baseCurrency, result.rates, result.timestamp);
+        set({
+          exchangeRates: result.rates,
+          exchangeRatesBaseCurrency: baseCurrency,
+          exchangeRatesLastUpdated: result.timestamp,
+          exchangeRatesSyncing: false,
+        });
+        // Log some sample rates for debugging
+        if (__DEV__) {
+          const sampleCurrencies = ["USD", "EUR", "IDR", "JPY"].filter(c => c !== baseCurrency);
+          const sampleRates = sampleCurrencies
+            .map(c => result.rates[c] ? `${c}=${result.rates[c].toFixed(4)}` : null)
+            .filter(Boolean)
+            .join(", ");
+          console.log(`[Currency] Sample rates (1 ${baseCurrency} = X): ${sampleRates}`);
+        }
+        return true;
+      }
+      console.warn(`[Currency] No rates returned from API`);
+      set({ exchangeRatesSyncing: false });
+      return false;
+    } catch (error) {
+      console.error("[Currency] Failed to sync exchange rates:", error);
+      set({ exchangeRatesSyncing: false });
+      return false;
+    }
+  },
+  convertToBaseCurrency: (amount, fromCurrency) => {
+    const { exchangeRates, profile } = get();
+    const baseCurrency = profile.currency || "USD";
+    
+    if (fromCurrency === baseCurrency || Object.keys(exchangeRates).length === 0) {
+      return amount;
+    }
+    
+    return convertCurrency(amount, fromCurrency, baseCurrency, exchangeRates, baseCurrency);
+  },
+  getTransactionAmountInBaseCurrency: (transaction) => {
+    const { accounts, exchangeRates, exchangeRatesBaseCurrency, profile } = get();
+    const baseCurrency = profile.currency || "USD";
+    
+    // First check if transaction has its own currency
+    let transactionCurrency = transaction.currency;
+    
+    // If not, get it from the account
+    if (!transactionCurrency && transaction.accountId) {
+      const account = accounts.find((a) => a.id === transaction.accountId);
+      transactionCurrency = account?.currency;
+    }
+    
+    // Default to base currency if still undefined
+    if (!transactionCurrency) {
+      transactionCurrency = baseCurrency;
+    }
+    
+    // If same currency, return as-is
+    if (transactionCurrency === baseCurrency) {
+      return transaction.amount;
+    }
+    
+    // Convert to base currency
+    if (Object.keys(exchangeRates).length > 0) {
+      // Verify rates are for current base currency
+      if (exchangeRatesBaseCurrency !== baseCurrency) {
+        if (__DEV__) {
+          console.warn(
+            `[Currency] Rates base mismatch: stored=${exchangeRatesBaseCurrency}, current=${baseCurrency}. ` +
+            `Returning original amount. Rates should be synced.`
+          );
+        }
+        return transaction.amount;
+      }
+      
+      const converted = convertCurrency(
+        transaction.amount,
+        transactionCurrency,
+        baseCurrency,
+        exchangeRates,
+        baseCurrency,
+      );
+      
+      if (__DEV__ && Math.abs(converted - transaction.amount) > 0.01) {
+        console.log(
+          `[Currency] Converting ${transaction.amount} ${transactionCurrency} -> ${converted.toFixed(2)} ${baseCurrency}`
+        );
+      }
+      
+      return converted;
+    }
+    
+    // No rates available, return as-is
+    if (__DEV__) {
+      console.warn(`[Currency] No exchange rates available for ${transactionCurrency} -> ${baseCurrency}`);
+    }
+    return transaction.amount;
+  },
+  getTotalBalanceInBaseCurrency: () => {
+    const { accounts, exchangeRates, profile } = get();
+    const baseCurrency = profile.currency || "USD";
+    
+    return accounts
+      .filter((acc) => !acc.isArchived && !acc.excludeFromTotal)
+      .reduce((total, acc) => {
+        const accountCurrency = acc.currency || baseCurrency;
+        if (accountCurrency === baseCurrency) {
+          return total + acc.balance;
+        }
+        // Convert to base currency
+        if (Object.keys(exchangeRates).length > 0) {
+          const converted = convertCurrency(
+            acc.balance,
+            accountCurrency,
+            baseCurrency,
+            exchangeRates,
+            baseCurrency,
+          );
+          return total + converted;
+        }
+        // No rates available, skip foreign accounts
+        return total;
+      }, 0);
+  },
+  getAccountBalanceInBaseCurrency: (accountId: string) => {
+    const { accounts, exchangeRates, profile } = get();
+    const baseCurrency = profile.currency || "USD";
+    const account = accounts.find((acc) => acc.id === accountId);
+    
+    if (!account) {
+      return 0;
+    }
+    
+    const accountCurrency = account.currency || baseCurrency;
+    if (accountCurrency === baseCurrency) {
+      return account.balance;
+    }
+    
+    // Convert to base currency
+    if (Object.keys(exchangeRates).length > 0) {
+      return convertCurrency(
+        account.balance,
+        accountCurrency,
+        baseCurrency,
+        exchangeRates,
+        baseCurrency,
+      );
+    }
+    
+    // No rates available, return raw balance
+    return account.balance;
+  },
+  hasForeignCurrencyAccounts: () => {
+    const { accounts, profile } = get();
+    const baseCurrency = profile.currency || "USD";
+    
+    return accounts
+      .filter((acc) => !acc.isArchived && !acc.excludeFromTotal)
+      .some((acc) => (acc.currency || baseCurrency) !== baseCurrency);
+  },
   getSuggestedCategoryForAmount: (amount, type) => {
     const transactions = get().transactions;
     // Round amount to 2 decimals for comparison
@@ -349,6 +539,16 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
         data.profile.currency,
       );
 
+      // Load cached exchange rates
+      const cachedRates = await loadExchangeRates();
+      const exchangeRatesState = cachedRates
+        ? {
+            exchangeRates: cachedRates.rates,
+            exchangeRatesBaseCurrency: cachedRates.baseCurrency,
+            exchangeRatesLastUpdated: cachedRates.lastUpdated,
+          }
+        : {};
+
       set({
         profile: data.profile,
         preferences: data.preferences,
@@ -356,9 +556,17 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
         transactions: transactionsWithInitialBalance,
         recurringTransactions: data.recurringTransactions,
         budgetGoals: data.budgetGoals,
+        ...exchangeRatesState,
         isHydrated: true,
         isHydrating: false,
       });
+
+      // Silently auto-sync exchange rates if stale (>7 days old)
+      if (shouldAutoSyncRates(cachedRates?.lastUpdated ?? null)) {
+        get().syncExchangeRates().catch(() => {
+          // Silently fail, fall back to cached rates
+        });
+      }
     } catch (error) {
       console.error(error);
       set({ isHydrating: false });
@@ -425,7 +633,8 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
     checkAllBudgets(
       updatedState.budgetGoals, 
       updatedState.transactions, 
-      updatedState.preferences.categories
+      updatedState.preferences.categories,
+      get().getTransactionAmountInBaseCurrency
     ).catch(err => console.error('[Points] Error checking budgets:', err));
 
     // Check and update mission progress with the NEW transaction included
@@ -695,6 +904,9 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
   },
   updateProfile: async (payload) => {
     const current = get().profile;
+    const currencyChanged = payload.currency && payload.currency !== current.currency;
+    const newCurrency = payload.currency;
+    
     const nextProfile: Profile = {
       ...current,
       ...payload,
@@ -703,6 +915,27 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
     await saveProfile(nextProfile);
 
     set({ profile: nextProfile });
+    
+    // Re-sync exchange rates if the base currency changed
+    if (currencyChanged && newCurrency) {
+      console.log(`[Currency] Base currency changed to ${newCurrency}, syncing exchange rates...`);
+      
+      // Also update the default "Everyday Account" to use the new base currency
+      const defaultAccount = get().accounts.find((account) => account.id === DEFAULT_ACCOUNT_ID);
+      if (defaultAccount) {
+        console.log(`[Currency] Updating Everyday Account currency to ${newCurrency}...`);
+        await get().updateAccount(DEFAULT_ACCOUNT_ID, { currency: newCurrency });
+      }
+      
+      // Wait for rates to sync before returning
+      const syncResult = await get().syncExchangeRates();
+      
+      if (syncResult) {
+        console.log(`[Currency] Exchange rates synced successfully for ${newCurrency}`);
+      } else {
+        console.warn(`[Currency] Failed to sync exchange rates for ${newCurrency}`);
+      }
+    }
   },
   setThemeMode: async (mode) => {
     await saveThemeMode(mode);

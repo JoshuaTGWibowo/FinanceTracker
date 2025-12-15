@@ -9,6 +9,7 @@ import { useAppTheme } from "../../theme";
 import { useFinanceStore } from "../../lib/store";
 import { filterTransactionsByAccount, getTransactionVisualState } from "../../lib/transactions";
 import { truncateWords, formatDate } from "../../lib/text";
+import { formatCurrency } from "../../lib/currency";
 
 interface Params {
   start?: string;
@@ -18,23 +19,6 @@ interface Params {
   category?: string;
   type?: string;
 }
-
-const formatCurrency = (
-  value: number,
-  currency: string,
-  options?: Intl.NumberFormatOptions,
-) => {
-  const maximumFractionDigits = options?.maximumFractionDigits ?? 2;
-  const minimumFractionDigits = Math.min(options?.minimumFractionDigits ?? 0, maximumFractionDigits);
-
-  return new Intl.NumberFormat(undefined, {
-    style: "currency",
-    currency,
-    ...options,
-    maximumFractionDigits,
-    minimumFractionDigits,
-  }).format(value);
-};
 
 export default function NetIncomeWeekScreen() {
   const router = useRouter();
@@ -48,6 +32,7 @@ export default function NetIncomeWeekScreen() {
   const accounts = useFinanceStore((state) => state.accounts);
   const currency = useFinanceStore((state) => state.profile.currency) || "USD";
   const dateFormat = useFinanceStore((state) => state.preferences.dateFormat);
+  const getTransactionAmountInBaseCurrency = useFinanceStore((state) => state.getTransactionAmountInBaseCurrency);
 
   const start = useMemo(() => dayjs(startParam ?? undefined).startOf("day"), [startParam]);
   const end = useMemo(() => dayjs(endParam ?? undefined).endOf("day"), [endParam]);
@@ -127,12 +112,13 @@ export default function NetIncomeWeekScreen() {
           grouped.get(key) ?? { title: `${dayjs(transaction.date).format("dddd")}, ${formatDate(transaction.date, dateFormat)}`, transactions: [], income: 0, expense: 0, net: 0 };
 
         existing.transactions.push(transaction);
+        const convertedAmount = getTransactionAmountInBaseCurrency(transaction);
         if (transaction.type === "income") {
-          existing.income += transaction.amount;
-          existing.net += transaction.amount;
+          existing.income += convertedAmount;
+          existing.net += convertedAmount;
         } else if (transaction.type === "expense") {
-          existing.expense += transaction.amount;
-          existing.net -= transaction.amount;
+          existing.expense += convertedAmount;
+          existing.net -= convertedAmount;
         }
         grouped.set(key, existing);
       });
@@ -145,22 +131,23 @@ export default function NetIncomeWeekScreen() {
       net: value.net,
       key: value.title,
     }));
-  }, [filtered]);
+  }, [dateFormat, filtered, getTransactionAmountInBaseCurrency]);
 
   const summary = useMemo(
     () =>
       filtered.reduce(
         (acc, transaction) => {
+          const convertedAmount = getTransactionAmountInBaseCurrency(transaction);
           if (transaction.type === "income") {
-            acc.income += transaction.amount;
+            acc.income += convertedAmount;
           } else if (transaction.type === "expense") {
-            acc.expense += transaction.amount;
+            acc.expense += convertedAmount;
           }
           return acc;
         },
         { income: 0, expense: 0 },
       ),
-    [filtered],
+    [filtered, getTransactionAmountInBaseCurrency],
   );
 
   const net = summary.income - summary.expense;
@@ -292,7 +279,7 @@ export default function NetIncomeWeekScreen() {
                     <View style={styles.transactionRight}>
                       <Text style={styles.transactionAmount(visual.variant)}>
                         {visual.prefix}
-                        {formatCurrency(transaction.amount, currency)}
+                        {formatCurrency(getTransactionAmountInBaseCurrency(transaction), currency)}
                       </Text>
                       {transaction.excludeFromReports && (
                         <View style={styles.excludedBadge}>

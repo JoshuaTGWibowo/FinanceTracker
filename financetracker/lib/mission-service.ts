@@ -149,11 +149,13 @@ export const getUserMissions = async (): Promise<{
 
 /**
  * Calculate mission progress based on user activities
+ * @param convertAmount - Optional function to convert amounts to base currency
  */
 export const calculateMissionProgress = (
   mission: Mission,
   transactions: Transaction[],
-  currentStreak: number
+  currentStreak: number,
+  convertAmount?: (t: Transaction) => number
 ): number => {
   const now = new Date();
   let startDate = new Date();
@@ -179,6 +181,9 @@ export const calculateMissionProgress = (
   
   console.log(`[Mission Progress] "${mission.title}": ${transactions.length} total, ${relevantTransactions.length} in period`);
   console.log(`[Mission Progress] Period: ${startDate.toISOString()} to ${now.toISOString()}`);
+  
+  // Helper to get amount (converted if converter provided)
+  const getAmount = (t: Transaction) => convertAmount ? convertAmount(t) : t.amount;
 
   switch (mission.goalType) {
     case 'transactions_logged': {
@@ -201,11 +206,11 @@ export const calculateMissionProgress = (
     case 'savings_rate': {
       const income = relevantTransactions
         .filter(t => t.type === 'income')
-        .reduce((sum, t) => sum + t.amount, 0);
+        .reduce((sum, t) => sum + getAmount(t), 0);
       
       const expenses = relevantTransactions
         .filter(t => t.type === 'expense')
-        .reduce((sum, t) => sum + t.amount, 0);
+        .reduce((sum, t) => sum + getAmount(t), 0);
       
       if (income === 0) return 0;
       

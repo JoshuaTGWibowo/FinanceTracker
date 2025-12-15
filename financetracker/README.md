@@ -8,6 +8,8 @@ A minimalist finance tracker MVP built with Expo Router, TypeScript, Zustand, an
 - **Home dashboard** showing balance, monthly insights, and a 7-day cash flow mini bar chart rendered with `react-native-svg`.
 - **Floating action button** to add new transactions in a polished modal using the native date picker.
 - **Auto Add with AI** - Take a photo of a receipt or bank statement and AI extracts transactions automatically using Google Gemini Vision.
+- **Multi-currency support** - Create accounts with different currencies and view converted balances in your base currency.
+- **Unified account creation** - Add new accounts from Home, Transactions, or Account management screens using a single dedicated page.
 - **Transactions feed** grouped by day with income in green and expenses in red.
 - **Account settings** to tweak the profile name and preferred currency.
 - **Hybrid storage architecture**: SQLite for private financial data, Supabase for leaderboards, crews, and missions.
@@ -24,6 +26,9 @@ app/
     transactions.tsx
     leaderboard.tsx
     account.tsx
+  accounts/
+    index.tsx            // Account management screen
+    new.tsx              // Unified add account screen (used from all tabs)
   transactions/
     new.tsx              // Add transaction modal
 components/

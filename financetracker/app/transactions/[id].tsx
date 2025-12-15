@@ -15,19 +15,7 @@ import { Image } from "expo-image";
 import { useAppTheme } from "../../theme";
 import { useFinanceStore, type TransactionType } from "../../lib/store";
 import { formatDate } from "../../lib/text";
-
-const formatCurrency = (
-  value: number,
-  currency: string,
-  options?: Intl.NumberFormatOptions,
-) =>
-  new Intl.NumberFormat(undefined, {
-    style: "currency",
-    currency,
-    maximumFractionDigits: options?.maximumFractionDigits ?? 2,
-    minimumFractionDigits: Math.min(options?.minimumFractionDigits ?? 0, options?.maximumFractionDigits ?? 2),
-    ...options,
-  }).format(value);
+import { formatCurrency } from "../../lib/currency";
 
 export default function TransactionDetailsScreen() {
   const { id } = useLocalSearchParams<{ id?: string }>();
@@ -44,6 +32,7 @@ export default function TransactionDetailsScreen() {
   const duplicateTransaction = useFinanceStore((state) => state.duplicateTransaction);
   const removeTransaction = useFinanceStore((state) => state.removeTransaction);
   const accounts = useFinanceStore((state) => state.accounts);
+  const getTransactionAmountInBaseCurrency = useFinanceStore((state) => state.getTransactionAmountInBaseCurrency);
 
   const accountLookup = useMemo(() => {
     const map = new Map<string, string>();
@@ -100,6 +89,13 @@ export default function TransactionDetailsScreen() {
   const isTransfer = transaction.type === "transfer";
   const fromAccountName = resolveAccountName(transaction.accountId);
   const toAccountName = isTransfer ? resolveAccountName(transaction.toAccountId) : null;
+  
+  // Get original transaction currency (from transaction or account)
+  const transactionAccount = accounts.find(a => a.id === transaction.accountId);
+  const originalCurrency = transaction.currency || transactionAccount?.currency || currency || "USD";
+  const convertedAmount = getTransactionAmountInBaseCurrency(transaction);
+  const wasConverted = originalCurrency !== (currency || "USD");
+  
   const typeIcon = transaction.type === "income"
     ? "trending-up"
     : transaction.type === "expense"
@@ -133,9 +129,16 @@ export default function TransactionDetailsScreen() {
       >
         <View style={styles.summaryCard}>
           <View style={styles.amountRow}>
-            <Text style={styles.amount(transaction.type)}>
-              {formatCurrency(transaction.amount, currency || "USD")}
-            </Text>
+            <View>
+              <Text style={styles.amount(transaction.type)}>
+                {formatCurrency(convertedAmount, currency || "USD")}
+              </Text>
+              {wasConverted && (
+                <Text style={styles.originalAmount}>
+                  Originally {formatCurrency(transaction.amount, originalCurrency)}
+                </Text>
+              )}
+            </View>
             <View style={styles.typeBadge(transaction.type)}>
               <Ionicons name={typeIcon} size={14} color={theme.colors.text} />
               <Text style={styles.typeBadgeText}>{typeLabel}</Text>
@@ -288,6 +291,11 @@ const createStyles = (
             ? theme.colors.danger
             : theme.colors.text,
     }),
+    originalAmount: {
+      fontSize: 12,
+      color: theme.colors.textMuted,
+      marginTop: theme.spacing.xs,
+    },
     typeBadge: (type: TransactionType) => ({
       flexDirection: "row",
       alignItems: "center",

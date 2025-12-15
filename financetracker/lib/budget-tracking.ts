@@ -12,11 +12,13 @@ const lastCheckedDates: Record<string, string> = {};
 
 /**
  * Calculate current spending for a budget goal
+ * @param convertAmount - Optional function to convert transaction amounts to base currency
  */
 export const calculateBudgetSpending = (
   goal: BudgetGoal,
   transactions: Transaction[],
-  categories: Category[]
+  categories: Category[],
+  convertAmount?: (t: Transaction) => number
 ): number => {
   const now = new Date();
   let periodStart: Date;
@@ -54,20 +56,26 @@ export const calculateBudgetSpending = (
     return isExpense && inDateRange && matchesCategory && !t.excludeFromReports;
   });
   
-  const totalSpending = matchingTransactions.reduce((sum, t) => sum + t.amount, 0);
+  // Sum amounts, using converter if provided
+  const totalSpending = matchingTransactions.reduce((sum, t) => {
+    const amount = convertAmount ? convertAmount(t) : t.amount;
+    return sum + amount;
+  }, 0);
   return totalSpending;
 };
 
 /**
  * Check if budget period has just completed successfully
+ * @param convertAmount - Optional function to convert transaction amounts to base currency
  */
 export const checkBudgetCompletion = async (
   goal: BudgetGoal,
   transactions: Transaction[],
-  categories: Category[]
+  categories: Category[],
+  convertAmount?: (t: Transaction) => number
 ): Promise<{ completed: boolean; pointsAwarded?: number }> => {
   const now = new Date();
-  const currentSpending = calculateBudgetSpending(goal, transactions, categories);
+  const currentSpending = calculateBudgetSpending(goal, transactions, categories, convertAmount);
   
   // Budget failed if over target
   if (currentSpending > goal.target) {
@@ -127,11 +135,13 @@ export const checkBudgetCompletion = async (
 /**
  * Check for daily budget success (stayed under all daily budgets)
  * This is a simplified check - you can enhance it to track actual daily budgets
+ * @param convertAmount - Optional function to convert transaction amounts to base currency
  */
 export const checkDailyBudgetSuccess = async (
   budgets: BudgetGoal[],
   transactions: Transaction[],
-  categories: Category[]
+  categories: Category[],
+  convertAmount?: (t: Transaction) => number
 ): Promise<{ success: boolean; pointsAwarded?: number }> => {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -156,7 +166,7 @@ export const checkDailyBudgetSuccess = async (
   
   // Check if all budgets are under target for today
   const allUnderBudget = budgets.every(budget => {
-    const spending = calculateBudgetSpending(budget, transactions, categories);
+    const spending = calculateBudgetSpending(budget, transactions, categories, convertAmount);
     const dailyTarget = budget.period === 'week' 
       ? budget.target / 7 
       : budget.target / 30;
@@ -187,23 +197,25 @@ export const checkDailyBudgetSuccess = async (
 
 /**
  * Check all budgets and award points for completions
+ * @param convertAmount - Optional function to convert transaction amounts to base currency
  */
 export const checkAllBudgets = async (
   budgets: BudgetGoal[],
   transactions: Transaction[],
-  categories: Category[]
+  categories: Category[],
+  convertAmount?: (t: Transaction) => number
 ): Promise<void> => {
   try {
     // Check each budget for completion
     for (const budget of budgets) {
       if (budget.isRepeating) {
-        await checkBudgetCompletion(budget, transactions, categories);
+        await checkBudgetCompletion(budget, transactions, categories, convertAmount);
       }
     }
     
-    // Check daily budget success
+    // Check daily budget success (pass converter)
     if (budgets.length > 0) {
-      await checkDailyBudgetSuccess(budgets, transactions, categories);
+      await checkDailyBudgetSuccess(budgets, transactions, categories, convertAmount);
     }
   } catch (err) {
     console.error('[Budget] Error checking budgets:', err);

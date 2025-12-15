@@ -497,6 +497,8 @@ export const calculateCrewBudgetSpendingLocal = (
     });
 
     // Sum up all expense amounts
+    // NOTE: For multi-currency support, amounts would need to be normalized
+    // to a common currency before summing. Currently assumes single currency.
     const totalSpending = filteredTransactions.reduce((sum, t) => sum + Math.abs(t.amount), 0);
     return totalSpending;
   } catch (error) {
@@ -540,6 +542,8 @@ export const calculateCrewBudgetSpending = async (
     }
 
     // Sum up all expense amounts
+    // NOTE: For multi-currency crew budgets, server would need to normalize
+    // amounts to a common currency before summing. Currently assumes single currency.
     const totalSpending = (transactions || []).reduce((sum, t) => sum + Math.abs(t.amount), 0);
     return totalSpending;
   } catch (error) {

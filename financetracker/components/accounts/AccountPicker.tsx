@@ -1,11 +1,12 @@
 import { useMemo, useState } from "react";
-import { Alert, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from "react-native";
+import { Alert, FlatList, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 
 import { AccountType, selectActiveAccounts, useFinanceStore } from "../../lib/store";
 import { useAppTheme } from "../../theme";
+import { formatCurrency, SUPPORTED_CURRENCIES } from "../../lib/currency";
 
 interface AccountPickerProps {
   label: string;
@@ -24,14 +25,6 @@ const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
   card: "Card",
   investment: "Investment",
 };
-
-const formatCurrency = (value: number, currency: string) =>
-  new Intl.NumberFormat(undefined, {
-    style: "currency",
-    currency,
-    maximumFractionDigits: 2,
-    minimumFractionDigits: 0,
-  }).format(value);
 
 const accountTypes: AccountType[] = ["cash", "bank", "card", "investment"];
 
@@ -58,6 +51,7 @@ export function AccountPicker({
   const [accountFormCurrency, setAccountFormCurrency] = useState(currency);
   const [accountFormInitialBalance, setAccountFormInitialBalance] = useState("");
   const [accountFormExcludeFromTotal, setAccountFormExcludeFromTotal] = useState(false);
+  const [currencyPickerVisible, setCurrencyPickerVisible] = useState(false);
 
   const filteredAccounts = useMemo(() => {
     if (!excludeAccountIds?.length) {
@@ -325,23 +319,21 @@ export function AccountPicker({
 
               {/* Currency & Balance */}
               <View style={styles.modernRow}>
-                <View style={[styles.modernFieldGroup, { flex: 1 }]}>
+                <Pressable 
+                  style={[styles.modernFieldGroup, { flex: 1 }]}
+                  onPress={() => setCurrencyPickerVisible(true)}
+                >
                   <View style={styles.modernFieldIcon}>
                     <Ionicons name="globe-outline" size={18} color={theme.colors.primary} />
                   </View>
                   <View style={styles.modernFieldContent}>
                     <Text style={styles.modernLabel}>Currency</Text>
-                    <TextInput
-                      value={accountFormCurrency}
-                      onChangeText={(text) => setAccountFormCurrency(text.toUpperCase())}
-                      placeholder="USD"
-                      placeholderTextColor={theme.colors.textMuted}
-                      autoCapitalize="characters"
-                      maxLength={3}
-                      style={styles.modernInput}
-                    />
+                    <View style={styles.currencyPickerValue}>
+                      <Text style={styles.modernInput}>{accountFormCurrency}</Text>
+                      <Ionicons name="chevron-down" size={16} color={theme.colors.textMuted} />
+                    </View>
                   </View>
-                </View>
+                </Pressable>
 
                 <View style={[styles.modernFieldGroup, { flex: 1.2 }]}>
                   <View style={styles.modernFieldIcon}>
@@ -410,6 +402,50 @@ export function AccountPicker({
               </View>
             </ScrollView>
           </KeyboardAvoidingView>
+        </SafeAreaView>
+      </Modal>
+
+      {/* Currency Picker Modal */}
+      <Modal
+        visible={currencyPickerVisible}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setCurrencyPickerVisible(false)}
+      >
+        <SafeAreaView style={[styles.modal, { backgroundColor: theme.colors.background }]}>
+          <View style={styles.modalHeader}>
+            <Text style={[styles.modalTitle, { color: theme.colors.text }]}>Select Currency</Text>
+            <Pressable style={styles.modalClose} onPress={() => setCurrencyPickerVisible(false)}>
+              <Ionicons name="close" size={22} color={theme.colors.text} />
+            </Pressable>
+          </View>
+
+          <FlatList
+            data={SUPPORTED_CURRENCIES}
+            keyExtractor={(item) => item.code}
+            contentContainerStyle={styles.currencyListContent}
+            renderItem={({ item }) => (
+              <Pressable
+                style={[
+                  styles.currencyListItem,
+                  item.code === accountFormCurrency && styles.currencyListItemActive,
+                ]}
+                onPress={() => {
+                  setAccountFormCurrency(item.code);
+                  setCurrencyPickerVisible(false);
+                }}
+              >
+                <View style={styles.currencyListItemLeft}>
+                  <Text style={styles.currencyListCode}>{item.code}</Text>
+                  <Text style={styles.currencyListName}>{item.name}</Text>
+                </View>
+                <Text style={styles.currencyListSymbol}>{item.symbol}</Text>
+                {item.code === accountFormCurrency && (
+                  <Ionicons name="checkmark-circle" size={22} color={theme.colors.primary} />
+                )}
+              </Pressable>
+            )}
+          />
         </SafeAreaView>
       </Modal>
     </View>
@@ -758,5 +794,47 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: "600",
     color: "#fff",
+  },
+  // Currency picker styles
+  currencyPickerValue: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  currencyListContent: {
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+  },
+  currencyListItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    marginBottom: 2,
+  },
+  currencyListItemActive: {
+    backgroundColor: "rgba(74, 144, 226, 0.12)",
+  },
+  currencyListItemLeft: {
+    flex: 1,
+    gap: 2,
+  },
+  currencyListCode: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#000",
+  },
+  currencyListName: {
+    fontSize: 13,
+    color: "#888",
+  },
+  currencyListSymbol: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#888",
+    minWidth: 32,
+    textAlign: "center",
   },
 });

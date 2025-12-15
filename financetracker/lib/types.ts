@@ -27,6 +27,7 @@ export interface Transaction {
   date: string;
   accountId: string;
   toAccountId?: string | null;
+  currency?: string;
   participants?: string[];
   location?: string;
   photos?: string[];

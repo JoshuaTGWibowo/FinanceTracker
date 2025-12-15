@@ -22,6 +22,7 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 import { useRouter } from "expo-router";
 
 import { useAppTheme } from "../../theme";
+import { SUPPORTED_CURRENCIES } from "../../lib/currency";
 import {
   Category,
   DEFAULT_ACCOUNT_ID,
@@ -310,6 +311,18 @@ export function TransactionForm({
   const [accountPickerVisible, setAccountPickerVisible] = useState(false);
   const [toAccountPickerVisible, setToAccountPickerVisible] = useState(false);
   const [calendarVisible, setCalendarVisible] = useState(false);
+  const [currencyPickerVisible, setCurrencyPickerVisible] = useState(false);
+  
+  // Currency state - defaults to transaction's saved currency, or account's currency, or profile currency
+  const getDefaultCurrency = () => {
+    if (initialValues?.currency) {
+      return initialValues.currency;
+    }
+    const selectedAccountId = initialValues?.accountId ?? DEFAULT_ACCOUNT_ID;
+    const selectedAccount = accounts.find((acc) => acc.id === selectedAccountId);
+    return selectedAccount?.currency ?? currency;
+  };
+  const [transactionCurrency, setTransactionCurrency] = useState(getDefaultCurrency);
 
   const inheritedCategory = useMemo(() => {
     if (!initialValues?.category) {
@@ -572,6 +585,7 @@ export function TransactionForm({
       category: resolvedCategory,
       type: transactionType === "transfer" ? "transfer" : normalizeCategoryType(selectedCategory?.type) ?? transactionType,
       date: date.toISOString(),
+      currency: transactionCurrency,
       participants: cleanedParticipants,
       location: location.trim() || undefined,
       photos: cleanedPhotos,
@@ -700,9 +714,13 @@ export function TransactionForm({
 
             {/* Amount Row */}
             <View style={styles.amountRow}>
-            <View style={styles.currencyBadge}>
-              <Text style={styles.currencyText}>{currency}</Text>
-            </View>
+            <Pressable 
+              style={styles.currencyBadge}
+              onPress={() => setCurrencyPickerVisible(true)}
+            >
+              <Text style={styles.currencyText}>{transactionCurrency}</Text>
+              <Ionicons name="chevron-down" size={14} color={theme.colors.text} />
+            </Pressable>
             <TextInput
               value={amount}
               onChangeText={handleAmountChange}
@@ -1127,6 +1145,8 @@ export function TransactionForm({
                   style={styles.accountRow(active)}
                   onPress={() => {
                     setAccountId(account.id);
+                    // Update transaction currency to match the new account's currency
+                    setTransactionCurrency(account.currency ?? currency);
                     setAccountPickerVisible(false);
                   }}
                 >
@@ -1238,6 +1258,60 @@ export function TransactionForm({
           </View>
         </View>
       )}
+
+      {/* Currency Picker Modal */}
+      <Modal
+        visible={currencyPickerVisible}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setCurrencyPickerVisible(false)}
+      >
+        <SafeAreaView style={styles.modal}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Select currency</Text>
+            <Pressable
+              onPress={() => setCurrencyPickerVisible(false)}
+              style={styles.modalClose}
+              accessibilityRole="button"
+            >
+              <Ionicons name="close" size={20} color={theme.colors.text} />
+            </Pressable>
+          </View>
+          <ScrollView 
+            contentContainerStyle={styles.currencyPickerContent}
+            showsVerticalScrollIndicator={true}
+          >
+            {SUPPORTED_CURRENCIES.map((currencyItem) => {
+              const isActive = transactionCurrency === currencyItem.code;
+              return (
+                <Pressable
+                  key={currencyItem.code}
+                  style={styles.currencyPickerItem(isActive)}
+                  onPress={() => {
+                    setTransactionCurrency(currencyItem.code);
+                    setCurrencyPickerVisible(false);
+                  }}
+                >
+                  <View style={styles.currencyPickerItemLeft}>
+                    <Text style={styles.currencyPickerCode(isActive)}>
+                      {currencyItem.code}
+                    </Text>
+                    <Text style={styles.currencyPickerName}>
+                      {currencyItem.name}
+                    </Text>
+                  </View>
+                  <Text style={styles.currencyPickerSymbol}>
+                    {currencyItem.symbol}
+                  </Text>
+                  {isActive && (
+                    <Ionicons name="checkmark-circle" size={20} color={theme.colors.primary} />
+                  )}
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+        </SafeAreaView>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -1351,6 +1425,9 @@ const createStyles = (
       backgroundColor: `${theme.colors.primary}08`,
     },
     currencyBadge: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 4,
       paddingHorizontal: theme.spacing.md,
       paddingVertical: theme.spacing.sm,
       backgroundColor: `${theme.colors.primary}22`,
@@ -1603,6 +1680,11 @@ const createStyles = (
       paddingHorizontal: theme.spacing.xl,
       paddingBottom: insets.bottom + theme.spacing.lg,
       gap: theme.spacing.lg,
+    },
+    currencyPickerContent: {
+      paddingHorizontal: theme.spacing.lg,
+      paddingBottom: insets.bottom + theme.spacing.lg,
+      gap: theme.spacing.xs,
     },
     categoryHeroCard: {
       backgroundColor: theme.colors.surface,
@@ -1886,6 +1968,34 @@ const createStyles = (
       borderWidth: 1,
       borderColor: active ? theme.colors.primary : theme.colors.border,
     }),
+    currencyPickerItem: (active: boolean) => ({
+      flexDirection: "row" as const,
+      alignItems: "center" as const,
+      padding: theme.spacing.md,
+      backgroundColor: active ? `${theme.colors.primary}15` : theme.colors.surface,
+      borderRadius: theme.radii.md,
+      borderWidth: 1,
+      borderColor: active ? theme.colors.primary : theme.colors.border,
+      gap: theme.spacing.md,
+    }),
+    currencyPickerCode: (active: boolean) => ({
+      fontSize: 15,
+      fontWeight: "700" as const,
+      color: active ? theme.colors.primary : theme.colors.text,
+    }),
+    currencyPickerItemLeft: {
+      flex: 1,
+      gap: 2,
+    },
+    currencyPickerName: {
+      fontSize: 12,
+      color: theme.colors.textMuted,
+    },
+    currencyPickerSymbol: {
+      fontSize: 15,
+      fontWeight: "600" as const,
+      color: theme.colors.textMuted,
+    },
     submitButton: (isValid: boolean) => ({
       ...theme.components.buttonPrimary,
       marginHorizontal: theme.spacing.xl,

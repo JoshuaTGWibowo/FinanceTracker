@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Alert, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import dayjs from "dayjs";
@@ -10,22 +10,11 @@ import { SpendingBarChart, SpendingLineChart } from "../../components/SpendingCh
 import { MonthlyCalendar } from "../../components/MonthlyCalendar";
 import { useAppTheme } from "../../theme";
 import { BudgetGoal, useFinanceStore } from "../../lib/store";
-import { filterTransactionsByAccount, getTransactionDelta, getTransactionVisualState, sortTransactionsByRecency } from "../../lib/transactions";
+import { filterTransactionsByAccount, getTransactionVisualState, sortTransactionsByRecency } from "../../lib/transactions";
 import { truncateWords, formatDate } from "../../lib/text";
 import { doesCategoryMatchBudget } from "../../lib/categoryUtils";
-
-const formatCurrency = (
-  value: number,
-  currency: string,
-  options?: Intl.NumberFormatOptions,
-) =>
-  new Intl.NumberFormat(undefined, {
-    style: "currency",
-    currency,
-    maximumFractionDigits: 2,
-    minimumFractionDigits: 0,
-    ...options,
-  }).format(value);
+import { formatCurrency } from "../../lib/currency";
+import type { Transaction } from "../../lib/types";
 
 const summarizeGoalProgress = (
   goal: BudgetGoal,
@@ -33,6 +22,7 @@ const summarizeGoalProgress = (
   transactions: ReturnType<typeof useFinanceStore.getState>["transactions"],
   accountId: string | null,
   categories: ReturnType<typeof useFinanceStore.getState>["preferences"]["categories"],
+  convertAmount: (transaction: Transaction) => number,
 ) => {
   const now = dayjs();
   const start = goal.period === "week" ? now.startOf("week") : now.startOf("month");
@@ -49,7 +39,7 @@ const summarizeGoalProgress = (
         transaction.type === "expense" && 
         doesCategoryMatchBudget(transaction.category, goal.category, categories)
       )
-      .reduce((acc, transaction) => acc + transaction.amount, 0);
+      .reduce((acc, transaction) => acc + convertAmount(transaction), 0);
 
     return {
       label: `${goal.category} spend`,
@@ -60,9 +50,18 @@ const summarizeGoalProgress = (
     };
   }
 
+  // For net savings, we need to consider converted amounts for income/expense deltas
   const netSavings = withinPeriod.reduce((acc, transaction) => {
-    const delta = getTransactionDelta(transaction, accountId);
-    return acc + delta;
+    const convertedAmount = convertAmount(transaction);
+    // Replicate getTransactionDelta logic with converted amount
+    if (transaction.type === "income") {
+      return acc + convertedAmount;
+    }
+    if (transaction.type === "expense") {
+      return acc - convertedAmount;
+    }
+    // Transfer: no net effect
+    return acc;
   }, 0);
 
   const savingsValue = Math.max(0, netSavings);
@@ -86,15 +85,10 @@ export default function HomeScreen() {
   const recurringTransactions = useFinanceStore((state) => state.recurringTransactions);
   const logRecurringTransaction = useFinanceStore((state) => state.logRecurringTransaction);
   const accounts = useFinanceStore((state) => state.accounts);
-  const addAccount = useFinanceStore((state) => state.addAccount);
   const categories = useFinanceStore((state) => state.preferences.categories);
-
-  const [createAccountModalVisible, setCreateAccountModalVisible] = useState(false);
-  const [accountFormName, setAccountFormName] = useState("");
-  const [accountFormType, setAccountFormType] = useState<"cash" | "bank" | "card" | "investment">("bank");
-  const [accountFormCurrency, setAccountFormCurrency] = useState(profile.currency);
-  const [accountFormInitialBalance, setAccountFormInitialBalance] = useState("");
-  const [accountFormExcludeFromTotal, setAccountFormExcludeFromTotal] = useState(false);
+  const getTotalBalanceInBaseCurrency = useFinanceStore((state) => state.getTotalBalanceInBaseCurrency);
+  const hasForeignCurrencyAccounts = useFinanceStore((state) => state.hasForeignCurrencyAccounts);
+  const getTransactionAmountInBaseCurrency = useFinanceStore((state) => state.getTransactionAmountInBaseCurrency);
 
   const reportableTransactions = useMemo(
     () => transactions.filter((transaction) => !transaction.excludeFromReports),
@@ -109,50 +103,6 @@ export default function HomeScreen() {
     accounts.forEach((account) => map.set(account.id, account.name));
     return map;
   }, [accounts]);
-
-  const handleOpenCreateModal = useCallback(() => {
-    setAccountFormName("");
-    setAccountFormType("bank");
-    setAccountFormCurrency(profile.currency);
-    setAccountFormInitialBalance("");
-    setAccountFormExcludeFromTotal(false);
-    setCreateAccountModalVisible(true);
-  }, [profile.currency]);
-
-  const handleCloseCreateModal = useCallback(() => {
-    setCreateAccountModalVisible(false);
-  }, []);
-
-  const handleSaveAccount = useCallback(async () => {
-    if (!accountFormName.trim()) {
-      Alert.alert("Heads up", "Give the account a name first.");
-      return;
-    }
-
-    if (!accountFormCurrency.trim()) {
-      Alert.alert("Heads up", "Currency code cannot be empty.");
-      return;
-    }
-
-    const sanitizedBalance = accountFormInitialBalance.replace(/[^0-9.-]/g, "");
-    const parsedInitial = sanitizedBalance ? Number(sanitizedBalance) : 0;
-    const initialBalanceValue = Number.isNaN(parsedInitial) ? 0 : parsedInitial;
-    const normalizedCurrency = accountFormCurrency.trim().toUpperCase();
-
-    const newAccountId = await addAccount({
-      name: accountFormName,
-      type: accountFormType,
-      currency: normalizedCurrency,
-      initialBalance: initialBalanceValue,
-      excludeFromTotal: accountFormExcludeFromTotal,
-    });
-
-    handleCloseCreateModal();
-    
-    if (newAccountId) {
-      setSelectedAccountId(newAccountId);
-    }
-  }, [accountFormName, accountFormType, accountFormCurrency, accountFormInitialBalance, accountFormExcludeFromTotal, addAccount, handleCloseCreateModal, setSelectedAccountId]);
 
   const resolveAccountName = useCallback(
     (accountId?: string | null) => {
@@ -188,17 +138,19 @@ export default function HomeScreen() {
     });
   }, [reportableTransactions, selectedAccountId, visibleAccountIds]);
 
-  const allAccountsBalance = useMemo(
-    () => visibleAccounts.reduce((acc, account) => acc + account.balance, 0),
-    [visibleAccounts],
-  );
+  // Use getTotalBalanceInBaseCurrency for total (includes converted foreign accounts)
+  const allAccountsBalance = getTotalBalanceInBaseCurrency();
+  const hasForeignAccounts = hasForeignCurrencyAccounts();
+  const getAccountBalanceInBaseCurrency = useFinanceStore((state) => state.getAccountBalanceInBaseCurrency);
 
   const selectedAccount = useMemo(
     () => accounts.find((account) => account.id === selectedAccountId) ?? null,
     [accounts, selectedAccountId],
   );
 
-  const balance = selectedAccount ? selectedAccount.balance : allAccountsBalance;
+  const balance = selectedAccount 
+    ? getAccountBalanceInBaseCurrency(selectedAccount.id) 
+    : allAccountsBalance;
 
   const [overviewPeriod, setOverviewPeriod] = useState<"week" | "month">("month");
   const [overviewChart, setOverviewChart] = useState<"bar" | "line">("bar");
@@ -222,7 +174,21 @@ export default function HomeScreen() {
       scopedTransactions.reduce(
         (acc, transaction) => {
           const date = dayjs(transaction.date);
-          const delta = getTransactionDelta(transaction, selectedAccountId);
+          const convertedAmount = getTransactionAmountInBaseCurrency(transaction);
+          
+          // Calculate delta using converted amount
+          let delta = 0;
+          if (transaction.type === "income") {
+            delta = convertedAmount;
+          } else if (transaction.type === "expense") {
+            delta = -convertedAmount;
+          } else if (transaction.type === "transfer" && selectedAccountId) {
+            if (transaction.accountId === selectedAccountId) {
+              delta = -convertedAmount;
+            } else if (transaction.toAccountId === selectedAccountId) {
+              delta = convertedAmount;
+            }
+          }
 
           if (date.isBefore(startOfMonth)) {
             acc.openingBalance += delta;
@@ -230,9 +196,9 @@ export default function HomeScreen() {
 
           if (!date.isBefore(startOfMonth) && !date.isAfter(endOfMonth)) {
             if (transaction.type === "income") {
-              acc.income += transaction.amount;
+              acc.income += convertedAmount;
             } else if (transaction.type === "expense") {
-              acc.expense += transaction.amount;
+              acc.expense += convertedAmount;
             }
             acc.monthNet += delta;
           }
@@ -241,7 +207,7 @@ export default function HomeScreen() {
         },
         { income: 0, expense: 0, openingBalance: 0, monthNet: 0 },
       ),
-    [endOfMonth, scopedTransactions, selectedAccountId, startOfMonth],
+    [endOfMonth, getTransactionAmountInBaseCurrency, scopedTransactions, selectedAccountId, startOfMonth],
   );
 
   const {
@@ -262,10 +228,11 @@ export default function HomeScreen() {
 
     const totals = filtered.reduce(
       (acc, transaction) => {
+        const convertedAmount = getTransactionAmountInBaseCurrency(transaction);
         if (transaction.type === "income") {
-          acc.income += transaction.amount;
+          acc.income += convertedAmount;
         } else if (transaction.type === "expense") {
-          acc.expense += transaction.amount;
+          acc.expense += convertedAmount;
         }
         return acc;
       },
@@ -277,7 +244,7 @@ export default function HomeScreen() {
       const day = periodStart.add(index, "day");
       const value = filtered
         .filter((transaction) => transaction.type === "expense" && dayjs(transaction.date).isSame(day, "day"))
-        .reduce((acc, transaction) => acc + transaction.amount, 0);
+        .reduce((acc, transaction) => acc + getTransactionAmountInBaseCurrency(transaction), 0);
 
       if (overviewPeriod === "week") {
         return {
@@ -306,7 +273,7 @@ export default function HomeScreen() {
       }
       const date = dayjs(transaction.date);
       if (!date.isBefore(previousPeriodStart) && !date.isAfter(previousPeriodEnd)) {
-        return acc + transaction.amount;
+        return acc + getTransactionAmountInBaseCurrency(transaction);
       }
       return acc;
     }, 0);
@@ -324,7 +291,7 @@ export default function HomeScreen() {
               }
               const date = dayjs(transaction.date);
               if (!date.isBefore(start) && !date.isAfter(end)) {
-                return acc + transaction.amount;
+                return acc + getTransactionAmountInBaseCurrency(transaction);
               }
               return acc;
             }, 0);
@@ -354,7 +321,7 @@ export default function HomeScreen() {
       const day = monthStart.add(index, "day");
       const spent = scopedTransactions
         .filter((transaction) => transaction.type === "expense" && dayjs(transaction.date).isSame(day, "day"))
-        .reduce((acc, transaction) => acc + transaction.amount, 0);
+        .reduce((acc, transaction) => acc + getTransactionAmountInBaseCurrency(transaction), 0);
 
       return buildMonthlyPoint(index, spent);
     });
@@ -363,7 +330,7 @@ export default function HomeScreen() {
       const day = previousMonthStart.add(index, "day");
       return scopedTransactions
         .filter((transaction) => transaction.type === "expense" && dayjs(transaction.date).isSame(day, "day"))
-        .reduce((acc, transaction) => acc + transaction.amount, 0);
+        .reduce((acc, transaction) => acc + getTransactionAmountInBaseCurrency(transaction), 0);
     });
 
     const lastPreviousValue = previousMonthValues.length
@@ -385,7 +352,7 @@ export default function HomeScreen() {
         previous: previousMonthDaily,
       },
     };
-  }, [overviewPeriod, scopedTransactions]);
+  }, [getTransactionAmountInBaseCurrency, overviewPeriod, scopedTransactions]);
 
   const topSpending = useMemo(() => {
     const today = dayjs();
@@ -402,11 +369,12 @@ export default function HomeScreen() {
 
     const totalsByCategory = filtered.reduce((acc, transaction) => {
       const previous = acc.get(transaction.category) ?? 0;
-      acc.set(transaction.category, previous + transaction.amount);
+      const convertedAmount = getTransactionAmountInBaseCurrency(transaction);
+      acc.set(transaction.category, previous + convertedAmount);
       return acc;
     }, new Map<string, number>());
 
-    const totalSpent = filtered.reduce((acc, transaction) => acc + transaction.amount, 0);
+    const totalSpent = filtered.reduce((acc, transaction) => acc + getTransactionAmountInBaseCurrency(transaction), 0);
 
     const sorted = Array.from(totalsByCategory.entries()).sort((a, b) => b[1] - a[1]);
     const topThree = sorted.slice(0, 3);
@@ -430,7 +398,7 @@ export default function HomeScreen() {
     }
 
     return { entries, totalSpent };
-  }, [scopedTransactions, topSpendingPeriod]);
+  }, [getTransactionAmountInBaseCurrency, scopedTransactions, topSpendingPeriod]);
 
   const donutColors = useMemo(
     () => [
@@ -453,7 +421,11 @@ export default function HomeScreen() {
   );
 
   const currency = selectedAccount?.currency || baseCurrency;
-  const formattedBalance = formatCurrency(balance, currency);
+  // Add ~ prefix when total includes converted foreign currency accounts
+  const showApproximate = !selectedAccount && hasForeignAccounts;
+  const formattedBalance = showApproximate 
+    ? `~${formatCurrency(balance, currency)}`
+    : formatCurrency(balance, currency);
   const formattedPeriodExpenses = formatCurrency(periodExpense, currency);
 
   const netChangeThisMonth = summary.income - summary.expense;
@@ -491,6 +463,7 @@ export default function HomeScreen() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView
+        key={`home-scroll-${baseCurrency}`}
         contentContainerStyle={styles.content}
         contentInsetAdjustmentBehavior="automatic"
         showsVerticalScrollIndicator={false}
@@ -576,13 +549,13 @@ export default function HomeScreen() {
               >
                 <Text style={styles.accountChipTitle}>{account.name}</Text>
                 <Text style={styles.accountChipBalance}>
-                  {formatCurrency(account.balance, account.currency || baseCurrency)}
+                  {formatCurrency(getAccountBalanceInBaseCurrency(account.id), baseCurrency)}
                 </Text>
               </Pressable>
             );
           })}
           <Pressable
-            onPress={handleOpenCreateModal}
+            onPress={() => router.push("/accounts/new")}
             style={[styles.accountChip, styles.addAccountChip]}
           >
             <Ionicons name="add-circle" size={20} color={theme.colors.primary} />
@@ -849,6 +822,7 @@ export default function HomeScreen() {
                   scopedTransactions,
                   selectedAccountId,
                   categories,
+                  getTransactionAmountInBaseCurrency,
                 );
                 const progressPercent = Math.round(progress.percentage * 100);
 
@@ -974,7 +948,7 @@ export default function HomeScreen() {
                       ]}
                     >
                       {visual.prefix}
-                      {formatCurrency(transaction.amount, currency)}
+                      {formatCurrency(getTransactionAmountInBaseCurrency(transaction), currency)}
                     </Text>
                   </Pressable>
                 );
@@ -988,180 +962,6 @@ export default function HomeScreen() {
           )}
         </View>
       </ScrollView>
-
-      {/* Create Account Modal */}
-      <Modal
-        visible={createAccountModalVisible}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={handleCloseCreateModal}
-      >
-        <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.colors.background }]}>
-          <KeyboardAvoidingView
-            style={styles.modalFlex}
-            behavior={Platform.OS === "ios" ? "padding" : undefined}
-            keyboardVerticalOffset={24}
-          >
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>New Account</Text>
-              <Pressable style={styles.modalClose} onPress={handleCloseCreateModal}>
-                <Ionicons name="close" size={22} color={theme.colors.text} />
-              </Pressable>
-            </View>
-
-            <ScrollView
-              style={styles.modalBody}
-              contentContainerStyle={styles.modalContent}
-              showsVerticalScrollIndicator={false}
-            >
-              {/* Account Name */}
-              <View style={styles.modernFieldGroup}>
-                <View style={styles.modernFieldIcon}>
-                  <Ionicons name="create-outline" size={18} color={theme.colors.primary} />
-                </View>
-                <View style={styles.modernFieldContent}>
-                  <Text style={styles.modernLabel}>Account Name</Text>
-                  <TextInput
-                    value={accountFormName}
-                    onChangeText={setAccountFormName}
-                    placeholder="e.g., Main Checking"
-                    placeholderTextColor={theme.colors.textMuted}
-                    style={styles.modernInput}
-                  />
-                </View>
-              </View>
-
-              {/* Account Type */}
-              <View style={styles.modernFieldGroup}>
-                <View style={styles.modernFieldIcon}>
-                  <Ionicons name="apps-outline" size={18} color={theme.colors.primary} />
-                </View>
-                <View style={[styles.modernFieldContent, { gap: theme.spacing.sm }]}>
-                  <Text style={styles.modernLabel}>Account Type</Text>
-                  <View style={styles.modernTypeGrid}>
-                    {(["cash", "bank", "card", "investment"] as const).map((type) => {
-                      const active = accountFormType === type;
-                      const iconName =
-                        type === "cash"
-                          ? "cash"
-                          : type === "bank"
-                          ? "business"
-                          : type === "card"
-                          ? "card"
-                          : "trending-up";
-                      const label = type === "cash" ? "Cash" : type === "bank" ? "Bank" : type === "card" ? "Card" : "Investment";
-                      return (
-                        <Pressable
-                          key={type}
-                          style={[styles.modernTypeCard, active && styles.modernTypeCardActive]}
-                          onPress={() => setAccountFormType(type)}
-                        >
-                          <View style={[styles.modernTypeIcon, active && styles.modernTypeIconActive]}>
-                            <Ionicons
-                              name={iconName}
-                              size={22}
-                              color={active ? "#fff" : theme.colors.textMuted}
-                            />
-                          </View>
-                          <Text style={[styles.modernTypeText, active && styles.modernTypeTextActive]}>
-                            {label}
-                          </Text>
-                        </Pressable>
-                      );
-                    })}
-                  </View>
-                </View>
-              </View>
-
-              {/* Currency & Balance */}
-              <View style={styles.modernRow}>
-                <View style={[styles.modernFieldGroup, { flex: 1 }]}>
-                  <View style={styles.modernFieldIcon}>
-                    <Ionicons name="globe-outline" size={18} color={theme.colors.primary} />
-                  </View>
-                  <View style={styles.modernFieldContent}>
-                    <Text style={styles.modernLabel}>Currency</Text>
-                    <TextInput
-                      value={accountFormCurrency}
-                      onChangeText={(text) => setAccountFormCurrency(text.toUpperCase())}
-                      placeholder="USD"
-                      placeholderTextColor={theme.colors.textMuted}
-                      autoCapitalize="characters"
-                      maxLength={3}
-                      style={styles.modernInput}
-                    />
-                  </View>
-                </View>
-
-                <View style={[styles.modernFieldGroup, { flex: 1.2 }]}>
-                  <View style={styles.modernFieldIcon}>
-                    <Ionicons name="calculator-outline" size={18} color={theme.colors.primary} />
-                  </View>
-                  <View style={styles.modernFieldContent}>
-                    <Text style={styles.modernLabel}>Initial Balance</Text>
-                    <TextInput
-                      value={accountFormInitialBalance}
-                      onChangeText={setAccountFormInitialBalance}
-                      placeholder="0.00"
-                      placeholderTextColor={theme.colors.textMuted}
-                      keyboardType="decimal-pad"
-                      style={styles.modernInput}
-                    />
-                  </View>
-                </View>
-              </View>
-
-              {/* Exclude Toggle */}
-              <Pressable 
-                style={[styles.modernToggleCard, accountFormExcludeFromTotal && styles.modernToggleCardActive]}
-                onPress={() => setAccountFormExcludeFromTotal(!accountFormExcludeFromTotal)}
-              >
-                <View style={styles.modernToggleIcon}>
-                  <Ionicons 
-                    name={accountFormExcludeFromTotal ? "eye-off" : "eye-off-outline"} 
-                    size={20} 
-                    color={accountFormExcludeFromTotal ? theme.colors.primary : theme.colors.textMuted} 
-                  />
-                </View>
-                <View style={styles.modalFlex}>
-                  <Text style={[styles.modernLabel, accountFormExcludeFromTotal && { color: theme.colors.text }]}>
-                    Exclude from Totals
-                  </Text>
-                  <Text style={styles.modernHelper}>
-                    {accountFormExcludeFromTotal ? "Hidden from total balance" : "Included in total balance"}
-                  </Text>
-                </View>
-                <View style={[
-                  styles.modernToggleSwitch,
-                  accountFormExcludeFromTotal && styles.modernToggleSwitchActive
-                ]}>
-                  <View style={[
-                    styles.modernToggleThumb,
-                    accountFormExcludeFromTotal && styles.modernToggleThumbActive
-                  ]} />
-                </View>
-              </Pressable>
-
-              {/* Action Buttons */}
-              <View style={styles.modernActions}>
-                <Pressable 
-                  style={[styles.modernButton, styles.modernButtonSecondary]} 
-                  onPress={handleCloseCreateModal}
-                >
-                  <Text style={styles.modernButtonSecondaryText}>Cancel</Text>
-                </Pressable>
-                <Pressable 
-                  style={[styles.modernButton, styles.modernButtonPrimary]} 
-                  onPress={handleSaveAccount}
-                >
-                  <Ionicons name="checkmark" size={18} color="#fff" />
-                  <Text style={styles.modernButtonPrimaryText}>Create Account</Text>
-                </Pressable>
-              </View>
-            </ScrollView>
-          </KeyboardAvoidingView>
-        </SafeAreaView>
-      </Modal>
     </SafeAreaView>
   );
 }
@@ -1944,5 +1744,47 @@ const createStyles = (
       fontSize: 15,
       fontWeight: "600",
       color: "#fff",
+    },
+    // Currency picker styles
+    currencyPickerValue: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 4,
+    },
+    currencyListContent: {
+      paddingHorizontal: theme.spacing.lg,
+      paddingVertical: theme.spacing.md,
+    },
+    currencyListItem: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: theme.spacing.md,
+      paddingVertical: theme.spacing.md,
+      paddingHorizontal: theme.spacing.md,
+      borderRadius: theme.radii.md,
+      marginBottom: 2,
+    },
+    currencyListItemActive: {
+      backgroundColor: `${theme.colors.primary}12`,
+    },
+    currencyListItemLeft: {
+      flex: 1,
+      gap: 2,
+    },
+    currencyListCode: {
+      fontSize: 16,
+      fontWeight: "700",
+      color: theme.colors.text,
+    },
+    currencyListName: {
+      fontSize: 13,
+      color: theme.colors.textMuted,
+    },
+    currencyListSymbol: {
+      fontSize: 16,
+      fontWeight: "600",
+      color: theme.colors.textMuted,
+      minWidth: 32,
+      textAlign: "center",
     },
   });

@@ -19,6 +19,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useAppTheme } from "../../theme";
 import { Category, useFinanceStore } from "../../lib/store";
 import { doesCategoryMatchBudget } from "../../lib/categoryUtils";
+import type { Transaction } from "../../lib/types";
 
 const goalPeriods = ["month", "week"] as const;
 
@@ -33,6 +34,7 @@ export default function BudgetsScreen() {
   const addBudgetGoal = useFinanceStore((state) => state.addBudgetGoal);
   const removeBudgetGoal = useFinanceStore((state) => state.removeBudgetGoal);
   const currency = useFinanceStore((state) => state.profile.currency);
+  const getTransactionAmountInBaseCurrency = useFinanceStore((state) => state.getTransactionAmountInBaseCurrency);
 
   const [goalName, setGoalName] = useState("");
   const [goalTarget, setGoalTarget] = useState("");
@@ -95,7 +97,7 @@ export default function BudgetsScreen() {
           return isExpense && matchesCategory && inDateRange;
         });
         
-        const spending = matchingTransactions.reduce((sum, t) => sum + Math.abs(t.amount), 0);
+        const spending = matchingTransactions.reduce((sum, t) => sum + Math.abs(getTransactionAmountInBaseCurrency(t)), 0);
         const progress = goal.target > 0 ? Math.min((spending / goal.target) * 100, 100) : 0;
         
         // Debug logging
@@ -117,7 +119,7 @@ export default function BudgetsScreen() {
           progress: Math.round(progress)
         };
     });
-  }, [budgetGoals, transactions, categories]);
+  }, [budgetGoals, transactions, categories, getTransactionAmountInBaseCurrency]);
 
   const groupedCategories = useMemo(() => {
     const parentCategories = categories.filter((category) => !category.parentCategoryId);

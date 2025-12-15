@@ -10,6 +10,7 @@ import { useAppTheme, type Theme } from "../../theme";
 import { useFinanceStore } from "../../lib/store";
 import { buildMonthlyPeriods } from "../../lib/periods";
 import { filterTransactionsByAccount } from "../../lib/transactions";
+import { formatCurrency } from "../../lib/currency";
 
 const chartPalette = [
   "#60A5FA",
@@ -20,23 +21,6 @@ const chartPalette = [
   "#FB7185",
   "#FBBF24",
 ];
-
-const formatCurrency = (
-  value: number,
-  currency: string,
-  options?: Intl.NumberFormatOptions,
-) => {
-  const maximumFractionDigits = options?.maximumFractionDigits ?? 2;
-  const minimumFractionDigits = Math.min(options?.minimumFractionDigits ?? 0, maximumFractionDigits);
-
-  return new Intl.NumberFormat(undefined, {
-    style: "currency",
-    currency,
-    ...options,
-    maximumFractionDigits,
-    minimumFractionDigits,
-  }).format(value);
-};
 
 interface CategorySlice {
   label: string;
@@ -113,6 +97,7 @@ export default function CategoryDetailsScreen() {
   const transactions = useFinanceStore((state) => state.transactions);
   const accounts = useFinanceStore((state) => state.accounts);
   const currency = useFinanceStore((state) => state.profile.currency) || "USD";
+  const getTransactionAmountInBaseCurrency = useFinanceStore((state) => state.getTransactionAmountInBaseCurrency);
 
   const baseCurrency = currency || "USD";
   const visibleAccounts = useMemo(
@@ -185,8 +170,8 @@ export default function CategoryDetailsScreen() {
   );
 
   const totalAmount = useMemo(
-    () => categoryTransactions.reduce((acc, transaction) => acc + transaction.amount, 0),
-    [categoryTransactions],
+    () => categoryTransactions.reduce((acc, transaction) => acc + getTransactionAmountInBaseCurrency(transaction), 0),
+    [categoryTransactions, getTransactionAmountInBaseCurrency],
   );
 
   const daysInPeriod = useMemo(() => Math.max(end.diff(start, "day") + 1, 1), [end, start]);
@@ -203,9 +188,9 @@ export default function CategoryDetailsScreen() {
           if (date.isBefore(rangeStart) || date.isAfter(rangeEnd)) {
             return acc;
           }
-          return acc + transaction.amount;
+          return acc + getTransactionAmountInBaseCurrency(transaction);
         }, 0),
-    [categoryType, reportableTransactions],
+    [categoryType, getTransactionAmountInBaseCurrency, reportableTransactions],
   );
 
   const selectedPeriodIndex = useMemo(
@@ -240,7 +225,8 @@ export default function CategoryDetailsScreen() {
 
     categoryTransactions.forEach((transaction) => {
       const label = transaction.category?.trim().length ? transaction.category : fallbackLabel;
-      map.set(label, (map.get(label) ?? 0) + transaction.amount);
+      const convertedAmount = getTransactionAmountInBaseCurrency(transaction);
+      map.set(label, (map.get(label) ?? 0) + convertedAmount);
     });
 
     const sorted = Array.from(map.entries()).sort((a, b) => b[1] - a[1]);
@@ -265,7 +251,7 @@ export default function CategoryDetailsScreen() {
     }
 
     return { slices, rows };
-  }, [categoryTransactions, categoryType, theme.colors.textMuted, totalAmount]);
+  }, [categoryTransactions, categoryType, getTransactionAmountInBaseCurrency, theme.colors.textMuted, totalAmount]);
 
   const comparisonDelta = totalAmount - trailingAverage;
   const isFavorableDelta = categoryType === "income" ? comparisonDelta >= 0 : comparisonDelta <= 0;

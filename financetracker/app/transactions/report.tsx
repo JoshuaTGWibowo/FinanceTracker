@@ -9,7 +9,8 @@ import dayjs from "dayjs";
 import { useAppTheme, type Theme } from "../../theme";
 import { useFinanceStore } from "../../lib/store";
 import { buildMonthlyPeriods } from "../../lib/periods";
-import { filterTransactionsByAccount, getTransactionDelta } from "../../lib/transactions";
+import { filterTransactionsByAccount } from "../../lib/transactions";
+import { formatCurrency } from "../../lib/currency";
 
 const chartPalette = [
   "#60A5FA",
@@ -20,23 +21,6 @@ const chartPalette = [
   "#FB7185",
   "#FBBF24",
 ];
-
-const formatCurrency = (
-  value: number,
-  currency: string,
-  options?: Intl.NumberFormatOptions,
-) => {
-  const maximumFractionDigits = options?.maximumFractionDigits ?? 2;
-  const minimumFractionDigits = Math.min(options?.minimumFractionDigits ?? 0, maximumFractionDigits);
-
-  return new Intl.NumberFormat(undefined, {
-    style: "currency",
-    currency,
-    ...options,
-    maximumFractionDigits,
-    minimumFractionDigits,
-  }).format(value);
-};
 
 interface CategorySlice {
   label: string;
@@ -103,6 +87,7 @@ export default function TransactionsReportModal() {
   const accounts = useFinanceStore((state) => state.accounts);
   const budgetGoals = useFinanceStore((state) => state.budgetGoals);
   const currency = useFinanceStore((state) => state.profile.currency) || "USD";
+  const getTransactionAmountInBaseCurrency = useFinanceStore((state) => state.getTransactionAmountInBaseCurrency);
 
   const baseCurrency = currency || "USD";
   const visibleAccounts = useMemo(
@@ -186,28 +171,57 @@ export default function TransactionsReportModal() {
 
     const totals = reportable.reduce(
       (acc, transaction) => {
+        const convertedAmount = getTransactionAmountInBaseCurrency(transaction);
         if (transaction.type === "income") {
-          acc.income += transaction.amount;
+          acc.income += convertedAmount;
         } else if (transaction.type === "expense") {
-          acc.expense += transaction.amount;
+          acc.expense += convertedAmount;
         }
         return acc;
       },
       { income: 0, expense: 0 },
     );
 
-    const netChange = reportable.reduce(
-      (acc, transaction) => acc + getTransactionDelta(transaction, selectedAccountId),
-      0,
-    );
+    // Calculate net change using converted amounts
+    const netChange = reportable.reduce((acc, transaction) => {
+      const convertedAmount = getTransactionAmountInBaseCurrency(transaction);
+      if (transaction.type === "income") {
+        return acc + convertedAmount;
+      }
+      if (transaction.type === "expense") {
+        return acc - convertedAmount;
+      }
+      // Transfers: no net effect when viewing all accounts
+      if (transaction.type === "transfer" && selectedAccountId) {
+        if (transaction.accountId === selectedAccountId) {
+          return acc - convertedAmount;
+        }
+        if (transaction.toAccountId === selectedAccountId) {
+          return acc + convertedAmount;
+        }
+      }
+      return acc;
+    }, 0);
 
+    // Calculate opening balance using converted amounts
     let openingBalance = 0;
     scopedTransactions
       .filter((transaction) => !transaction.excludeFromReports)
       .sort((a, b) => dayjs(a.date).valueOf() - dayjs(b.date).valueOf())
       .forEach((transaction) => {
         if (dayjs(transaction.date).isBefore(start)) {
-          openingBalance += getTransactionDelta(transaction, selectedAccountId);
+          const convertedAmount = getTransactionAmountInBaseCurrency(transaction);
+          if (transaction.type === "income") {
+            openingBalance += convertedAmount;
+          } else if (transaction.type === "expense") {
+            openingBalance -= convertedAmount;
+          } else if (transaction.type === "transfer" && selectedAccountId) {
+            if (transaction.accountId === selectedAccountId) {
+              openingBalance -= convertedAmount;
+            } else if (transaction.toAccountId === selectedAccountId) {
+              openingBalance += convertedAmount;
+            }
+          }
         }
       });
 
@@ -223,7 +237,8 @@ export default function TransactionsReportModal() {
           return;
         }
         const key = transaction.category || (type === "income" ? "Income" : "Expense");
-        map.set(key, (map.get(key) ?? 0) + transaction.amount);
+        const convertedAmount = getTransactionAmountInBaseCurrency(transaction);
+        map.set(key, (map.get(key) ?? 0) + convertedAmount);
       });
 
       return Array.from(map.entries())
@@ -245,7 +260,7 @@ export default function TransactionsReportModal() {
       incomeSlices: buildSlices("income", totals.income),
       expenseSlices: buildSlices("expense", totals.expense),
     };
-  }, [end, selectedAccountId, start, transactions, visibleAccountIds]);
+  }, [end, getTransactionAmountInBaseCurrency, selectedAccountId, start, transactions, visibleAccountIds]);
 
   const netPositive = report.netChange >= 0;
   const accountLabel = selectedAccountId ? accountName : "All accounts";
@@ -276,7 +291,7 @@ export default function TransactionsReportModal() {
       .map((goal) => {
         const spent = reportable
           .filter((transaction) => transaction.type === "expense" && transaction.category === goal.category)
-          .reduce((acc, transaction) => acc + transaction.amount, 0);
+          .reduce((acc, transaction) => acc + getTransactionAmountInBaseCurrency(transaction), 0);
 
         const percentage = Math.min(100, Math.round((spent / goal.target) * 100));
         
@@ -299,7 +314,7 @@ export default function TransactionsReportModal() {
           statusColor,
         };
       });
-  }, [budgetGoals, selectedPeriod.label, theme.colors.primary, selectedAccountId, visibleAccountIds, transactions, start, end]);
+  }, [budgetGoals, end, getTransactionAmountInBaseCurrency, selectedAccountId, selectedPeriod.label, start, theme.colors.primary, transactions, visibleAccountIds]);
 
   return (
     <SafeAreaView style={styles.safeArea}>

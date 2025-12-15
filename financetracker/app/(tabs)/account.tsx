@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
   Platform,
@@ -17,8 +18,8 @@ import { Ionicons } from "@expo/vector-icons";
 import { useAppTheme } from "../../theme";
 import { ThemeMode, useFinanceStore } from "../../lib/store";
 import { DateFormat } from "../../lib/types";
+import { SUPPORTED_CURRENCIES, getLastSyncText } from "../../lib/currency";
 
-const currencies = ["USD", "EUR", "GBP", "CAD", "AUD", "JPY"];
 const dateFormats: { value: DateFormat; label: string }[] = [
   { value: "dd/mm/yyyy", label: "DD/MM/YYYY" },
   { value: "mm/dd/yyyy", label: "MM/DD/YYYY" },
@@ -56,10 +57,14 @@ export default function AccountScreen() {
   const transactions = useFinanceStore((state) => state.transactions);
   const loadMockData = useFinanceStore((state) => state.loadMockData);
   const clearAllDataAndReload = useFinanceStore((state) => state.clearAllDataAndReload);
+  const exchangeRatesLastUpdated = useFinanceStore((state) => state.exchangeRatesLastUpdated);
+  const exchangeRatesSyncing = useFinanceStore((state) => state.exchangeRatesSyncing);
+  const syncExchangeRates = useFinanceStore((state) => state.syncExchangeRates);
 
   const [name, setName] = useState(profile.name);
   const [currency, setCurrency] = useState(profile.currency);
   const [isLoadingMockData, setIsLoadingMockData] = useState(false);
+  const [currencyExpanded, setCurrencyExpanded] = useState(false);
 
   const insets = useSafeAreaInsets();
   const styles = useMemo(() => createStyles(theme, insets), [theme, insets]);
@@ -168,37 +173,99 @@ export default function AccountScreen() {
             </View>
 
             <View style={styles.fieldGroup}>
-              <Text style={styles.label}>Currency</Text>
-              <View style={styles.currencyRow}>
-                <TextInput
-                  value={currency}
-                  onChangeText={setCurrency}
-                  placeholder="USD"
-                  placeholderTextColor={theme.colors.textMuted}
-                  autoCapitalize="characters"
-                  style={[styles.input, styles.currencyInput]}
+              <Pressable 
+                style={styles.currencyDropdownHeader}
+                onPress={() => setCurrencyExpanded(!currencyExpanded)}
+              >
+                <View style={styles.currencyDropdownLeft}>
+                  <Ionicons name="globe-outline" size={18} color={theme.colors.primary} />
+                  <View>
+                    <Text style={styles.label}>Currency</Text>
+                    <Text style={styles.currencyDropdownValue}>
+                      {currency} - {SUPPORTED_CURRENCIES.find(c => c.code === currency)?.name || currency}
+                    </Text>
+                  </View>
+                </View>
+                <Ionicons 
+                  name={currencyExpanded ? "chevron-up" : "chevron-down"} 
+                  size={20} 
+                  color={theme.colors.textMuted} 
                 />
-                <View style={styles.chipsRow}>
-                  {currencies.map((code) => {
-                    const isActive = currency.toUpperCase() === code;
+              </Pressable>
+              
+              {currencyExpanded && (
+                <ScrollView 
+                  style={styles.currencyDropdownList}
+                  nestedScrollEnabled={true}
+                  showsVerticalScrollIndicator={true}
+                >
+                  {SUPPORTED_CURRENCIES.map((currencyItem) => {
+                    const isActive = currency.toUpperCase() === currencyItem.code;
                     return (
                       <Pressable
-                        key={code}
-                        onPress={() => setCurrency(code)}
-                        style={[styles.currencyChip, isActive && styles.currencyChipActive]}
+                        key={currencyItem.code}
+                        onPress={() => {
+                          setCurrency(currencyItem.code);
+                          setCurrencyExpanded(false);
+                        }}
+                        style={[styles.currencyDropdownItem, isActive && styles.currencyDropdownItemActive]}
                       >
-                        <Text style={[styles.currencyChipText, isActive && styles.currencyChipTextActive]}>
-                          {code}
-                        </Text>
+                        <View style={styles.currencyDropdownItemLeft}>
+                          <Text style={[styles.currencyDropdownCode, isActive && styles.currencyDropdownCodeActive]}>
+                            {currencyItem.code}
+                          </Text>
+                          <Text style={styles.currencyDropdownName}>{currencyItem.name}</Text>
+                        </View>
+                        <Text style={styles.currencyDropdownSymbol}>{currencyItem.symbol}</Text>
+                        {isActive && (
+                          <Ionicons name="checkmark-circle" size={20} color={theme.colors.primary} />
+                        )}
                       </Pressable>
                     );
                   })}
-                </View>
-              </View>
+                </ScrollView>
+              )}
             </View>
 
             <Pressable style={styles.primaryButton} onPress={handleSaveProfile}>
               <Text style={styles.primaryButtonText}>Save profile</Text>
+            </Pressable>
+          </View>
+
+          {/* Exchange Rates Card */}
+          <View style={[theme.components.surface, styles.sectionCard]}>
+            <View style={styles.exchangeRatesHeader}>
+              <View style={styles.exchangeRatesIconContainer}>
+                <Ionicons name="swap-horizontal" size={18} color={theme.colors.primary} />
+              </View>
+              <View style={styles.flex}>
+                <Text style={styles.sectionTitle}>Exchange Rates</Text>
+                <Text style={styles.exchangeRatesSyncText}>
+                  {getLastSyncText(exchangeRatesLastUpdated)}
+                </Text>
+              </View>
+            </View>
+            
+            <Text style={styles.exchangeRatesDescription}>
+              Exchange rates are used to convert foreign currency accounts to your main currency ({profile.currency}) for accurate total balance calculations.
+            </Text>
+            
+            <Pressable
+              style={[
+                styles.syncButton,
+                exchangeRatesSyncing && styles.syncButtonDisabled,
+              ]}
+              onPress={() => syncExchangeRates()}
+              disabled={exchangeRatesSyncing}
+            >
+              {exchangeRatesSyncing ? (
+                <ActivityIndicator size="small" color={theme.colors.primary} />
+              ) : (
+                <Ionicons name="refresh" size={18} color={theme.colors.primary} />
+              )}
+              <Text style={styles.syncButtonText}>
+                {exchangeRatesSyncing ? "Syncing..." : "Sync Exchange Rates"}
+              </Text>
             </Pressable>
           </View>
 
@@ -682,6 +749,114 @@ const createStyles = (
     timezoneChipTextActive: {
       color: theme.colors.text,
       fontWeight: "600",
+    },
+    // Currency dropdown styles
+    currencyDropdownHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      padding: theme.spacing.md,
+      backgroundColor: theme.colors.surface,
+      borderRadius: theme.radii.md,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+    },
+    currencyDropdownLeft: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: theme.spacing.md,
+    },
+    currencyDropdownValue: {
+      fontSize: 14,
+      fontWeight: "600",
+      color: theme.colors.text,
+      marginTop: 2,
+    },
+    currencyDropdownList: {
+      marginTop: theme.spacing.sm,
+      backgroundColor: theme.colors.surface,
+      borderRadius: theme.radii.md,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      maxHeight: 260, // Shows approximately 5 items
+    },
+    currencyDropdownItem: {
+      flexDirection: "row",
+      alignItems: "center",
+      padding: theme.spacing.md,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.colors.border,
+      gap: theme.spacing.md,
+    },
+    currencyDropdownItemActive: {
+      backgroundColor: `${theme.colors.primary}12`,
+    },
+    currencyDropdownItemLeft: {
+      flex: 1,
+      gap: 2,
+    },
+    currencyDropdownCode: {
+      fontSize: 15,
+      fontWeight: "700",
+      color: theme.colors.text,
+    },
+    currencyDropdownCodeActive: {
+      color: theme.colors.primary,
+    },
+    currencyDropdownName: {
+      fontSize: 12,
+      color: theme.colors.textMuted,
+    },
+    currencyDropdownSymbol: {
+      fontSize: 15,
+      fontWeight: "600",
+      color: theme.colors.textMuted,
+      minWidth: 28,
+      textAlign: "center",
+    },
+    // Exchange rates styles
+    exchangeRatesHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: theme.spacing.md,
+    },
+    exchangeRatesIconContainer: {
+      width: 36,
+      height: 36,
+      borderRadius: theme.radii.md,
+      backgroundColor: `${theme.colors.primary}22`,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    exchangeRatesSyncText: {
+      fontSize: 12,
+      color: theme.colors.textMuted,
+      marginTop: 2,
+    },
+    exchangeRatesDescription: {
+      fontSize: 13,
+      color: theme.colors.textMuted,
+      lineHeight: 18,
+    },
+    syncButton: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: theme.spacing.sm,
+      paddingVertical: theme.spacing.md,
+      paddingHorizontal: theme.spacing.lg,
+      borderRadius: theme.radii.md,
+      backgroundColor: `${theme.colors.primary}12`,
+      borderWidth: 1,
+      borderColor: `${theme.colors.primary}30`,
+    },
+    syncButtonDisabled: {
+      opacity: 0.6,
+    },
+    syncButtonText: {
+      fontSize: 14,
+      fontWeight: "600",
+      color: theme.colors.primary,
     },
   });
 

@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import dayjs, { Dayjs } from 'dayjs';
 import { useAppTheme } from '../theme';
 import { Transaction } from '../lib/types';
+import { useFinanceStore } from '../lib/store';
 
 interface MonthlyCalendarProps {
   transactions: Transaction[];
@@ -12,28 +13,30 @@ interface MonthlyCalendarProps {
   onDatePress?: (date: string) => void;
 }
 
-// Calculate net for a specific day
+// Calculate net for a specific day (with currency conversion)
 const calculateDayNet = (
   transactions: Transaction[],
   date: Dayjs,
-  selectedAccountId?: string | null,
+  selectedAccountId: string | null | undefined,
+  convertAmount: (t: Transaction) => number,
 ): number => {
   return transactions
     .filter((t) => dayjs(t.date).isSame(date, 'day'))
     .reduce((acc, t) => {
+      const amount = convertAmount(t);
       // Handle transfers
       if (t.type === 'transfer') {
         if (selectedAccountId) {
-          if (t.accountId === selectedAccountId) return acc - t.amount;
-          if (t.toAccountId === selectedAccountId) return acc + t.amount;
+          if (t.accountId === selectedAccountId) return acc - amount;
+          if (t.toAccountId === selectedAccountId) return acc + amount;
           return acc;
         }
         return acc; // Transfers are neutral for all accounts view
       }
       
       // Handle income and expenses
-      if (t.type === 'income') return acc + t.amount;
-      if (t.type === 'expense') return acc - t.amount;
+      if (t.type === 'income') return acc + amount;
+      if (t.type === 'expense') return acc - amount;
       return acc;
     }, 0);
 };
@@ -42,6 +45,7 @@ export function MonthlyCalendar({ transactions, selectedAccountId, currency, onD
   const theme = useAppTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
   const [currentMonth, setCurrentMonth] = useState(dayjs());
+  const getTransactionAmountInBaseCurrency = useFinanceStore((state) => state.getTransactionAmountInBaseCurrency);
 
   const canGoNext = useMemo(() => {
     const now = dayjs();
@@ -81,7 +85,7 @@ export function MonthlyCalendar({ transactions, selectedAccountId, currency, onD
     // Add days of the month
     for (let day = 1; day <= daysInMonth; day++) {
       const date = startOfMonth.date(day);
-      const net = calculateDayNet(transactions, date, selectedAccountId);
+      const net = calculateDayNet(transactions, date, selectedAccountId, getTransactionAmountInBaseCurrency);
       const isToday = date.isSame(now, 'day');
       // Only mark as future if it's in a future month, not if it's in the current month
       const isFuture = date.isAfter(now, 'day') && !currentMonth.isSame(now, 'month');
@@ -92,7 +96,7 @@ export function MonthlyCalendar({ transactions, selectedAccountId, currency, onD
       monthName: currentMonth.format('MMMM YYYY'),
       days,
     };
-  }, [transactions, selectedAccountId, currentMonth]);
+  }, [transactions, selectedAccountId, currentMonth, getTransactionAmountInBaseCurrency]);
 
   const getNetColor = (net: number, isFuture: boolean) => {
     if (isFuture) return theme.colors.textMuted;

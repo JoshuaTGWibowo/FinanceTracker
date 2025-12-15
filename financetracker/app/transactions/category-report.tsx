@@ -10,6 +10,7 @@ import { useAppTheme } from "../../theme";
 import { useFinanceStore } from "../../lib/store";
 import { buildMonthlyPeriods } from "../../lib/periods";
 import { filterTransactionsByAccount } from "../../lib/transactions";
+import { formatCurrency } from "../../lib/currency";
 
 dayjs.extend(isoWeek);
 
@@ -22,23 +23,6 @@ const chartPalette = [
   "#FB7185",
   "#FBBF24",
 ];
-
-const formatCurrency = (
-  value: number,
-  currency: string,
-  options?: Intl.NumberFormatOptions,
-) => {
-  const maximumFractionDigits = options?.maximumFractionDigits ?? 2;
-  const minimumFractionDigits = Math.min(options?.minimumFractionDigits ?? 0, maximumFractionDigits);
-
-  return new Intl.NumberFormat(undefined, {
-    style: "currency",
-    currency,
-    ...options,
-    maximumFractionDigits,
-    minimumFractionDigits,
-  }).format(value);
-};
 
 const buildWeeksForMonth = (start: dayjs.Dayjs, end: dayjs.Dayjs) => {
   const weeks: { start: dayjs.Dayjs; end: dayjs.Dayjs }[] = [];
@@ -93,6 +77,7 @@ export default function CategoryReportScreen() {
   const transactions = useFinanceStore((state) => state.transactions);
   const accounts = useFinanceStore((state) => state.accounts);
   const currency = useFinanceStore((state) => state.profile.currency) || "USD";
+  const getTransactionAmountInBaseCurrency = useFinanceStore((state) => state.getTransactionAmountInBaseCurrency);
 
   const baseCurrency = currency || "USD";
   const visibleAccounts = useMemo(
@@ -168,7 +153,8 @@ export default function CategoryReportScreen() {
       .filter((transaction) => transaction.type === categoryType)
       .forEach((transaction) => {
         const label = transaction.category?.trim().length ? transaction.category : fallbackCategory;
-        map.set(label, (map.get(label) ?? 0) + transaction.amount);
+        const convertedAmount = getTransactionAmountInBaseCurrency(transaction);
+        map.set(label, (map.get(label) ?? 0) + convertedAmount);
       });
 
     const sorted = Array.from(map.entries()).sort((a, b) => b[1] - a[1]);
@@ -178,7 +164,7 @@ export default function CategoryReportScreen() {
       value,
       color: chartPalette[index % chartPalette.length],
     }));
-  }, [categoryType, fallbackCategory, withinPeriodTransactions]);
+  }, [categoryType, fallbackCategory, getTransactionAmountInBaseCurrency, withinPeriodTransactions]);
 
   const [selectedCategory, setSelectedCategory] = useState<string>(() => {
     const initial = typeof categoryParam === "string" && categoryParam.length ? categoryParam : null;
@@ -210,8 +196,8 @@ export default function CategoryReportScreen() {
           const label = transaction.category?.trim().length ? transaction.category : fallbackCategory;
           return label === selectedCategory;
         })
-        .reduce((acc, transaction) => acc + transaction.amount, 0),
-    [categoryType, fallbackCategory, selectedCategory, withinPeriodTransactions],
+        .reduce((acc, transaction) => acc + getTransactionAmountInBaseCurrency(transaction), 0),
+    [categoryType, fallbackCategory, getTransactionAmountInBaseCurrency, selectedCategory, withinPeriodTransactions],
   );
 
   const daysInPeriod = useMemo(() => Math.max(end.diff(start, "day") + 1, 1), [end, start]);
@@ -242,9 +228,9 @@ export default function CategoryReportScreen() {
           if (label !== selectedCategory || date.isBefore(rangeStart) || date.isAfter(rangeEnd)) {
             return acc;
           }
-          return acc + transaction.amount;
+          return acc + getTransactionAmountInBaseCurrency(transaction);
         }, 0),
-    [categoryType, fallbackCategory, reportableTransactions, selectedCategory],
+    [categoryType, fallbackCategory, getTransactionAmountInBaseCurrency, reportableTransactions, selectedCategory],
   );
 
   const trailingAverage = useMemo(() => {
@@ -277,7 +263,7 @@ export default function CategoryReportScreen() {
               label === selectedCategory && !date.isBefore(range.start) && !date.isAfter(range.end)
             );
           })
-          .reduce((acc, transaction) => acc + transaction.amount, 0);
+          .reduce((acc, transaction) => acc + getTransactionAmountInBaseCurrency(transaction), 0);
 
         const label = `${range.start.date()}–${range.end.date()}`;
 
@@ -288,7 +274,7 @@ export default function CategoryReportScreen() {
           total,
         };
       }),
-    [categoryType, fallbackCategory, selectedCategory, weeks, withinPeriodTransactions],
+    [categoryType, fallbackCategory, getTransactionAmountInBaseCurrency, selectedCategory, weeks, withinPeriodTransactions],
   );
 
   const maxWeeklyTotal = Math.max(...weeklySummaries.map((week) => Math.abs(week.total)), 0);

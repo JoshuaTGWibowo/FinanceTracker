@@ -11,6 +11,7 @@ import { useAppTheme } from "../../theme";
 import { useFinanceStore } from "../../lib/store";
 import { buildMonthlyPeriods } from "../../lib/periods";
 import { filterTransactionsByAccount } from "../../lib/transactions";
+import { formatCurrency } from "../../lib/currency";
 
 dayjs.extend(isoWeek);
 
@@ -23,23 +24,6 @@ type WeeklySummary = {
   income: number;
   expense: number;
   net: number;
-};
-
-const formatCurrency = (
-  value: number,
-  currency: string,
-  options?: Intl.NumberFormatOptions,
-) => {
-  const maximumFractionDigits = options?.maximumFractionDigits ?? 2;
-  const minimumFractionDigits = Math.min(options?.minimumFractionDigits ?? 0, maximumFractionDigits);
-
-  return new Intl.NumberFormat(undefined, {
-    style: "currency",
-    currency,
-    ...options,
-    maximumFractionDigits,
-    minimumFractionDigits,
-  }).format(value);
 };
 
 const buildWeeksForMonth = (start: dayjs.Dayjs, end: dayjs.Dayjs) => {
@@ -86,6 +70,7 @@ export default function NetIncomeDetailsScreen() {
   const transactions = useFinanceStore((state) => state.transactions);
   const accounts = useFinanceStore((state) => state.accounts);
   const currency = useFinanceStore((state) => state.profile.currency) || "USD";
+  const getTransactionAmountInBaseCurrency = useFinanceStore((state) => state.getTransactionAmountInBaseCurrency);
 
   const baseCurrency = currency || "USD";
   const visibleAccounts = useMemo(
@@ -157,10 +142,10 @@ export default function NetIncomeDetailsScreen() {
 
         const income = rangeTransactions
           .filter((transaction) => transaction.type === "income")
-          .reduce((acc, transaction) => acc + transaction.amount, 0);
+          .reduce((acc, transaction) => acc + getTransactionAmountInBaseCurrency(transaction), 0);
         const expense = rangeTransactions
           .filter((transaction) => transaction.type === "expense")
-          .reduce((acc, transaction) => acc + transaction.amount, 0);
+          .reduce((acc, transaction) => acc + getTransactionAmountInBaseCurrency(transaction), 0);
 
         const label = `${range.start.date()}–${range.end.date()}`;
 
@@ -173,7 +158,7 @@ export default function NetIncomeDetailsScreen() {
           net: income - expense,
         };
       }),
-    [reportableTransactions, weeks],
+    [getTransactionAmountInBaseCurrency, reportableTransactions, weeks],
   );
 
   const totalNet = weeklySummaries.reduce((acc, week) => acc + week.net, 0);

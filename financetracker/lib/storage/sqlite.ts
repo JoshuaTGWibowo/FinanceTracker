@@ -121,6 +121,12 @@ const ensureSchema = async (db: SQLiteDatabase) => {
       period TEXT NOT NULL,
       category TEXT
     );
+    CREATE TABLE IF NOT EXISTS exchange_rates (
+      id INTEGER PRIMARY KEY NOT NULL,
+      baseCurrency TEXT NOT NULL,
+      rates TEXT NOT NULL,
+      lastUpdated TEXT NOT NULL
+    );
   `);
 
   await ensureColumnExists(db, "categories", "icon", "TEXT");
@@ -129,6 +135,9 @@ const ensureSchema = async (db: SQLiteDatabase) => {
   
   // Add createdAt column to transactions
   await ensureColumnExists(db, "transactions", "createdAt", "TEXT");
+  
+  // Add currency column to transactions
+  await ensureColumnExists(db, "transactions", "currency", "TEXT");
   
   // Add new budget_goals columns
   await ensureColumnExists(db, "budget_goals", "isRepeating", "INTEGER", "DEFAULT 1");
@@ -212,6 +221,7 @@ interface TransactionRow {
   date: string;
   accountId: string;
   toAccountId: string | null;
+  currency: string | null;
   participants: string | null;
   location: string | null;
   photos: string | null;
@@ -322,6 +332,7 @@ export const fetchFinanceState = async (): Promise<FinanceStatePayload> => {
     date: row.date,
     accountId: row.accountId,
     toAccountId: row.toAccountId,
+    currency: row.currency ?? undefined,
     participants: row.participants ? (JSON.parse(row.participants) as string[]) : [],
     location: row.location ?? undefined,
     photos: row.photos ? (JSON.parse(row.photos) as string[]) : [],
@@ -376,12 +387,13 @@ export const saveTransaction = async (transaction: Transaction) => {
       date,
       accountId,
       toAccountId,
+      currency,
       participants,
       location,
       photos,
       excludeFromReports,
       createdAt
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       amount=excluded.amount,
       note=excluded.note,
@@ -390,6 +402,7 @@ export const saveTransaction = async (transaction: Transaction) => {
       date=excluded.date,
       accountId=excluded.accountId,
       toAccountId=excluded.toAccountId,
+      currency=excluded.currency,
       participants=excluded.participants,
       location=excluded.location,
       photos=excluded.photos,
@@ -404,6 +417,7 @@ export const saveTransaction = async (transaction: Transaction) => {
       transaction.date,
       transaction.accountId,
       transaction.toAccountId ?? null,
+      transaction.currency ?? null,
       serializeArray(transaction.participants),
       transaction.location ?? null,
       serializeArray(transaction.photos),
@@ -609,4 +623,55 @@ export const clearAllData = async () => {
       defaultAccount.createdAt,
     ],
   );
+};
+
+// ============================================================================
+// Exchange Rates Storage
+// ============================================================================
+
+export interface StoredExchangeRates {
+  baseCurrency: string;
+  rates: Record<string, number>;
+  lastUpdated: string;
+}
+
+/**
+ * Save exchange rates to the database
+ */
+export const saveExchangeRates = async (
+  baseCurrency: string,
+  rates: Record<string, number>,
+  lastUpdated: string,
+): Promise<void> => {
+  const db = await getDatabase();
+  await db.runAsync(
+    `INSERT OR REPLACE INTO exchange_rates (id, baseCurrency, rates, lastUpdated) VALUES (1, ?, ?, ?)`,
+    [baseCurrency, JSON.stringify(rates), lastUpdated],
+  );
+};
+
+/**
+ * Load exchange rates from the database
+ */
+export const loadExchangeRates = async (): Promise<StoredExchangeRates | null> => {
+  const db = await getDatabase();
+  const row = await db.getFirstAsync<{
+    baseCurrency: string;
+    rates: string;
+    lastUpdated: string;
+  }>("SELECT baseCurrency, rates, lastUpdated FROM exchange_rates WHERE id = 1");
+
+  if (!row) {
+    return null;
+  }
+
+  try {
+    return {
+      baseCurrency: row.baseCurrency,
+      rates: JSON.parse(row.rates),
+      lastUpdated: row.lastUpdated,
+    };
+  } catch {
+    return null;
+  }
 };
