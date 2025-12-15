@@ -149,6 +149,52 @@ export default function HomeScreen() {
     ? selectedAccount.balance
     : allAccountsBalance;
 
+  // Helper to get transaction amount in the display currency (selected account's currency or base currency)
+  const getTransactionAmountInDisplayCurrency = useCallback(
+    (transaction: Transaction) => {
+      if (!selectedAccount) {
+        // When viewing all accounts, use base currency conversion
+        return getTransactionAmountInBaseCurrency(transaction);
+      }
+      
+      // When viewing specific account, convert to that account's currency
+      const targetCurrency = selectedAccount.currency;
+      const store = useFinanceStore.getState();
+      const { exchangeRates, exchangeRatesBaseCurrency } = store;
+      
+      // Get transaction currency
+      let transactionCurrency = transaction.currency;
+      if (!transactionCurrency && transaction.accountId) {
+        const account = accounts.find((a) => a.id === transaction.accountId);
+        transactionCurrency = account?.currency;
+      }
+      if (!transactionCurrency) {
+        transactionCurrency = currency || "USD";
+      }
+      
+      // If same currency, return as-is
+      if (transactionCurrency === targetCurrency) {
+        return transaction.amount;
+      }
+      
+      // Convert to target currency using exchange rates
+      if (Object.keys(exchangeRates).length > 0) {
+        const { convertCurrency } = require("../../lib/currency");
+        return convertCurrency(
+          transaction.amount,
+          transactionCurrency,
+          targetCurrency,
+          exchangeRates,
+          exchangeRatesBaseCurrency || currency || "USD"
+        );
+      }
+      
+      // No exchange rates available, return original amount
+      return transaction.amount;
+    },
+    [selectedAccount, getTransactionAmountInBaseCurrency, accounts, currency],
+  );
+
   const [overviewPeriod, setOverviewPeriod] = useState<"week" | "month">("month");
   const [overviewChart, setOverviewChart] = useState<"bar" | "line">("bar");
   const [topSpendingPeriod, setTopSpendingPeriod] = useState<"week" | "month">("month");
@@ -171,7 +217,7 @@ export default function HomeScreen() {
       scopedTransactions.reduce(
         (acc, transaction) => {
           const date = dayjs(transaction.date);
-          const convertedAmount = getTransactionAmountInBaseCurrency(transaction);
+          const convertedAmount = getTransactionAmountInDisplayCurrency(transaction);
           
           // Calculate delta using converted amount
           let delta = 0;
@@ -204,7 +250,7 @@ export default function HomeScreen() {
         },
         { income: 0, expense: 0, openingBalance: 0, monthNet: 0 },
       ),
-    [endOfMonth, getTransactionAmountInBaseCurrency, scopedTransactions, selectedAccountId, startOfMonth],
+    [endOfMonth, getTransactionAmountInDisplayCurrency, scopedTransactions, selectedAccountId, startOfMonth],
   );
 
   const {
@@ -225,7 +271,7 @@ export default function HomeScreen() {
 
     const totals = filtered.reduce(
       (acc, transaction) => {
-        const convertedAmount = getTransactionAmountInBaseCurrency(transaction);
+        const convertedAmount = getTransactionAmountInDisplayCurrency(transaction);
         if (transaction.type === "income") {
           acc.income += convertedAmount;
         } else if (transaction.type === "expense") {
@@ -241,7 +287,7 @@ export default function HomeScreen() {
       const day = periodStart.add(index, "day");
       const value = filtered
         .filter((transaction) => transaction.type === "expense" && dayjs(transaction.date).isSame(day, "day"))
-        .reduce((acc, transaction) => acc + getTransactionAmountInBaseCurrency(transaction), 0);
+        .reduce((acc, transaction) => acc + getTransactionAmountInDisplayCurrency(transaction), 0);
 
       if (overviewPeriod === "week") {
         return {
@@ -270,7 +316,7 @@ export default function HomeScreen() {
       }
       const date = dayjs(transaction.date);
       if (!date.isBefore(previousPeriodStart) && !date.isAfter(previousPeriodEnd)) {
-        return acc + getTransactionAmountInBaseCurrency(transaction);
+        return acc + getTransactionAmountInDisplayCurrency(transaction);
       }
       return acc;
     }, 0);
@@ -288,7 +334,7 @@ export default function HomeScreen() {
               }
               const date = dayjs(transaction.date);
               if (!date.isBefore(start) && !date.isAfter(end)) {
-                return acc + getTransactionAmountInBaseCurrency(transaction);
+                return acc + getTransactionAmountInDisplayCurrency(transaction);
               }
               return acc;
             }, 0);
@@ -318,7 +364,7 @@ export default function HomeScreen() {
       const day = monthStart.add(index, "day");
       const spent = scopedTransactions
         .filter((transaction) => transaction.type === "expense" && dayjs(transaction.date).isSame(day, "day"))
-        .reduce((acc, transaction) => acc + getTransactionAmountInBaseCurrency(transaction), 0);
+        .reduce((acc, transaction) => acc + getTransactionAmountInDisplayCurrency(transaction), 0);
 
       return buildMonthlyPoint(index, spent);
     });
@@ -327,7 +373,7 @@ export default function HomeScreen() {
       const day = previousMonthStart.add(index, "day");
       return scopedTransactions
         .filter((transaction) => transaction.type === "expense" && dayjs(transaction.date).isSame(day, "day"))
-        .reduce((acc, transaction) => acc + getTransactionAmountInBaseCurrency(transaction), 0);
+        .reduce((acc, transaction) => acc + getTransactionAmountInDisplayCurrency(transaction), 0);
     });
 
     const lastPreviousValue = previousMonthValues.length
@@ -349,7 +395,7 @@ export default function HomeScreen() {
         previous: previousMonthDaily,
       },
     };
-  }, [getTransactionAmountInBaseCurrency, overviewPeriod, scopedTransactions]);
+  }, [getTransactionAmountInDisplayCurrency, overviewPeriod, scopedTransactions]);
 
   const topSpending = useMemo(() => {
     const today = dayjs();
@@ -366,12 +412,12 @@ export default function HomeScreen() {
 
     const totalsByCategory = filtered.reduce((acc, transaction) => {
       const previous = acc.get(transaction.category) ?? 0;
-      const convertedAmount = getTransactionAmountInBaseCurrency(transaction);
+      const convertedAmount = getTransactionAmountInDisplayCurrency(transaction);
       acc.set(transaction.category, previous + convertedAmount);
       return acc;
     }, new Map<string, number>());
 
-    const totalSpent = filtered.reduce((acc, transaction) => acc + getTransactionAmountInBaseCurrency(transaction), 0);
+    const totalSpent = filtered.reduce((acc, transaction) => acc + getTransactionAmountInDisplayCurrency(transaction), 0);
 
     const sorted = Array.from(totalsByCategory.entries()).sort((a, b) => b[1] - a[1]);
     const topThree = sorted.slice(0, 3);
@@ -395,7 +441,7 @@ export default function HomeScreen() {
     }
 
     return { entries, totalSpent };
-  }, [getTransactionAmountInBaseCurrency, scopedTransactions, topSpendingPeriod]);
+  }, [getTransactionAmountInDisplayCurrency, scopedTransactions, topSpendingPeriod]);
 
   const donutColors = useMemo(
     () => [
@@ -945,7 +991,7 @@ export default function HomeScreen() {
                       ]}
                     >
                       {visual.prefix}
-                      {formatCurrency(getTransactionAmountInBaseCurrency(transaction), currency)}
+                      {formatCurrency(getTransactionAmountInDisplayCurrency(transaction), selectedAccount?.currency || currency)}
                     </Text>
                   </Pressable>
                 );
