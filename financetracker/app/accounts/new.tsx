@@ -20,6 +20,84 @@ import { useAppTheme } from "../../theme";
 import { AccountType, useFinanceStore } from "../../lib/store";
 import { SUPPORTED_CURRENCIES } from "../../lib/currency";
 
+type LocaleSeparators = {
+  decimal: string;
+  group: string;
+};
+
+const getLocaleSeparators = (): LocaleSeparators => {
+  const formatter = new Intl.NumberFormat(undefined);
+
+  if (typeof formatter.formatToParts !== "function") {
+    return { decimal: ".", group: "," };
+  }
+
+  try {
+    const parts = formatter.formatToParts(12345.6);
+    const group = parts.find((part) => part.type === "group")?.value ?? ",";
+    const decimal = parts.find((part) => part.type === "decimal")?.value ?? ".";
+    return { decimal, group };
+  } catch {
+    return { decimal: ".", group: "," };
+  }
+};
+
+const formatRawAmountInput = (
+  rawValue: string,
+  separators: LocaleSeparators,
+  groupingFormatter: Intl.NumberFormat,
+): string => {
+  const trimmed = rawValue.replace(/[\s']/g, "");
+  if (!trimmed) {
+    return "";
+  }
+
+  const sanitized = trimmed.replace(/[^0-9.,]/g, "");
+  if (!sanitized) {
+    return "";
+  }
+
+  const endsWithSeparator = /[.,]$/.test(trimmed);
+  const groupingRegex = new RegExp(`\\${separators.group}`, "g");
+  const normalized = sanitized.replace(groupingRegex, "");
+  const lastSeparatorIndex = Math.max(normalized.lastIndexOf("."), normalized.lastIndexOf(","));
+
+  let integerPartRaw = normalized;
+  let decimalPartRaw = "";
+  let hasDecimalSeparator = false;
+
+  if (lastSeparatorIndex !== -1) {
+    hasDecimalSeparator = true;
+    integerPartRaw = normalized.slice(0, lastSeparatorIndex);
+    decimalPartRaw = normalized.slice(lastSeparatorIndex + 1).replace(/[^0-9]/g, "");
+  }
+
+  const integerDigits = integerPartRaw.replace(/[^0-9]/g, "");
+
+  if (!integerDigits) {
+    if (decimalPartRaw) {
+      return `0${separators.decimal}${decimalPartRaw}`;
+    }
+    return endsWithSeparator ? `0${separators.decimal}` : "";
+  }
+
+  const groupedInteger = groupingFormatter.format(Number(integerDigits));
+
+  if (decimalPartRaw) {
+    return `${groupedInteger}${separators.decimal}${decimalPartRaw}`;
+  }
+
+  if (endsWithSeparator) {
+    return `${groupedInteger}${separators.decimal}`;
+  }
+
+  if (!hasDecimalSeparator && sanitized.endsWith(separators.group)) {
+    return `${groupedInteger}${separators.decimal}`;
+  }
+
+  return groupedInteger;
+};
+
 const accountTypes: AccountType[] = ["cash", "bank", "card", "investment"];
 const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
   cash: "Cash",
@@ -41,6 +119,12 @@ export default function NewAccountScreen() {
   const [accountFormInitialBalance, setAccountFormInitialBalance] = useState("");
   const [accountFormExcludeFromTotal, setAccountFormExcludeFromTotal] = useState(false);
   const [currencyPickerVisible, setCurrencyPickerVisible] = useState(false);
+
+  const separators = useMemo(() => getLocaleSeparators(), []);
+  const groupingFormatter = useMemo(
+    () => new Intl.NumberFormat(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 }),
+    [],
+  );
 
   const insets = useSafeAreaInsets();
   const styles = useMemo(() => createStyles(theme, insets), [theme, insets]);
@@ -182,7 +266,7 @@ export default function NewAccountScreen() {
                 <Text style={styles.modernLabel}>Initial Balance</Text>
                 <TextInput
                   value={accountFormInitialBalance}
-                  onChangeText={setAccountFormInitialBalance}
+                  onChangeText={(value) => setAccountFormInitialBalance(formatRawAmountInput(value, separators, groupingFormatter))}
                   placeholder="0.00"
                   placeholderTextColor={theme.colors.textMuted}
                   keyboardType="decimal-pad"
