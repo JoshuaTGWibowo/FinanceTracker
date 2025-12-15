@@ -146,7 +146,7 @@ export interface FinanceState {
 
 const applyAccountBalanceUpdate = (state: FinanceState, transactions: Transaction[]) => ({
   transactions,
-  accounts: recalculateAccountBalances(state.accounts, transactions, state.profile.currency),
+  accounts: recalculateAccountBalances(state.accounts, transactions, state.profile.currency, state.exchangeRates),
 });
 
 const generateId = (prefix: string) =>
@@ -156,6 +156,7 @@ const recalculateAccountBalances = (
   accounts: Account[],
   transactions: Transaction[],
   fallbackCurrency: string,
+  exchangeRates: Record<string, number> = {},
 ): Account[] => {
   const base = accounts.map((account) => ({
     ...account,
@@ -201,15 +202,40 @@ const recalculateAccountBalances = (
       return;
     }
 
+    // Convert transaction amount to account's currency
+    const transactionCurrency = transaction.currency || primary.currency;
+    let convertedAmount = transaction.amount;
+    
+    if (transactionCurrency !== primary.currency && Object.keys(exchangeRates).length > 0) {
+      convertedAmount = convertCurrency(
+        transaction.amount,
+        transactionCurrency,
+        primary.currency,
+        exchangeRates,
+        fallbackCurrency,
+      );
+    }
+
     if (transaction.type === "income") {
-      primary.balance += transaction.amount;
+      primary.balance += convertedAmount;
     } else if (transaction.type === "expense") {
-      primary.balance -= transaction.amount;
+      primary.balance -= convertedAmount;
     } else if (transaction.type === "transfer") {
-      primary.balance -= transaction.amount;
+      primary.balance -= convertedAmount;
       const destination = ensureAccount(transaction.toAccountId);
       if (destination) {
-        destination.balance += transaction.amount;
+        // Convert to destination account's currency for transfers
+        let destinationAmount = transaction.amount;
+        if (transactionCurrency !== destination.currency && Object.keys(exchangeRates).length > 0) {
+          destinationAmount = convertCurrency(
+            transaction.amount,
+            transactionCurrency,
+            destination.currency,
+            exchangeRates,
+            fallbackCurrency,
+          );
+        }
+        destination.balance += destinationAmount;
       }
     }
   });
@@ -533,14 +559,16 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
         sourceAccounts,
         data.transactions,
       );
+
+      // Load cached exchange rates before recalculating balances
+      const cachedRates = await loadExchangeRates();
+      
       const normalizedAccounts = recalculateAccountBalances(
         sourceAccounts,
         transactionsWithInitialBalance,
         data.profile.currency,
+        cachedRates?.rates || {},
       );
-
-      // Load cached exchange rates
-      const cachedRates = await loadExchangeRates();
       const exchangeRatesState = cachedRates
         ? {
             exchangeRates: cachedRates.rates,
@@ -561,10 +589,10 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
         isHydrating: false,
       });
 
-      // Silently auto-sync exchange rates if stale (>7 days old)
-      if (shouldAutoSyncRates(cachedRates?.lastUpdated ?? null)) {
+      // Sync exchange rates if missing or stale (>7 days old)
+      if (!cachedRates || shouldAutoSyncRates(cachedRates?.lastUpdated ?? null)) {
         get().syncExchangeRates().catch(() => {
-          // Silently fail, fall back to cached rates
+          // Silently fail, fall back to cached rates if available
         });
       }
     } catch (error) {
@@ -1125,7 +1153,7 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
     set((state) => {
       const nextAccounts = state.accounts.map((account) => (account.id === id ? next : account));
       return {
-        accounts: recalculateAccountBalances(nextAccounts, state.transactions, state.profile.currency),
+        accounts: recalculateAccountBalances(nextAccounts, state.transactions, state.profile.currency, state.exchangeRates),
       };
     });
   },

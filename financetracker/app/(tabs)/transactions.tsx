@@ -88,6 +88,8 @@ export default function TransactionsScreen() {
   const logRecurringTransaction = useFinanceStore((state) => state.logRecurringTransaction);
   const accounts = useFinanceStore((state) => state.accounts);
   const getTransactionAmountInBaseCurrency = useFinanceStore((state) => state.getTransactionAmountInBaseCurrency);
+  const getAccountBalanceInBaseCurrency = useFinanceStore((state) => state.getAccountBalanceInBaseCurrency);
+  const getTotalBalanceInBaseCurrency = useFinanceStore((state) => state.getTotalBalanceInBaseCurrency);
   const router = useRouter();
   const { category: categoryParam, date: dateParam } = useLocalSearchParams<{ category?: string | string[]; date?: string }>();
 
@@ -100,19 +102,13 @@ export default function TransactionsScreen() {
   const scrollViewRef = useRef<ScrollView>(null);
 
   const visibleAccounts = useMemo(
-    () =>
-      accounts.filter(
-        (account) => !account.excludeFromTotal && (account.currency || baseCurrency) === baseCurrency,
-      ),
-    [accounts, baseCurrency],
+    () => accounts.filter((account) => !account.isArchived && !account.excludeFromTotal),
+    [accounts],
   );
 
   const visibleAccountIds = useMemo(() => visibleAccounts.map((account) => account.id), [visibleAccounts]);
 
-  const allAccountsBalance = useMemo(
-    () => visibleAccounts.reduce((acc, account) => acc + account.balance, 0),
-    [visibleAccounts],
-  );
+  const allAccountsBalance = getTotalBalanceInBaseCurrency();
   
   // Default to current month
   const [selectedPeriod, setSelectedPeriod] = useState(() => {
@@ -821,7 +817,7 @@ export default function TransactionsScreen() {
                   >
                     <Text style={styles.accountChipTitle}>{account.name}</Text>
                     <Text style={styles.accountChipBalance}>
-                      {formatCurrency(account.balance, account.currency || baseCurrency)}
+                      {formatCurrency(getAccountBalanceInBaseCurrency(account.id), baseCurrency)}
                     </Text>
                   </Pressable>
                 );
