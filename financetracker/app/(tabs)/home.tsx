@@ -1014,112 +1014,151 @@ export default function HomeScreen() {
               contentContainerStyle={styles.modalContent}
               showsVerticalScrollIndicator={false}
             >
-              <View style={styles.fieldGroup}>
-                <Text style={styles.fieldLabel}>Account Name</Text>
-                <TextInput
-                  value={accountFormName}
-                  onChangeText={setAccountFormName}
-                  placeholder="e.g., Main Checking"
-                  placeholderTextColor={theme.colors.textMuted}
-                  style={[styles.textInput, theme.components.inputSurface, { color: theme.colors.text }]}
-                />
+              {/* Account Name */}
+              <View style={styles.modernFieldGroup}>
+                <View style={styles.modernFieldIcon}>
+                  <Ionicons name="create-outline" size={18} color={theme.colors.primary} />
+                </View>
+                <View style={styles.modernFieldContent}>
+                  <Text style={styles.modernLabel}>Account Name</Text>
+                  <TextInput
+                    value={accountFormName}
+                    onChangeText={setAccountFormName}
+                    placeholder="e.g., Main Checking"
+                    placeholderTextColor={theme.colors.textMuted}
+                    style={styles.modernInput}
+                  />
+                </View>
               </View>
 
-              <View style={styles.fieldGroup}>
-                <Text style={styles.fieldLabel}>Type</Text>
-                <View style={styles.accountTypeGrid}>
-                  {(["cash", "bank", "card", "investment"] as const).map((type) => {
-                    const active = accountFormType === type;
-                    const iconName =
-                      type === "cash"
-                        ? "cash"
-                        : type === "bank"
-                        ? "business"
-                        : type === "card"
-                        ? "card"
-                        : "trending-up";
-                    const label = type === "cash" ? "Cash" : type === "bank" ? "Bank" : type === "card" ? "Card" : "Investment";
-                    return (
-                      <Pressable
-                        key={type}
-                        style={[
-                          styles.accountTypeCard,
-                          theme.components.surface,
-                          active && { borderColor: theme.colors.primary, borderWidth: 2 }
-                        ]}
-                        onPress={() => setAccountFormType(type)}
-                      >
-                        <Ionicons
-                          name={iconName}
-                          size={20}
-                          color={active ? theme.colors.primary : theme.colors.textMuted}
-                        />
-                        <Text
-                          style={[
-                            styles.accountTypeCardText,
-                            { color: theme.colors.text },
-                            active && { color: theme.colors.primary, fontWeight: "600" }
-                          ]}
+              {/* Account Type */}
+              <View style={styles.modernFieldGroup}>
+                <View style={styles.modernFieldIcon}>
+                  <Ionicons name="apps-outline" size={18} color={theme.colors.primary} />
+                </View>
+                <View style={[styles.modernFieldContent, { gap: theme.spacing.sm }]}>
+                  <Text style={styles.modernLabel}>Account Type</Text>
+                  <View style={styles.modernTypeGrid}>
+                    {(["cash", "bank", "card", "investment"] as const).map((type) => {
+                      const active = accountFormType === type;
+                      const iconName =
+                        type === "cash"
+                          ? "cash"
+                          : type === "bank"
+                          ? "business"
+                          : type === "card"
+                          ? "card"
+                          : "trending-up";
+                      const label = type === "cash" ? "Cash" : type === "bank" ? "Bank" : type === "card" ? "Card" : "Investment";
+                      return (
+                        <Pressable
+                          key={type}
+                          style={[styles.modernTypeCard, active && styles.modernTypeCardActive]}
+                          onPress={() => setAccountFormType(type)}
                         >
-                          {label}
-                        </Text>
-                      </Pressable>
-                    );
-                  })}
+                          <View style={[styles.modernTypeIcon, active && styles.modernTypeIconActive]}>
+                            <Ionicons
+                              name={iconName}
+                              size={22}
+                              color={active ? "#fff" : theme.colors.textMuted}
+                            />
+                          </View>
+                          <Text style={[styles.modernTypeText, active && styles.modernTypeTextActive]}>
+                            {label}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
                 </View>
               </View>
 
-              <View style={styles.rowFields}>
-                <View style={[styles.fieldGroup, styles.flexField]}>
-                  <Text style={styles.fieldLabel}>Currency</Text>
-                  <TextInput
-                    value={accountFormCurrency}
-                    onChangeText={(text) => setAccountFormCurrency(text.toUpperCase())}
-                    placeholder="USD"
-                    placeholderTextColor={theme.colors.textMuted}
-                    autoCapitalize="characters"
-                    maxLength={3}
-                    style={[styles.textInput, theme.components.inputSurface, { color: theme.colors.text }]}
-                  />
+              {/* Currency & Balance */}
+              <View style={styles.modernRow}>
+                <View style={[styles.modernFieldGroup, { flex: 1 }]}>
+                  <View style={styles.modernFieldIcon}>
+                    <Ionicons name="globe-outline" size={18} color={theme.colors.primary} />
+                  </View>
+                  <View style={styles.modernFieldContent}>
+                    <Text style={styles.modernLabel}>Currency</Text>
+                    <TextInput
+                      value={accountFormCurrency}
+                      onChangeText={(text) => setAccountFormCurrency(text.toUpperCase())}
+                      placeholder="USD"
+                      placeholderTextColor={theme.colors.textMuted}
+                      autoCapitalize="characters"
+                      maxLength={3}
+                      style={styles.modernInput}
+                    />
+                  </View>
                 </View>
 
-                <View style={[styles.fieldGroup, styles.flexField]}>
-                  <Text style={styles.fieldLabel}>Initial Balance</Text>
-                  <TextInput
-                    value={accountFormInitialBalance}
-                    onChangeText={setAccountFormInitialBalance}
-                    placeholder="0.00"
-                    placeholderTextColor={theme.colors.textMuted}
-                    keyboardType="decimal-pad"
-                    style={[styles.textInput, theme.components.inputSurface, { color: theme.colors.text }]}
-                  />
+                <View style={[styles.modernFieldGroup, { flex: 1.2 }]}>
+                  <View style={styles.modernFieldIcon}>
+                    <Ionicons name="calculator-outline" size={18} color={theme.colors.primary} />
+                  </View>
+                  <View style={styles.modernFieldContent}>
+                    <Text style={styles.modernLabel}>Initial Balance</Text>
+                    <TextInput
+                      value={accountFormInitialBalance}
+                      onChangeText={setAccountFormInitialBalance}
+                      placeholder="0.00"
+                      placeholderTextColor={theme.colors.textMuted}
+                      keyboardType="decimal-pad"
+                      style={styles.modernInput}
+                    />
+                  </View>
                 </View>
               </View>
 
-              <View style={[styles.fieldGroup, styles.switchField]}>
-                <View style={styles.switchLabelContainer}>
-                  <Text style={styles.fieldLabel}>Exclude from Total</Text>
-                  <Text style={[styles.fieldHelperText, { color: theme.colors.textMuted }]}>
-                    Don&apos;t include this account in your net worth
+              {/* Exclude Toggle */}
+              <Pressable 
+                style={[styles.modernToggleCard, accountFormExcludeFromTotal && styles.modernToggleCardActive]}
+                onPress={() => setAccountFormExcludeFromTotal(!accountFormExcludeFromTotal)}
+              >
+                <View style={styles.modernToggleIcon}>
+                  <Ionicons 
+                    name={accountFormExcludeFromTotal ? "eye-off" : "eye-off-outline"} 
+                    size={20} 
+                    color={accountFormExcludeFromTotal ? theme.colors.primary : theme.colors.textMuted} 
+                  />
+                </View>
+                <View style={styles.modalFlex}>
+                  <Text style={[styles.modernLabel, accountFormExcludeFromTotal && { color: theme.colors.text }]}>
+                    Exclude from Totals
+                  </Text>
+                  <Text style={styles.modernHelper}>
+                    {accountFormExcludeFromTotal ? "Hidden from total balance" : "Included in total balance"}
                   </Text>
                 </View>
-                <Switch
-                  value={accountFormExcludeFromTotal}
-                  onValueChange={setAccountFormExcludeFromTotal}
-                  trackColor={{ false: theme.colors.border, true: theme.colors.primary }}
-                  thumbColor={theme.colors.background}
-                />
+                <View style={[
+                  styles.modernToggleSwitch,
+                  accountFormExcludeFromTotal && styles.modernToggleSwitchActive
+                ]}>
+                  <View style={[
+                    styles.modernToggleThumb,
+                    accountFormExcludeFromTotal && styles.modernToggleThumbActive
+                  ]} />
+                </View>
+              </Pressable>
+
+              {/* Action Buttons */}
+              <View style={styles.modernActions}>
+                <Pressable 
+                  style={[styles.modernButton, styles.modernButtonSecondary]} 
+                  onPress={handleCloseCreateModal}
+                >
+                  <Text style={styles.modernButtonSecondaryText}>Cancel</Text>
+                </Pressable>
+                <Pressable 
+                  style={[styles.modernButton, styles.modernButtonPrimary]} 
+                  onPress={handleSaveAccount}
+                >
+                  <Ionicons name="checkmark" size={18} color="#fff" />
+                  <Text style={styles.modernButtonPrimaryText}>Create Account</Text>
+                </Pressable>
               </View>
             </ScrollView>
-
-            <View style={styles.modalFooter}>
-              <Pressable
-                style={[styles.saveButton, { backgroundColor: theme.colors.primary }]}
-                onPress={handleSaveAccount}
-              >
-                <Text style={styles.saveButtonText}>Create Account</Text>
-              </Pressable>
-            </View>
           </KeyboardAvoidingView>
         </SafeAreaView>
       </Modal>
@@ -1652,23 +1691,29 @@ const createStyles = (
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "space-between",
-      paddingHorizontal: 24,
-      paddingVertical: 16,
+      paddingHorizontal: theme.spacing.lg,
+      paddingTop: theme.spacing.md,
+      paddingBottom: theme.spacing.sm,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: theme.colors.border,
     },
     modalTitle: {
-      fontSize: 18,
-      fontWeight: "600",
-      color: theme.colors.text,
+      ...theme.typography.title,
+      fontSize: 20,
     },
     modalClose: {
-      padding: 8,
+      padding: theme.spacing.sm,
+      borderRadius: theme.radii.md,
+      backgroundColor: theme.colors.surface,
     },
     modalBody: {
       flex: 1,
     },
     modalContent: {
-      padding: 24,
-      gap: 20,
+      paddingHorizontal: theme.spacing.lg,
+      paddingTop: theme.spacing.md,
+      paddingBottom: theme.spacing.lg,
+      gap: theme.spacing.lg,
     },
     fieldGroup: {
       marginBottom: 0,
@@ -1736,5 +1781,168 @@ const createStyles = (
       color: "#fff",
       fontSize: 16,
       fontWeight: "600",
+    },
+    // Modern redesigned styles
+    modernFieldGroup: {
+      flexDirection: "row",
+      alignItems: "flex-start",
+      gap: theme.spacing.md,
+      backgroundColor: theme.colors.surface,
+      borderRadius: theme.radii.lg,
+      padding: theme.spacing.md,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+    },
+    modernFieldIcon: {
+      width: 36,
+      height: 36,
+      borderRadius: theme.radii.md,
+      backgroundColor: `${theme.colors.primary}12`,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    modernFieldContent: {
+      flex: 1,
+      gap: 4,
+    },
+    modernLabel: {
+      fontSize: 12,
+      fontWeight: "600",
+      color: theme.colors.textMuted,
+      textTransform: "uppercase",
+      letterSpacing: 0.5,
+    },
+    modernInput: {
+      fontSize: 16,
+      fontWeight: "500",
+      color: theme.colors.text,
+      paddingVertical: 4,
+    },
+    modernTypeGrid: {
+      flexDirection: "row",
+      gap: theme.spacing.sm,
+    },
+    modernTypeCard: {
+      flex: 1,
+      alignItems: "center",
+      gap: 6,
+      paddingVertical: theme.spacing.sm,
+      paddingHorizontal: 4,
+      borderRadius: theme.radii.md,
+      backgroundColor: theme.colors.background,
+      borderWidth: 1.5,
+      borderColor: theme.colors.border,
+    },
+    modernTypeCardActive: {
+      backgroundColor: `${theme.colors.primary}08`,
+      borderColor: theme.colors.primary,
+    },
+    modernTypeIcon: {
+      width: 40,
+      height: 40,
+      borderRadius: theme.radii.md,
+      backgroundColor: theme.colors.surface,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    modernTypeIconActive: {
+      backgroundColor: theme.colors.primary,
+    },
+    modernTypeText: {
+      fontSize: 11,
+      fontWeight: "600",
+      color: theme.colors.textMuted,
+    },
+    modernTypeTextActive: {
+      color: theme.colors.text,
+    },
+    modernRow: {
+      flexDirection: "row",
+      gap: theme.spacing.sm,
+    },
+    modernToggleCard: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: theme.spacing.md,
+      backgroundColor: theme.colors.surface,
+      borderRadius: theme.radii.lg,
+      padding: theme.spacing.md,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+    },
+    modernToggleCardActive: {
+      backgroundColor: `${theme.colors.primary}08`,
+      borderColor: `${theme.colors.primary}40`,
+    },
+    modernToggleIcon: {
+      width: 36,
+      height: 36,
+      borderRadius: theme.radii.md,
+      backgroundColor: `${theme.colors.primary}12`,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    modernHelper: {
+      fontSize: 12,
+      color: theme.colors.textMuted,
+      marginTop: 2,
+    },
+    modernToggleSwitch: {
+      width: 44,
+      height: 26,
+      borderRadius: 13,
+      backgroundColor: theme.colors.border,
+      padding: 2,
+      justifyContent: "center",
+    },
+    modernToggleSwitchActive: {
+      backgroundColor: theme.colors.primary,
+    },
+    modernToggleThumb: {
+      width: 22,
+      height: 22,
+      borderRadius: 11,
+      backgroundColor: "#fff",
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.2,
+      shadowRadius: 2,
+      elevation: 2,
+    },
+    modernToggleThumbActive: {
+      transform: [{ translateX: 18 }],
+    },
+    modernActions: {
+      flexDirection: "row",
+      gap: theme.spacing.sm,
+      paddingTop: theme.spacing.lg,
+    },
+    modernButton: {
+      flex: 1,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: theme.spacing.xs,
+      paddingVertical: theme.spacing.md + 2,
+      borderRadius: theme.radii.lg,
+    },
+    modernButtonSecondary: {
+      backgroundColor: theme.colors.surface,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+    },
+    modernButtonPrimary: {
+      backgroundColor: theme.colors.primary,
+      flex: 1.5,
+    },
+    modernButtonSecondaryText: {
+      fontSize: 15,
+      fontWeight: "600",
+      color: theme.colors.text,
+    },
+    modernButtonPrimaryText: {
+      fontSize: 15,
+      fontWeight: "600",
+      color: "#fff",
     },
   });

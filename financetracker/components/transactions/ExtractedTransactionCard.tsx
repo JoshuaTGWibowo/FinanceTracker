@@ -95,7 +95,6 @@ export function ExtractedTransactionCard({
   }, [editNote, onUpdate, transaction.id, transaction.note]);
 
   const handleDateChange = useCallback((_event: unknown, selectedDate?: Date) => {
-    setShowDatePicker(false);
     if (selectedDate) {
       onUpdate(transaction.id, { date: selectedDate.toISOString().split('T')[0] });
     }
@@ -261,13 +260,34 @@ export function ExtractedTransactionCard({
           </Pressable>
 
           {/* Date Picker */}
-          <Pressable style={styles.fieldRow} onPress={() => setShowDatePicker(true)}>
+          <View style={styles.fieldRow}>
             <Text style={styles.fieldLabel}>Date</Text>
-            <View style={styles.pickerButton}>
+            <Pressable 
+              style={styles.pickerButton} 
+              onPress={() => setShowDatePicker(!showDatePicker)}
+            >
               <Text style={styles.pickerButtonText}>{formattedDate}</Text>
-              <Ionicons name="chevron-forward" size={18} color={theme.colors.textMuted} />
+              <Ionicons 
+                name={showDatePicker ? "chevron-up" : "chevron-forward"} 
+                size={18} 
+                color={theme.colors.textMuted} 
+              />
+            </Pressable>
+          </View>
+
+          {/* Inline Date Picker */}
+          {showDatePicker && (
+            <View style={styles.inlineDatePicker}>
+              <View style={styles.datePickerCenter}>
+                <DateTimePicker
+                  value={new Date(transaction.date)}
+                  mode="date"
+                  display="inline"
+                  onChange={handleDateChange}
+                />
+              </View>
             </View>
-          </Pressable>
+          )}
 
           {/* Account Override */}
           <Pressable style={styles.fieldRow} onPress={() => setShowAccountPicker(true)}>
@@ -284,16 +304,6 @@ export function ExtractedTransactionCard({
             <Text style={styles.deleteButtonText}>Remove Transaction</Text>
           </Pressable>
         </View>
-      )}
-
-      {/* Date Picker Modal */}
-      {showDatePicker && (
-        <DateTimePicker
-          value={new Date(transaction.date)}
-          mode="date"
-          display="default"
-          onChange={handleDateChange}
-        />
       )}
 
       {/* Category Picker Modal */}
@@ -635,5 +645,17 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>) =>
       fontSize: 13,
       color: theme.colors.textMuted,
       marginTop: 2,
+    },
+    inlineDatePicker: {
+      marginTop: theme.spacing.sm,
+      backgroundColor: theme.colors.surface,
+      borderRadius: theme.radii.md,
+      overflow: 'hidden',
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+    },
+    datePickerCenter: {
+      alignItems: 'center',
+      justifyContent: 'center',
     },
   });

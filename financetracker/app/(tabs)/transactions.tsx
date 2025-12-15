@@ -110,7 +110,10 @@ export default function TransactionsScreen() {
 
   const baseCurrency = currency || "USD";
 
-  const periodOptions = useMemo(() => buildMonthlyPeriods(), []);
+  const periodOptions = useMemo(() => {
+    const transactionDates = transactions.map(t => t.date);
+    return buildMonthlyPeriods(12, transactionDates);
+  }, [transactions]);
   const scrollViewRef = useRef<ScrollView>(null);
 
   const visibleAccounts = useMemo(
