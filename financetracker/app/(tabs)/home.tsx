@@ -146,7 +146,7 @@ export default function HomeScreen() {
   );
 
   const balance = selectedAccount 
-    ? getAccountBalanceInBaseCurrency(selectedAccount.id) 
+    ? selectedAccount.balance
     : allAccountsBalance;
 
   const [overviewPeriod, setOverviewPeriod] = useState<"week" | "month">("month");
@@ -546,7 +546,7 @@ export default function HomeScreen() {
               >
                 <Text style={styles.accountChipTitle}>{account.name}</Text>
                 <Text style={styles.accountChipBalance}>
-                  {formatCurrency(getAccountBalanceInBaseCurrency(account.id), baseCurrency)}
+                  {formatCurrency(account.balance, account.currency)}
                 </Text>
               </Pressable>
             );

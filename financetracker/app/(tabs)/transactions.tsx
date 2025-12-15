@@ -159,7 +159,7 @@ const toIconName = (value?: string | null) =>
 export default function TransactionsScreen() {
   const theme = useAppTheme();
   const transactions = useFinanceStore((state) => state.transactions);
-  const currency = useFinanceStore((state) => state.profile.currency);
+  const profileCurrency = useFinanceStore((state) => state.profile.currency);
   const dateFormat = useFinanceStore((state) => state.preferences.dateFormat);
   const categories = useFinanceStore((state) => state.preferences.categories);
   const recurringTransactions = useFinanceStore((state) => state.recurringTransactions);
@@ -171,7 +171,63 @@ export default function TransactionsScreen() {
   const router = useRouter();
   const { category: categoryParam, date: dateParam } = useLocalSearchParams<{ category?: string | string[]; date?: string }>();
 
+  const selectedAccountId = useFinanceStore((state) => state.selectedAccountId);
+  const setSelectedAccountId = useFinanceStore((state) => state.setSelectedAccountId);
+  
+  // Use selected account's currency, or profile currency as fallback
+  const selectedAccount = useMemo(
+    () => accounts.find((account) => account.id === selectedAccountId) ?? null,
+    [accounts, selectedAccountId],
+  );
+  const currency = selectedAccount?.currency || profileCurrency;
   const baseCurrency = currency || "USD";
+
+  // Helper to get transaction amount in the display currency (selected account's currency or base currency)
+  const getTransactionAmountInDisplayCurrency = useCallback(
+    (transaction: Transaction) => {
+      if (!selectedAccount) {
+        // When viewing all accounts, use base currency conversion
+        return getTransactionAmountInBaseCurrency(transaction);
+      }
+      
+      // When viewing specific account, convert to that account's currency
+      const targetCurrency = selectedAccount.currency;
+      const store = useFinanceStore.getState();
+      const { exchangeRates, exchangeRatesBaseCurrency } = store;
+      
+      // Get transaction currency
+      let transactionCurrency = transaction.currency;
+      if (!transactionCurrency && transaction.accountId) {
+        const account = accounts.find((a) => a.id === transaction.accountId);
+        transactionCurrency = account?.currency;
+      }
+      if (!transactionCurrency) {
+        transactionCurrency = profileCurrency || "USD";
+      }
+      
+      // If same currency, return as-is
+      if (transactionCurrency === targetCurrency) {
+        return transaction.amount;
+      }
+      
+      // Convert to target currency using exchange rates
+      if (Object.keys(exchangeRates).length > 0) {
+        // Import convertCurrency dynamically
+        const { convertCurrency } = require("../../lib/currency");
+        return convertCurrency(
+          transaction.amount,
+          transactionCurrency,
+          targetCurrency,
+          exchangeRates,
+          exchangeRatesBaseCurrency || profileCurrency || "USD"
+        );
+      }
+      
+      // No exchange rates available, return original amount
+      return transaction.amount;
+    },
+    [selectedAccount, getTransactionAmountInBaseCurrency, accounts, profileCurrency],
+  );
 
   const periodOptions = useMemo(() => {
     const transactionDates = transactions.map(t => t.date);
@@ -233,8 +289,6 @@ export default function TransactionsScreen() {
   const [endDate, setEndDate] = useState<Dayjs | null>(null);
   const [showStartPicker, setShowStartPicker] = useState(false);
   const [showEndPicker, setShowEndPicker] = useState(false);
-  const selectedAccountId = useFinanceStore((state) => state.selectedAccountId);
-  const setSelectedAccountId = useFinanceStore((state) => state.setSelectedAccountId);
 
   const separators = useMemo(() => getLocaleSeparators(), []);
   const groupingFormatter = useMemo(
@@ -545,7 +599,7 @@ export default function TransactionsScreen() {
             dailyNet: 0,
           };
         existing.transactions.push(transaction);
-        const convertedAmount = getTransactionAmountInBaseCurrency(transaction);
+        const convertedAmount = getTransactionAmountInDisplayCurrency(transaction);
         if (transaction.type === "income") {
           existing.dailyIncome += convertedAmount;
           existing.dailyNet += convertedAmount;
@@ -574,7 +628,7 @@ export default function TransactionsScreen() {
     // Calculate summary
     const totals = reportable.reduce(
       (acc, transaction) => {
-        const convertedAmount = getTransactionAmountInBaseCurrency(transaction);
+        const convertedAmount = getTransactionAmountInDisplayCurrency(transaction);
         if (transaction.type === "income") {
           acc.income += convertedAmount;
         } else if (transaction.type === "expense") {
@@ -587,7 +641,7 @@ export default function TransactionsScreen() {
 
     // Calculate net change using converted amounts
     const netChange = reportable.reduce((acc, transaction) => {
-      const convertedAmount = getTransactionAmountInBaseCurrency(transaction);
+      const convertedAmount = getTransactionAmountInDisplayCurrency(transaction);
       if (transaction.type === "income") {
         return acc + convertedAmount;
       }
@@ -616,7 +670,7 @@ export default function TransactionsScreen() {
         const date = dayjs(transaction.date);
 
         if (date.isBefore(start)) {
-          const convertedAmount = getTransactionAmountInBaseCurrency(transaction);
+          const convertedAmount = getTransactionAmountInDisplayCurrency(transaction);
           if (transaction.type === "income") {
             openingBalance += convertedAmount;
           } else if (transaction.type === "expense") {
@@ -670,7 +724,7 @@ export default function TransactionsScreen() {
     startDate,
     transactions,
     visibleAccountIds,
-    getTransactionAmountInBaseCurrency,
+    getTransactionAmountInDisplayCurrency,
   ]);
 
   const closingBalanceDisplay = useMemo(
@@ -901,7 +955,7 @@ export default function TransactionsScreen() {
                   >
                     <Text style={styles.accountChipTitle}>{account.name}</Text>
                     <Text style={styles.accountChipBalance}>
-                      {formatCurrency(getAccountBalanceInBaseCurrency(account.id), baseCurrency)}
+                      {formatCurrency(account.balance, account.currency)}
                     </Text>
                   </Pressable>
                 );
@@ -1031,7 +1085,7 @@ export default function TransactionsScreen() {
                     <View style={styles.transactionRight}>
                       <Text style={styles.transactionAmount(visual.variant)}>
                         {visual.prefix}
-                        {formatCurrency(getTransactionAmountInBaseCurrency(transaction), currency || "USD")}
+                        {formatCurrency(getTransactionAmountInDisplayCurrency(transaction), currency || "USD")}
                       </Text>
                       {transaction.excludeFromReports && (
                         <View style={styles.excludedBadge}>

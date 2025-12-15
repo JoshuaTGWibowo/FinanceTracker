@@ -172,14 +172,24 @@ const parseAmountInput = (rawValue: string): number => {
     }
   } else if (hasComma) {
     const parts = sanitized.split(",");
+    // A comma is a decimal separator if:
+    // - There are exactly 2 parts AND
+    // - The decimal part has 1-2 digits (e.g., "100,5" or "100,50")
+    // - OR the decimal part has exactly 3 digits BUT the integer part is 1-2 digits (e.g., "1,500" could be 1.5 but "100,500" is 100500)
     const isDecimalCandidate =
-      (parts.length === 2 && parts[1].length <= 2) ||
-      (parts.length === 2 && parts[1].length <= 3 && parts[0].length > 2);
+      parts.length === 2 &&
+      (parts[1].length <= 2 || (parts[1].length === 3 && parts[0].length <= 2));
 
     normalized = isDecimalCandidate ? sanitized.replace(/,/g, ".") : sanitized.replace(/,/g, "");
   } else if (hasDot) {
     const parts = sanitized.split(".");
-    const isDecimalCandidate = parts.length === 2 && parts[1].length <= 3;
+    // A dot is a decimal separator if:
+    // - There are exactly 2 parts AND
+    // - The decimal part has 1-2 digits (e.g., "100.5" or "100.50")
+    // - OR the decimal part has exactly 3 digits BUT the integer part is 1-2 digits (e.g., "1.500" could be 1.5 but "100.500" is 100500)
+    const isDecimalCandidate =
+      parts.length === 2 &&
+      (parts[1].length <= 2 || (parts[1].length === 3 && parts[0].length <= 2));
     normalized = isDecimalCandidate ? sanitized : sanitized.replace(/\./g, "");
   }
 
