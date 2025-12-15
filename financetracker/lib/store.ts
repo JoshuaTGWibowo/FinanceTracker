@@ -57,6 +57,11 @@ export interface FinanceState {
     parentCategoryId: string | null;
     activeAccountIds: string[] | null;
   } | null;
+  // Smart features
+  stickyDate: string | null;
+  stickyDateLastUsed: number | null;
+  setStickyDate: (date: string | null) => void;
+  getSuggestedCategoryForAmount: (amount: number, type: TransactionType) => string | null;
   hydrateFromDatabase: () => Promise<void>;
   addTransaction: (transaction: Omit<Transaction, "id">) => Promise<void>;
   updateTransaction: (
@@ -286,6 +291,43 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
   isHydrated: false,
   isHydrating: false,
   categoryFormDraft: null,
+  stickyDate: null,
+  stickyDateLastUsed: null,
+  setStickyDate: (date) => set({ stickyDate: date, stickyDateLastUsed: date ? Date.now() : null }),
+  getSuggestedCategoryForAmount: (amount, type) => {
+    const transactions = get().transactions;
+    // Round amount to 2 decimals for comparison
+    const roundedAmount = Math.round(amount * 100) / 100;
+    
+    // Find all transactions with this exact amount and type
+    const matchingTransactions = transactions.filter(
+      (t) => Math.round(t.amount * 100) / 100 === roundedAmount && t.type === type
+    );
+    
+    if (matchingTransactions.length < 2) {
+      return null; // Need at least 2 transactions to suggest
+    }
+    
+    // Count category occurrences
+    const categoryCounts = new Map<string, number>();
+    matchingTransactions.forEach((t) => {
+      const count = categoryCounts.get(t.category) || 0;
+      categoryCounts.set(t.category, count + 1);
+    });
+    
+    // Find most common category
+    let maxCount = 0;
+    let suggestedCategory: string | null = null;
+    
+    categoryCounts.forEach((count, category) => {
+      if (count > maxCount && count >= 2) { // At least 2 occurrences
+        maxCount = count;
+        suggestedCategory = category;
+      }
+    });
+    
+    return suggestedCategory;
+  },
   hydrateFromDatabase: async () => {
     if (get().isHydrated || get().isHydrating) {
       return;

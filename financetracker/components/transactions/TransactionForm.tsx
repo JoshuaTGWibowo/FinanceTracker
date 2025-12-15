@@ -223,6 +223,10 @@ export function TransactionForm({
   const categories = useFinanceStore((state) => state.preferences.categories);
   const availableCategories = categories.length ? categories : DEFAULT_CATEGORIES;
   const activeAccounts = useMemo(() => accounts.filter((account) => !account.isArchived), [accounts]);
+  const getSuggestedCategoryForAmount = useFinanceStore((state) => state.getSuggestedCategoryForAmount);
+  const stickyDate = useFinanceStore((state) => state.stickyDate);
+  const stickyDateLastUsed = useFinanceStore((state) => state.stickyDateLastUsed);
+  const setStickyDate = useFinanceStore((state) => state.setStickyDate);
 
   const isCategoryActiveInAccount = (category: Category, accountIdValue: string) =>
     isCategoryActiveForAccount(category, accountIdValue, activeAccounts);
@@ -266,7 +270,19 @@ export function TransactionForm({
   const [categoryModalVisible, setCategoryModalVisible] = useState(false);
   const [categorySearch, setCategorySearch] = useState("");
   const [date, setDate] = useState(() => {
-    const base = initialValues?.date ? new Date(initialValues.date) : new Date();
+    if (initialValues?.date) {
+      const base = new Date(initialValues.date);
+      base.setHours(0, 0, 0, 0);
+      return base;
+    }
+    // Check if we should use sticky date (within 2 minutes)
+    const now = Date.now();
+    if (stickyDate && stickyDateLastUsed && (now - stickyDateLastUsed) < 2 * 60 * 1000) {
+      const stickyDateObj = new Date(stickyDate);
+      stickyDateObj.setHours(0, 0, 0, 0);
+      return stickyDateObj;
+    }
+    const base = new Date();
     base.setHours(0, 0, 0, 0);
     return base;
   });
@@ -480,8 +496,23 @@ export function TransactionForm({
   const handleAmountChange = useCallback(
     (value: string) => {
       setAmount(formatRawAmountInput(value, separators, groupingFormatter));
+      
+      // Check for suggested category based on amount
+      const parsedAmount = parseAmountInput(value);
+      if (!Number.isNaN(parsedAmount) && parsedAmount > 0 && transactionType !== "transfer") {
+        const suggestedCategoryName = getSuggestedCategoryForAmount(parsedAmount, transactionType);
+        if (suggestedCategoryName && !selectedCategory) {
+          // Find the category object
+          const categoryObj = availableCategories.find(
+            (cat) => cat.name === suggestedCategoryName && cat.type === transactionType
+          );
+          if (categoryObj) {
+            setSelectedCategory(categoryObj);
+          }
+        }
+      }
     },
-    [groupingFormatter, separators],
+    [groupingFormatter, separators, transactionType, getSuggestedCategoryForAmount, selectedCategory, availableCategories],
   );
 
   const handleOpenCreateCategory = () => {
@@ -557,6 +588,13 @@ export function TransactionForm({
         startDate: date.toISOString(),
       });
     }
+    
+    // Refresh sticky date timer if we're using a non-today date
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    if (date.getTime() !== today.getTime()) {
+      setStickyDate(date.toISOString());
+    }
   };
 
   const handleDateChange = (direction: 'prev' | 'next') => {
@@ -568,6 +606,15 @@ export function TransactionForm({
     }
     newDate.setHours(0, 0, 0, 0);
     setDate(newDate);
+    
+    // Update sticky date if it's not today
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    if (newDate.getTime() !== today.getTime()) {
+      setStickyDate(newDate.toISOString());
+    } else {
+      setStickyDate(null);
+    }
   };
 
   const isFormValid = useMemo(() => {
@@ -1175,6 +1222,15 @@ export function TransactionForm({
                   next.setHours(0, 0, 0, 0);
                   setDate(next);
                   setCalendarVisible(false);
+                  
+                  // Update sticky date if it's not today
+                  const today = new Date();
+                  today.setHours(0, 0, 0, 0);
+                  if (next.getTime() !== today.getTime()) {
+                    setStickyDate(next.toISOString());
+                  } else {
+                    setStickyDate(null);
+                  }
                 }
               }}
               themeVariant={theme.colors.background === "#050608" ? "dark" : "light"}
