@@ -69,23 +69,67 @@ export default function NetIncomeDetailsScreen() {
 
   const transactions = useFinanceStore((state) => state.transactions);
   const accounts = useFinanceStore((state) => state.accounts);
-  const currency = useFinanceStore((state) => state.profile.currency) || "USD";
+  const profileCurrency = useFinanceStore((state) => state.profile.currency) || "USD";
   const getTransactionAmountInBaseCurrency = useFinanceStore((state) => state.getTransactionAmountInBaseCurrency);
-
-  const baseCurrency = currency || "USD";
-  const visibleAccounts = useMemo(
-    () =>
-      accounts.filter(
-        (account) => !account.excludeFromTotal && (account.currency || baseCurrency) === baseCurrency,
-      ),
-    [accounts, baseCurrency],
-  );
-
-  const visibleAccountIds = useMemo(() => visibleAccounts.map((account) => account.id), [visibleAccounts]);
 
   const [selectedAccountId] = useState<string | null>(() =>
     typeof accountId === "string" && accountId.length ? accountId : null,
   );
+
+  const selectedAccount = useMemo(
+    () => (selectedAccountId ? accounts.find((account) => account.id === selectedAccountId) : null),
+    [accounts, selectedAccountId],
+  );
+
+  const currency = selectedAccount?.currency || profileCurrency;
+  const baseCurrency = currency || "USD";
+
+  const visibleAccounts = useMemo(
+    () =>
+      accounts.filter(
+        (account) => !account.excludeFromTotal && !account.isArchived,
+      ),
+    [accounts],
+  );
+
+  const visibleAccountIds = useMemo(() => visibleAccounts.map((account) => account.id), [visibleAccounts]);
+
+  // Helper to get transaction amount in the display currency
+  const getTransactionAmountInDisplayCurrency = (transaction: any) => {
+    if (!selectedAccount) {
+      return getTransactionAmountInBaseCurrency(transaction);
+    }
+    
+    const targetCurrency = selectedAccount.currency;
+    const store = useFinanceStore.getState();
+    const { exchangeRates, exchangeRatesBaseCurrency } = store;
+    
+    let transactionCurrency = transaction.currency;
+    if (!transactionCurrency && transaction.accountId) {
+      const account = accounts.find((a) => a.id === transaction.accountId);
+      transactionCurrency = account?.currency;
+    }
+    if (!transactionCurrency) {
+      transactionCurrency = profileCurrency || "USD";
+    }
+    
+    if (transactionCurrency === targetCurrency) {
+      return transaction.amount;
+    }
+    
+    if (Object.keys(exchangeRates).length > 0) {
+      const { convertCurrency } = require("../../lib/currency");
+      return convertCurrency(
+        transaction.amount,
+        transactionCurrency,
+        targetCurrency,
+        exchangeRates,
+        exchangeRatesBaseCurrency || profileCurrency || "USD"
+      );
+    }
+    
+    return transaction.amount;
+  };
 
   const periodOptions = useMemo(() => buildMonthlyPeriods(), []);
   const resolvedPeriod = useMemo(() => {
@@ -142,10 +186,10 @@ export default function NetIncomeDetailsScreen() {
 
         const income = rangeTransactions
           .filter((transaction) => transaction.type === "income")
-          .reduce((acc, transaction) => acc + getTransactionAmountInBaseCurrency(transaction), 0);
+          .reduce((acc, transaction) => acc + getTransactionAmountInDisplayCurrency(transaction), 0);
         const expense = rangeTransactions
           .filter((transaction) => transaction.type === "expense")
-          .reduce((acc, transaction) => acc + getTransactionAmountInBaseCurrency(transaction), 0);
+          .reduce((acc, transaction) => acc + getTransactionAmountInDisplayCurrency(transaction), 0);
 
         const label = `${range.start.date()}–${range.end.date()}`;
 
@@ -158,7 +202,7 @@ export default function NetIncomeDetailsScreen() {
           net: income - expense,
         };
       }),
-    [getTransactionAmountInBaseCurrency, reportableTransactions, weeks],
+    [reportableTransactions, weeks, selectedAccount, accounts, profileCurrency],
   );
 
   const totalNet = weeklySummaries.reduce((acc, week) => acc + week.net, 0);

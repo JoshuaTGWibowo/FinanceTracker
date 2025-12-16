@@ -48,8 +48,8 @@ export default function NetIncomeWeekScreen() {
   }, [categoryType]);
 
   const visibleAccounts = useMemo(
-    () => accounts.filter((account) => !account.excludeFromTotal && (account.currency || currency) === currency),
-    [accounts, currency],
+    () => accounts.filter((account) => !account.excludeFromTotal && !account.isArchived),
+    [accounts],
   );
 
   const visibleAccountIds = useMemo(() => visibleAccounts.map((account) => account.id), [visibleAccounts]);

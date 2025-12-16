@@ -96,23 +96,67 @@ export default function CategoryDetailsScreen() {
 
   const transactions = useFinanceStore((state) => state.transactions);
   const accounts = useFinanceStore((state) => state.accounts);
-  const currency = useFinanceStore((state) => state.profile.currency) || "USD";
+  const profileCurrency = useFinanceStore((state) => state.profile.currency) || "USD";
+  const exchangeRates = useFinanceStore((state) => state.exchangeRates);
+  const exchangeRatesBaseCurrency = useFinanceStore((state) => state.exchangeRatesBaseCurrency);
   const getTransactionAmountInBaseCurrency = useFinanceStore((state) => state.getTransactionAmountInBaseCurrency);
-
-  const baseCurrency = currency || "USD";
-  const visibleAccounts = useMemo(
-    () =>
-      accounts.filter(
-        (account) => !account.excludeFromTotal && (account.currency || baseCurrency) === baseCurrency,
-      ),
-    [accounts, baseCurrency],
-  );
-
-  const visibleAccountIds = useMemo(() => visibleAccounts.map((account) => account.id), [visibleAccounts]);
 
   const [selectedAccountId] = useState<string | null>(() =>
     typeof accountId === "string" && accountId.length ? accountId : null,
   );
+
+  const selectedAccount = useMemo(
+    () => (selectedAccountId ? accounts.find((account) => account.id === selectedAccountId) : null),
+    [accounts, selectedAccountId],
+  );
+
+  const currency = selectedAccount?.currency || profileCurrency;
+  const baseCurrency = currency || "USD";
+
+  const visibleAccounts = useMemo(
+    () =>
+      accounts.filter(
+        (account) => !account.excludeFromTotal && !account.isArchived,
+      ),
+    [accounts],
+  );
+
+  const visibleAccountIds = useMemo(() => visibleAccounts.map((account) => account.id), [visibleAccounts]);
+
+  // Helper to get transaction amount in the display currency
+  const getTransactionAmountInDisplayCurrency = (transaction: any) => {
+    if (!selectedAccount) {
+      return getTransactionAmountInBaseCurrency(transaction);
+    }
+    
+    const targetCurrency = selectedAccount.currency;
+    
+    let transactionCurrency = transaction.currency;
+    if (!transactionCurrency && transaction.accountId) {
+      const account = accounts.find((a) => a.id === transaction.accountId);
+      transactionCurrency = account?.currency;
+    }
+    if (!transactionCurrency) {
+      transactionCurrency = profileCurrency || "USD";
+    }
+    
+    if (transactionCurrency === targetCurrency) {
+      return transaction.amount;
+    }
+    
+    if (Object.keys(exchangeRates).length > 0) {
+      const { convertCurrency } = require("../../lib/currency");
+      return convertCurrency(
+        transaction.amount,
+        transactionCurrency,
+        targetCurrency,
+        exchangeRates,
+        exchangeRatesBaseCurrency || profileCurrency || "USD"
+      );
+    }
+    
+    return transaction.amount;
+  };
 
   const periodOptions = useMemo(() => buildMonthlyPeriods(), []);
   const resolvedPeriod = useMemo(() => {
@@ -170,8 +214,8 @@ export default function CategoryDetailsScreen() {
   );
 
   const totalAmount = useMemo(
-    () => categoryTransactions.reduce((acc, transaction) => acc + getTransactionAmountInBaseCurrency(transaction), 0),
-    [categoryTransactions, getTransactionAmountInBaseCurrency],
+    () => categoryTransactions.reduce((acc, transaction) => acc + getTransactionAmountInDisplayCurrency(transaction), 0),
+    [categoryTransactions, selectedAccount, accounts, profileCurrency, exchangeRates, exchangeRatesBaseCurrency],
   );
 
   const daysInPeriod = useMemo(() => Math.max(end.diff(start, "day") + 1, 1), [end, start]);
@@ -188,9 +232,9 @@ export default function CategoryDetailsScreen() {
           if (date.isBefore(rangeStart) || date.isAfter(rangeEnd)) {
             return acc;
           }
-          return acc + getTransactionAmountInBaseCurrency(transaction);
+          return acc + getTransactionAmountInDisplayCurrency(transaction);
         }, 0),
-    [categoryType, getTransactionAmountInBaseCurrency, reportableTransactions],
+    [categoryType, reportableTransactions, selectedAccount, accounts, profileCurrency, exchangeRates, exchangeRatesBaseCurrency],
   );
 
   const selectedPeriodIndex = useMemo(
@@ -225,7 +269,7 @@ export default function CategoryDetailsScreen() {
 
     categoryTransactions.forEach((transaction) => {
       const label = transaction.category?.trim().length ? transaction.category : fallbackLabel;
-      const convertedAmount = getTransactionAmountInBaseCurrency(transaction);
+      const convertedAmount = getTransactionAmountInDisplayCurrency(transaction);
       map.set(label, (map.get(label) ?? 0) + convertedAmount);
     });
 
@@ -251,7 +295,7 @@ export default function CategoryDetailsScreen() {
     }
 
     return { slices, rows };
-  }, [categoryTransactions, categoryType, getTransactionAmountInBaseCurrency, theme.colors.textMuted, totalAmount]);
+  }, [categoryTransactions, categoryType, theme.colors.textMuted, totalAmount, selectedAccount, accounts, profileCurrency, exchangeRates, exchangeRatesBaseCurrency]);
 
   const comparisonDelta = totalAmount - trailingAverage;
   const isFavorableDelta = categoryType === "income" ? comparisonDelta >= 0 : comparisonDelta <= 0;

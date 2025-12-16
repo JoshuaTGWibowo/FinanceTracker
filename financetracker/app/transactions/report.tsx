@@ -86,18 +86,8 @@ export default function TransactionsReportModal() {
   const transactions = useFinanceStore((state) => state.transactions);
   const accounts = useFinanceStore((state) => state.accounts);
   const budgetGoals = useFinanceStore((state) => state.budgetGoals);
-  const currency = useFinanceStore((state) => state.profile.currency) || "USD";
+  const profileCurrency = useFinanceStore((state) => state.profile.currency) || "USD";
   const getTransactionAmountInBaseCurrency = useFinanceStore((state) => state.getTransactionAmountInBaseCurrency);
-
-  const baseCurrency = currency || "USD";
-  const visibleAccounts = useMemo(
-    () =>
-      accounts.filter(
-        (account) => !account.excludeFromTotal && (account.currency || baseCurrency) === baseCurrency,
-      ),
-    [accounts, baseCurrency],
-  );
-  const visibleAccountIds = useMemo(() => visibleAccounts.map((account) => account.id), [visibleAccounts]);
 
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(() =>
     typeof accountId === "string" && accountId.length ? accountId : null,
@@ -106,6 +96,65 @@ export default function TransactionsReportModal() {
     () => (selectedAccountId ? accounts.find((account) => account.id === selectedAccountId) : null),
     [accounts, selectedAccountId],
   );
+
+  // Use selected account's currency, or profile currency as fallback
+  const currency = selectedAccount?.currency || profileCurrency;
+  const baseCurrency = currency || "USD";
+
+  // Helper to get transaction amount in the display currency (selected account's currency or base currency)
+  const getTransactionAmountInDisplayCurrency = useCallback(
+    (transaction: Transaction) => {
+      if (!selectedAccount) {
+        // When viewing all accounts, use base currency conversion
+        return getTransactionAmountInBaseCurrency(transaction);
+      }
+      
+      // When viewing specific account, convert to that account's currency
+      const targetCurrency = selectedAccount.currency;
+      const store = useFinanceStore.getState();
+      const { exchangeRates, exchangeRatesBaseCurrency } = store;
+      
+      // Get transaction currency
+      let transactionCurrency = transaction.currency;
+      if (!transactionCurrency && transaction.accountId) {
+        const account = accounts.find((a) => a.id === transaction.accountId);
+        transactionCurrency = account?.currency;
+      }
+      if (!transactionCurrency) {
+        transactionCurrency = profileCurrency || "USD";
+      }
+      
+      // If same currency, return as-is
+      if (transactionCurrency === targetCurrency) {
+        return transaction.amount;
+      }
+      
+      // Convert to target currency using exchange rates
+      if (Object.keys(exchangeRates).length > 0) {
+        const { convertCurrency } = require("../../lib/currency");
+        return convertCurrency(
+          transaction.amount,
+          transactionCurrency,
+          targetCurrency,
+          exchangeRates,
+          exchangeRatesBaseCurrency || profileCurrency || "USD"
+        );
+      }
+      
+      // No exchange rates available, return original amount
+      return transaction.amount;
+    },
+    [selectedAccount, getTransactionAmountInBaseCurrency, accounts, profileCurrency],
+  );
+
+  const visibleAccounts = useMemo(
+    () =>
+      accounts.filter(
+        (account) => !account.excludeFromTotal && !account.isArchived,
+      ),
+    [accounts],
+  );
+  const visibleAccountIds = useMemo(() => visibleAccounts.map((account) => account.id), [visibleAccounts]);
   const periodOptions = useMemo(() => buildMonthlyPeriods().slice().reverse(), []);
   const resolvedPeriod = useMemo(() => {
     const key = typeof periodParam === "string" ? periodParam : undefined;
@@ -171,7 +220,7 @@ export default function TransactionsReportModal() {
 
     const totals = reportable.reduce(
       (acc, transaction) => {
-        const convertedAmount = getTransactionAmountInBaseCurrency(transaction);
+        const convertedAmount = getTransactionAmountInDisplayCurrency(transaction);
         if (transaction.type === "income") {
           acc.income += convertedAmount;
         } else if (transaction.type === "expense") {
@@ -184,7 +233,7 @@ export default function TransactionsReportModal() {
 
     // Calculate net change using converted amounts
     const netChange = reportable.reduce((acc, transaction) => {
-      const convertedAmount = getTransactionAmountInBaseCurrency(transaction);
+      const convertedAmount = getTransactionAmountInDisplayCurrency(transaction);
       if (transaction.type === "income") {
         return acc + convertedAmount;
       }
@@ -210,7 +259,7 @@ export default function TransactionsReportModal() {
       .sort((a, b) => dayjs(a.date).valueOf() - dayjs(b.date).valueOf())
       .forEach((transaction) => {
         if (dayjs(transaction.date).isBefore(start)) {
-          const convertedAmount = getTransactionAmountInBaseCurrency(transaction);
+          const convertedAmount = getTransactionAmountInDisplayCurrency(transaction);
           if (transaction.type === "income") {
             openingBalance += convertedAmount;
           } else if (transaction.type === "expense") {
@@ -237,7 +286,7 @@ export default function TransactionsReportModal() {
           return;
         }
         const key = transaction.category || (type === "income" ? "Income" : "Expense");
-        const convertedAmount = getTransactionAmountInBaseCurrency(transaction);
+        const convertedAmount = getTransactionAmountInDisplayCurrency(transaction);
         map.set(key, (map.get(key) ?? 0) + convertedAmount);
       });
 
@@ -260,7 +309,7 @@ export default function TransactionsReportModal() {
       incomeSlices: buildSlices("income", totals.income),
       expenseSlices: buildSlices("expense", totals.expense),
     };
-  }, [end, getTransactionAmountInBaseCurrency, selectedAccountId, start, transactions, visibleAccountIds]);
+  }, [end, getTransactionAmountInDisplayCurrency, selectedAccountId, start, transactions, visibleAccountIds]);
 
   const netPositive = report.netChange >= 0;
   const accountLabel = selectedAccountId ? accountName : "All accounts";
@@ -291,7 +340,7 @@ export default function TransactionsReportModal() {
       .map((goal) => {
         const spent = reportable
           .filter((transaction) => transaction.type === "expense" && transaction.category === goal.category)
-          .reduce((acc, transaction) => acc + getTransactionAmountInBaseCurrency(transaction), 0);
+          .reduce((acc, transaction) => acc + getTransactionAmountInDisplayCurrency(transaction), 0);
 
         const percentage = Math.min(100, Math.round((spent / goal.target) * 100));
         
@@ -314,7 +363,7 @@ export default function TransactionsReportModal() {
           statusColor,
         };
       });
-  }, [budgetGoals, end, getTransactionAmountInBaseCurrency, selectedAccountId, selectedPeriod.label, start, theme.colors.primary, transactions, visibleAccountIds]);
+  }, [budgetGoals, end, getTransactionAmountInDisplayCurrency, selectedAccountId, selectedPeriod.label, start, theme.colors.primary, transactions, visibleAccountIds]);
 
   return (
     <SafeAreaView style={styles.safeArea}>

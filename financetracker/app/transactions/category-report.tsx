@@ -83,9 +83,9 @@ export default function CategoryReportScreen() {
   const visibleAccounts = useMemo(
     () =>
       accounts.filter(
-        (account) => !account.excludeFromTotal && (account.currency || baseCurrency) === baseCurrency,
+        (account) => !account.excludeFromTotal && !account.isArchived,
       ),
-    [accounts, baseCurrency],
+    [accounts],
   );
 
   const visibleAccountIds = useMemo(() => visibleAccounts.map((account) => account.id), [visibleAccounts]);
