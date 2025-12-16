@@ -205,8 +205,24 @@ export default function AccountScreen() {
                       <Pressable
                         key={currencyItem.code}
                         onPress={() => {
-                          setCurrency(currencyItem.code);
-                          setCurrencyExpanded(false);
+                          if (currency.toUpperCase() !== currencyItem.code) {
+                            Alert.alert(
+                              "Currency Change",
+                              "Changing your base currency may require restarting the app for all changes to take effect. Close the app completely and reopen it after saving.",
+                              [
+                                { text: "Cancel", style: "cancel" },
+                                {
+                                  text: "Continue",
+                                  onPress: () => {
+                                    setCurrency(currencyItem.code);
+                                    setCurrencyExpanded(false);
+                                  },
+                                },
+                              ]
+                            );
+                          } else {
+                            setCurrencyExpanded(false);
+                          }
                         }}
                         style={[styles.currencyDropdownItem, isActive && styles.currencyDropdownItemActive]}
                       >
