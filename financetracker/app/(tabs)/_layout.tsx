@@ -135,7 +135,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="account"
         options={{
-          title: "Account",
+          title: "Profile",
           tabBarIcon: ({ color, size, focused }) => (
             <AnimatedTabIcon
               color={color}
