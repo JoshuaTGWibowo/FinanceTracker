@@ -20,16 +20,106 @@ import { useAppTheme } from "../../theme";
 import { Category, useFinanceStore } from "../../lib/store";
 import { doesCategoryMatchBudget } from "../../lib/categoryUtils";
 import type { Transaction } from "../../lib/types";
+import { formatCurrency } from "../../lib/currency";
 
 const goalPeriods = ["month", "week"] as const;
 
 const toIconName = (value?: string | null) =>
   (value as keyof typeof Ionicons.glyphMap) || ("pricetag" as keyof typeof Ionicons.glyphMap);
 
+type LocaleSeparators = {
+  decimal: string;
+  group: string;
+};
+
+const getLocaleSeparators = (): LocaleSeparators => {
+  const formatter = new Intl.NumberFormat(undefined);
+
+  if (typeof formatter.formatToParts !== "function") {
+    return { decimal: ".", group: "," };
+  }
+
+  try {
+    const parts = formatter.formatToParts(12345.6);
+    const group = parts.find((part) => part.type === "group")?.value ?? ",";
+    const decimal = parts.find((part) => part.type === "decimal")?.value ?? ".";
+    return { decimal, group };
+  } catch {
+    return { decimal: ".", group: "," };
+  }
+};
+
+const formatRawAmountInput = (
+  rawValue: string,
+  separators: LocaleSeparators,
+  groupingFormatter: Intl.NumberFormat,
+): string => {
+  const trimmed = rawValue.replace(/[\s']/g, "");
+  if (!trimmed) {
+    return "";
+  }
+
+  const sanitized = trimmed.replace(/[^0-9.,]/g, "");
+  if (!sanitized) {
+    return "";
+  }
+
+  const endsWithSeparator = /[.,]$/.test(trimmed);
+  const groupingRegex = new RegExp(`\\${separators.group}`, "g");
+  const normalized = sanitized.replace(groupingRegex, "");
+  const lastSeparatorIndex = Math.max(normalized.lastIndexOf("."), normalized.lastIndexOf(","));
+
+  let integerPartRaw = normalized;
+  let decimalPartRaw = "";
+  let hasDecimalSeparator = false;
+
+  if (lastSeparatorIndex !== -1) {
+    hasDecimalSeparator = true;
+    integerPartRaw = normalized.slice(0, lastSeparatorIndex);
+    decimalPartRaw = normalized.slice(lastSeparatorIndex + 1).replace(/[^0-9]/g, "");
+  }
+
+  const integerDigits = integerPartRaw.replace(/[^0-9]/g, "");
+
+  if (!integerDigits) {
+    if (decimalPartRaw) {
+      return `0${separators.decimal}${decimalPartRaw}`;
+    }
+    return endsWithSeparator ? `0${separators.decimal}` : "";
+  }
+
+  const groupedInteger = groupingFormatter.format(Number(integerDigits));
+
+  if (decimalPartRaw) {
+    return `${groupedInteger}${separators.decimal}${decimalPartRaw}`;
+  }
+
+  if (endsWithSeparator) {
+    return `${groupedInteger}${separators.decimal}`;
+  }
+
+  if (!hasDecimalSeparator && sanitized.endsWith(separators.group)) {
+    return `${groupedInteger}${separators.decimal}`;
+  }
+
+  return groupedInteger;
+};
+
 export default function BudgetsScreen() {
   const theme = useAppTheme();
   const router = useRouter();
   const categories = useFinanceStore((state) => state.preferences.categories);
+  
+  const separators = useMemo(() => getLocaleSeparators(), []);
+  const groupingFormatter = useMemo(
+    () =>
+      new Intl.NumberFormat(undefined, {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 0,
+        useGrouping: true,
+      }),
+    [],
+  );
   const budgetGoals = useFinanceStore((state) => state.budgetGoals);
   const addBudgetGoal = useFinanceStore((state) => state.addBudgetGoal);
   const removeBudgetGoal = useFinanceStore((state) => state.removeBudgetGoal);
@@ -151,7 +241,8 @@ export default function BudgetsScreen() {
       return;
     }
 
-    const targetValue = Number(goalTarget);
+    const cleanedTarget = goalTarget.replace(/[\s',]/g, "").replace(separators.group, "");
+    const targetValue = Number(cleanedTarget);
     if (!goalTarget.trim() || Number.isNaN(targetValue) || targetValue <= 0) {
       Alert.alert("Heads up", "Target amount must be a positive number.");
       return;
@@ -231,7 +322,7 @@ export default function BudgetsScreen() {
                     <Text style={styles.currencySymbol}>{currency}</Text>
                     <TextInput
                       value={goalTarget}
-                      onChangeText={setGoalTarget}
+                      onChangeText={(value) => setGoalTarget(formatRawAmountInput(value, separators, groupingFormatter))}
                       keyboardType="numeric"
                       placeholder="0"
                       placeholderTextColor={theme.colors.textMuted}
@@ -395,7 +486,7 @@ export default function BudgetsScreen() {
                       <View style={styles.progressSection}>
                         <View style={styles.progressHeader}>
                           <Text style={styles.progressText}>
-                            {currency}{spending.toFixed(2)} of {currency}{goal.target.toFixed(2)}
+                            {formatCurrency(spending, currency)} of {formatCurrency(goal.target, currency)}
                           </Text>
                           <Text style={[styles.progressPercentage, isOverBudget && styles.progressPercentageOver]}>
                             {progress}%
@@ -414,12 +505,12 @@ export default function BudgetsScreen() {
                           <View style={styles.progressWarning}>
                             <Ionicons name="warning" size={14} color={theme.colors.danger} />
                             <Text style={styles.progressWarningText}>
-                              Over budget by {currency}{(spending - goal.target).toFixed(2)}
+                              Over budget by {formatCurrency(spending - goal.target, currency)}
                             </Text>
                           </View>
                         ) : (
                           <Text style={styles.progressRemaining}>
-                            {currency}{remaining.toFixed(2)} remaining
+                            {formatCurrency(remaining, currency)} remaining
                           </Text>
                         )}
                       </View>

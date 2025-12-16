@@ -17,6 +17,7 @@ import { useFinanceStore } from "../../lib/store";
 import { doesCategoryMatchBudget } from "../../lib/categoryUtils";
 import { sortTransactionsByRecency } from "../../lib/transactions";
 import { formatDate } from "../../lib/text";
+import { formatCurrency } from "../../lib/currency";
 
 const toIconName = (value?: string | null) =>
   (value as keyof typeof Ionicons.glyphMap) || ("pricetag" as keyof typeof Ionicons.glyphMap);
@@ -201,10 +202,10 @@ export default function BudgetDetailScreen() {
           <View style={styles.progressSection}>
             <View style={styles.progressHeader}>
               <Text style={styles.spendingText}>
-                {currency}{spending.toFixed(2)}
+                {formatCurrency(spending, currency)}
               </Text>
               <Text style={styles.targetText}>
-                of {currency}{budget.target.toFixed(2)}
+                of {formatCurrency(budget.target, currency)}
               </Text>
             </View>
             
@@ -226,12 +227,12 @@ export default function BudgetDetailScreen() {
                 <View style={styles.warningBadge}>
                   <Ionicons name="warning" size={14} color={theme.colors.danger} />
                   <Text style={styles.warningText}>
-                    Over by {currency}{(spending - budget.target).toFixed(2)}
+                    Over by {formatCurrency(spending - budget.target, currency)}
                   </Text>
                 </View>
               ) : (
                 <Text style={styles.remainingText}>
-                  {currency}{remaining.toFixed(2)} remaining
+                  {formatCurrency(remaining, currency)} remaining
                 </Text>
               )}
             </View>
