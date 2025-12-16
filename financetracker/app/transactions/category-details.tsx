@@ -96,6 +96,7 @@ export default function CategoryDetailsScreen() {
 
   const transactions = useFinanceStore((state) => state.transactions);
   const accounts = useFinanceStore((state) => state.accounts);
+  const categories = useFinanceStore((state) => state.preferences.categories);
   const profileCurrency = useFinanceStore((state) => state.profile.currency) || "USD";
   const exchangeRates = useFinanceStore((state) => state.exchangeRates);
   const exchangeRatesBaseCurrency = useFinanceStore((state) => state.exchangeRatesBaseCurrency);
@@ -405,7 +406,11 @@ export default function CategoryDetailsScreen() {
             <Text style={styles.emptyState}>No data for this period.</Text>
           ) : (
             <View style={styles.list}>
-              {breakdown.rows.map((item) => (
+              {breakdown.rows.map((item) => {
+                const categoryObj = categories.find(c => c.name === item.label);
+                const categoryIcon = categoryObj?.icon || "pricetag";
+                
+                return (
                 <Pressable
                   key={`${item.label}-${item.color}`}
                   style={styles.listRow}
@@ -424,9 +429,11 @@ export default function CategoryDetailsScreen() {
                   accessibilityLabel={`View ${item.label} details`}
                 >
                   <View style={[styles.categoryIcon, { backgroundColor: `${item.color}26` }]}>
-                    <Text style={[styles.categoryInitial, { color: item.color }]}>
-                      {item.label.charAt(0).toUpperCase()}
-                    </Text>
+                    <Ionicons 
+                      name={categoryIcon as keyof typeof Ionicons.glyphMap} 
+                      size={20} 
+                      color={item.color} 
+                    />
                   </View>
                   <View style={styles.listMeta}>
                     <Text style={styles.listLabel} numberOfLines={1}>
@@ -436,7 +443,8 @@ export default function CategoryDetailsScreen() {
                   </View>
                   <Text style={styles.listAmount}>{formatCurrency(item.value, currency)}</Text>
                 </Pressable>
-              ))}
+                );
+              })}
             </View>
           )}
         </View>

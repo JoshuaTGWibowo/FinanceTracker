@@ -1023,6 +1023,10 @@ export default function HomeScreen() {
                     : visual.variant === "expense"
                       ? styles.avatarExpense
                       : styles.avatarNeutral;
+                
+                // Find category icon
+                const categoryObj = categories.find(c => c.name === transaction.category);
+                const categoryIcon = categoryObj?.icon || "pricetag";
 
                 return (
                   <Pressable
@@ -1037,7 +1041,11 @@ export default function HomeScreen() {
                         avatarVariant,
                       ]}
                     >
-                      <Text style={styles.avatarText}>{transaction.category.charAt(0)}</Text>
+                      <Ionicons 
+                        name={categoryIcon as keyof typeof Ionicons.glyphMap} 
+                        size={18} 
+                        color={theme.colors.text} 
+                      />
                     </View>
                     <View style={styles.recentCopy}>
                       <Text style={styles.recentNote}>{transaction.note}</Text>

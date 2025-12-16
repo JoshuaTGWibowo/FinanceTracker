@@ -1053,6 +1053,10 @@ export default function TransactionsScreen() {
               const transferLabel = isTransfer
                 ? `${resolveAccountName(transaction.accountId)} → ${resolveAccountName(transaction.toAccountId)}`
                 : null;
+              
+              // Find category icon
+              const categoryObj = categories.find(c => c.name === transaction.category);
+              const categoryIcon = categoryObj?.icon || "pricetag";
 
               return (
                 <View key={transaction.id}>
@@ -1064,9 +1068,11 @@ export default function TransactionsScreen() {
                   >
                     <View style={styles.transactionLeft}>
                       <View style={styles.categoryIcon(visual.variant)}>
-                        <Text style={styles.categoryInitial}>
-                          {transaction.category.charAt(0).toUpperCase()}
-                        </Text>
+                        <Ionicons 
+                          name={categoryIcon as keyof typeof Ionicons.glyphMap} 
+                          size={20} 
+                          color={theme.colors.text} 
+                        />
                       </View>
                       <View style={styles.transactionDetails}>
                         <Text style={styles.transactionCategory} numberOfLines={1}>

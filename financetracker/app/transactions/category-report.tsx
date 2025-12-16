@@ -76,6 +76,7 @@ export default function CategoryReportScreen() {
 
   const transactions = useFinanceStore((state) => state.transactions);
   const accounts = useFinanceStore((state) => state.accounts);
+  const categories = useFinanceStore((state) => state.preferences.categories);
   const currency = useFinanceStore((state) => state.profile.currency) || "USD";
   const getTransactionAmountInBaseCurrency = useFinanceStore((state) => state.getTransactionAmountInBaseCurrency);
 
@@ -187,6 +188,11 @@ export default function CategoryReportScreen() {
     () => categoryOptions.find((option) => option.label === selectedCategory)?.color ?? theme.colors.primary,
     [categoryOptions, selectedCategory, theme.colors.primary],
   );
+
+  const selectedCategoryIcon = useMemo(() => {
+    const categoryObj = categories.find(c => c.name === selectedCategory);
+    return categoryObj?.icon || "pricetag";
+  }, [categories, selectedCategory]);
 
   const selectedCategoryTotal = useMemo(
     () =>
@@ -467,9 +473,11 @@ export default function CategoryReportScreen() {
               <Text style={styles.sectionSubtitle}>Tap a week to view its transactions</Text>
             </View>
             <View style={[styles.categoryIconSmall, { backgroundColor: `${selectedCategoryColor}22` }]}>
-              <Text style={[styles.categoryInitial, { color: selectedCategoryColor }]}>
-                {selectedCategory.charAt(0).toUpperCase()}
-              </Text>
+              <Ionicons 
+                name={selectedCategoryIcon as keyof typeof Ionicons.glyphMap} 
+                size={18} 
+                color={selectedCategoryColor} 
+              />
             </View>
           </View>
 

@@ -30,6 +30,7 @@ export default function NetIncomeWeekScreen() {
 
   const transactions = useFinanceStore((state) => state.transactions);
   const accounts = useFinanceStore((state) => state.accounts);
+  const categories = useFinanceStore((state) => state.preferences.categories);
   const currency = useFinanceStore((state) => state.profile.currency) || "USD";
   const dateFormat = useFinanceStore((state) => state.preferences.dateFormat);
   const getTransactionAmountInBaseCurrency = useFinanceStore((state) => state.getTransactionAmountInBaseCurrency);
@@ -247,6 +248,10 @@ export default function NetIncomeWeekScreen() {
               const transferLabel = isTransfer
                 ? `${resolveAccountName(transaction.accountId)} → ${resolveAccountName(transaction.toAccountId)}`
                 : null;
+              
+              // Find category icon
+              const categoryObj = categories.find(c => c.name === transaction.category);
+              const categoryIcon = categoryObj?.icon || "pricetag";
 
               return (
                 <View key={transaction.id}>
@@ -258,9 +263,11 @@ export default function NetIncomeWeekScreen() {
                   >
                     <View style={styles.transactionLeft}>
                       <View style={styles.categoryIcon(visual.variant)}>
-                        <Text style={styles.categoryInitial}>
-                          {transaction.category.charAt(0).toUpperCase()}
-                        </Text>
+                        <Ionicons 
+                          name={categoryIcon as keyof typeof Ionicons.glyphMap} 
+                          size={20} 
+                          color={theme.colors.text} 
+                        />
                       </View>
                       <View style={styles.transactionMeta}>
                         <Text style={styles.transactionCategory} numberOfLines={1}>
