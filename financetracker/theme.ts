@@ -49,17 +49,17 @@ const darkColors: Colors = {
 };
 
 const lightColors: Colors = {
-  background: "#F8FAFF",
+  background: "#F1F5F9",
   surface: "#FFFFFF",
-  surfaceElevated: "#EEF3FF",
+  surfaceElevated: "#F8FAFC",
   primary: "#2563EB",
-  primaryMuted: "#1D4ED8",
-  accent: "#60A5FA",
+  primaryMuted: "#1E40AF",
+  accent: "#3B82F6",
   text: "#0F172A",
   textMuted: "#475569",
-  success: "#047857",
-  danger: "#B91C1C",
-  border: "#CBD5F5",
+  success: "#059669",
+  danger: "#DC2626",
+  border: "#CBD5E1",
 };
 
 const buildTypography = (colors: Colors, screen: ReturnType<typeof useScreenSize>) => ({
