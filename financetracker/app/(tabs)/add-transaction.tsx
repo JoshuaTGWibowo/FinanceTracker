@@ -8,6 +8,10 @@ export default function AddTransactionScreen() {
   const router = useRouter();
   const addTransaction = useFinanceStore((state) => state.addTransaction);
   const selectedAccountId = useFinanceStore((state) => state.selectedAccountId);
+  const accounts = useFinanceStore((state) => state.accounts);
+
+  // Get the selected account, or fallback to first non-archived account
+  const initialAccountId = selectedAccountId || accounts.find(a => !a.isArchived)?.id;
 
   const handleSubmit = async (transaction: Omit<Transaction, "id">) => {
     try {
@@ -29,7 +33,7 @@ export default function AddTransactionScreen() {
       submitLabel="Save"
       onCancel={handleCancel}
       onSubmit={handleSubmit}
-      initialValues={selectedAccountId ? { accountId: selectedAccountId } : undefined}
+      initialValues={initialAccountId ? { accountId: initialAccountId } : undefined}
     />
   );
 }

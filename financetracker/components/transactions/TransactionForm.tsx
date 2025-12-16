@@ -22,7 +22,7 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 import { useRouter } from "expo-router";
 
 import { useAppTheme } from "../../theme";
-import { SUPPORTED_CURRENCIES } from "../../lib/currency";
+import { SUPPORTED_CURRENCIES, formatCurrency } from "../../lib/currency";
 import {
   Category,
   DEFAULT_ACCOUNT_ID,
@@ -1166,7 +1166,10 @@ export function TransactionForm({
                   <View style={styles.accountInfo}>
                     <Text style={styles.accountName}>{account.name}</Text>
                     <Text style={styles.accountMeta}>
-                      {account.type.charAt(0).toUpperCase() + account.type.slice(1)} • {currency} {balance.toFixed(2)}
+                      {account.type.charAt(0).toUpperCase() + account.type.slice(1)} • {formatCurrency(
+                        balance,
+                        account.currency ?? currency,
+                      )}
                     </Text>
                   </View>
                   {active && <Ionicons name="checkmark-circle" size={20} color={theme.colors.primary} />}
@@ -1215,7 +1218,10 @@ export function TransactionForm({
                     <View style={styles.accountInfo}>
                       <Text style={styles.accountName}>{account.name}</Text>
                       <Text style={styles.accountMeta}>
-                        {account.type.charAt(0).toUpperCase() + account.type.slice(1)} • {currency} {balance.toFixed(2)}
+                        {account.type.charAt(0).toUpperCase() + account.type.slice(1)} • {formatCurrency(
+                          balance,
+                          account.currency ?? currency,
+                        )}
                       </Text>
                     </View>
                     {active && <Ionicons name="checkmark-circle" size={20} color={theme.colors.primary} />}

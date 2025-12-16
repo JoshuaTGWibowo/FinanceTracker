@@ -142,6 +142,7 @@ const ensureSchema = async (db: SQLiteDatabase) => {
   // Add new budget_goals columns
   await ensureColumnExists(db, "budget_goals", "isRepeating", "INTEGER", "DEFAULT 1");
   await ensureColumnExists(db, "budget_goals", "createdAt", "TEXT", `DEFAULT '${new Date().toISOString()}'`);
+  await ensureColumnExists(db, "budget_goals", "accountId", "TEXT");
   
   // Add dateFormat columns
   await ensureColumnExists(db, "profile", "dateFormat", "TEXT", "DEFAULT 'dd/mm/yyyy'");
@@ -162,6 +163,11 @@ const ensureSchema = async (db: SQLiteDatabase) => {
   if (!preferenceCount?.count) {
     await db.runAsync("INSERT INTO preferences (id, themeMode, dateFormat) VALUES (1, ?, ?)", ["dark", "dd/mm/yyyy"]);
   }
+
+  // Ensure currency column exists in accounts table
+  // If the column didn't exist before, existing accounts will have NULL values
+  // We'll fix those up after we load the profile
+  await ensureColumnExists(db, "accounts", "currency", "TEXT");
 
   const categoryCount = await db.getFirstAsync<{ count: number }>(
     "SELECT COUNT(*) as count FROM categories",
@@ -259,6 +265,9 @@ interface BudgetGoalRow {
   target: number;
   period: string;
   category: string | null;
+  accountId: string | null;
+  isRepeating: number;
+  createdAt: string;
 }
 
 export const fetchFinanceState = async (): Promise<FinanceStatePayload> => {
@@ -266,6 +275,10 @@ export const fetchFinanceState = async (): Promise<FinanceStatePayload> => {
 
   const profileRow = await db.getFirstAsync<Profile>("SELECT name, currency, dateFormat FROM profile LIMIT 1");
   const profile: Profile = profileRow ?? { name: "Alicia Jeanelly", currency: "USD", dateFormat: "dd/mm/yyyy" };
+
+  // Update any accounts with NULL currency to use the profile's base currency
+  // This handles accounts created before the currency field was added
+  await db.runAsync("UPDATE accounts SET currency = ? WHERE currency IS NULL", [profile.currency]);
 
   const preferenceRow = await db.getFirstAsync<{ themeMode: ThemeMode; dateFormat: string }>(
     "SELECT themeMode, dateFormat FROM preferences LIMIT 1",
@@ -359,6 +372,7 @@ export const fetchFinanceState = async (): Promise<FinanceStatePayload> => {
     target: row.target,
     period: row.period as BudgetGoal["period"],
     category: row.category,
+    accountId: row.accountId || accounts[0]?.id || "", // Default to first account if missing
     isRepeating: row.isRepeating !== undefined ? Boolean(row.isRepeating) : true,
     createdAt: row.createdAt || new Date().toISOString(),
   }));
@@ -475,13 +489,14 @@ export const saveRecurringTransaction = async (transaction: RecurringTransaction
 export const saveBudgetGoal = async (goal: BudgetGoal) => {
   const db = await getDatabase();
   await db.runAsync(
-    `INSERT INTO budget_goals (id, name, target, period, category, isRepeating, createdAt)
-     VALUES (?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO budget_goals (id, name, target, period, category, accountId, isRepeating, createdAt)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET
        name=excluded.name,
        target=excluded.target,
        period=excluded.period,
        category=excluded.category,
+       accountId=excluded.accountId,
        isRepeating=excluded.isRepeating,
        createdAt=excluded.createdAt`,
     [
@@ -490,6 +505,7 @@ export const saveBudgetGoal = async (goal: BudgetGoal) => {
       goal.target, 
       goal.period, 
       goal.category ?? null,
+      goal.accountId,
       goal.isRepeating ? 1 : 0,
       goal.createdAt,
     ],

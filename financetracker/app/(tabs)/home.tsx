@@ -18,12 +18,20 @@ import type { Transaction } from "../../lib/types";
 
 const summarizeGoalProgress = (
   goal: BudgetGoal,
-  currency: string,
+  baseCurrency: string,
   transactions: ReturnType<typeof useFinanceStore.getState>["transactions"],
   accountId: string | null,
   categories: ReturnType<typeof useFinanceStore.getState>["preferences"]["categories"],
-  convertAmount: (transaction: Transaction) => number,
+  accounts: ReturnType<typeof useFinanceStore.getState>["accounts"],
+  exchangeRates: Record<string, number>,
+  exchangeRatesBaseCurrency: string,
 ) => {
+  const { convertCurrency } = require("../../lib/currency");
+  
+  // Get the budget's account to determine currency
+  const budgetAccount = accounts.find(a => a.id === goal.accountId);
+  const currency = budgetAccount?.currency || baseCurrency;
+
   const now = dayjs();
   const start = goal.period === "week" ? now.startOf("week") : now.startOf("month");
   const end = goal.period === "week" ? now.endOf("week") : now.endOf("month");
@@ -37,9 +45,35 @@ const summarizeGoalProgress = (
     const spent = withinPeriod
       .filter((transaction) => 
         transaction.type === "expense" && 
-        doesCategoryMatchBudget(transaction.category, goal.category, categories)
+        doesCategoryMatchBudget(transaction.category, goal.category, categories) &&
+        transaction.accountId === goal.accountId
       )
-      .reduce((acc, transaction) => acc + convertAmount(transaction), 0);
+      .reduce((acc, transaction) => {
+        // Get transaction currency
+        let txCurrency = transaction.currency;
+        if (!txCurrency && transaction.accountId) {
+          const txAccount = accounts.find(a => a.id === transaction.accountId);
+          txCurrency = txAccount?.currency || baseCurrency;
+        }
+        if (!txCurrency) {
+          txCurrency = baseCurrency;
+        }
+
+        let amount = Math.abs(transaction.amount);
+
+        // Convert to budget currency if needed
+        if (txCurrency !== currency && Object.keys(exchangeRates).length > 0) {
+          amount = convertCurrency(
+            amount,
+            txCurrency,
+            currency,
+            exchangeRates,
+            exchangeRatesBaseCurrency || baseCurrency
+          );
+        }
+
+        return acc + amount;
+      }, 0);
 
     return {
       label: `${goal.category} spend`,
@@ -52,13 +86,35 @@ const summarizeGoalProgress = (
 
   // For net savings, we need to consider converted amounts for income/expense deltas
   const netSavings = withinPeriod.reduce((acc, transaction) => {
-    const convertedAmount = convertAmount(transaction);
+    // Get transaction currency
+    let txCurrency = transaction.currency;
+    if (!txCurrency && transaction.accountId) {
+      const txAccount = accounts.find(a => a.id === transaction.accountId);
+      txCurrency = txAccount?.currency || baseCurrency;
+    }
+    if (!txCurrency) {
+      txCurrency = baseCurrency;
+    }
+
+    let amount = Math.abs(transaction.amount);
+
+    // Convert to budget currency if needed
+    if (txCurrency !== currency && Object.keys(exchangeRates).length > 0) {
+      amount = convertCurrency(
+        amount,
+        txCurrency,
+        currency,
+        exchangeRates,
+        exchangeRatesBaseCurrency || baseCurrency
+      );
+    }
+
     // Replicate getTransactionDelta logic with converted amount
     if (transaction.type === "income") {
-      return acc + convertedAmount;
+      return acc + amount;
     }
     if (transaction.type === "expense") {
-      return acc - convertedAmount;
+      return acc - amount;
     }
     // Transfer: no net effect
     return acc;
@@ -89,6 +145,8 @@ export default function HomeScreen() {
   const getTotalBalanceInBaseCurrency = useFinanceStore((state) => state.getTotalBalanceInBaseCurrency);
   const hasForeignCurrencyAccounts = useFinanceStore((state) => state.hasForeignCurrencyAccounts);
   const getTransactionAmountInBaseCurrency = useFinanceStore((state) => state.getTransactionAmountInBaseCurrency);
+  const exchangeRates = useFinanceStore((state) => state.exchangeRates);
+  const exchangeRatesBaseCurrency = useFinanceStore((state) => state.exchangeRatesBaseCurrency);
 
   const reportableTransactions = useMemo(
     () => transactions.filter((transaction) => !transaction.excludeFromReports),
@@ -865,7 +923,9 @@ export default function HomeScreen() {
                   scopedTransactions,
                   selectedAccountId,
                   categories,
-                  getTransactionAmountInBaseCurrency,
+                  accounts,
+                  exchangeRates,
+                  exchangeRatesBaseCurrency || currency,
                 );
                 const progressPercent = Math.round(progress.percentage * 100);
 
@@ -882,6 +942,9 @@ export default function HomeScreen() {
                   }
                 }
 
+                const budgetAccount = accounts.find(a => a.id === goal.accountId);
+                const budgetCurrency = budgetAccount?.currency || currency;
+
                 return (
                   <Pressable 
                     key={goal.id} 
@@ -891,7 +954,7 @@ export default function HomeScreen() {
                     <View style={styles.goalCopy}>
                       <Text style={styles.goalName}>{goal.name}</Text>
                       <Text style={styles.goalMeta}>
-                        {progress.label}: {progress.formatted} / {formatCurrency(goal.target, currency)}
+                        {progress.label}: {progress.formatted} / {formatCurrency(goal.target, budgetCurrency)}
                       </Text>
                     </View>
                     <View style={styles.goalMeter}>

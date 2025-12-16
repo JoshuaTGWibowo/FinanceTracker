@@ -147,6 +147,7 @@ export interface BudgetGoal {
   target: number;
   period: "week" | "month";
   category: string;
+  accountId: string;
   isRepeating: boolean;
   createdAt: string;
   currentSpending?: number;

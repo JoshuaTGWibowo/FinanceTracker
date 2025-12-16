@@ -130,17 +130,24 @@ export default function BudgetsScreen() {
   const [goalTarget, setGoalTarget] = useState("");
   const [goalPeriod, setGoalPeriod] = useState<(typeof goalPeriods)[number]>("month");
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
+  const [selectedAccount, setSelectedAccount] = useState<any | null>(null);
   const [categoryModalVisible, setCategoryModalVisible] = useState(false);
+  const [accountModalVisible, setAccountModalVisible] = useState(false);
   const [categorySearch, setCategorySearch] = useState("");
   const [isRepeating, setIsRepeating] = useState(true);
 
   const transactions = useFinanceStore((state) => state.transactions);
+  const accounts = useFinanceStore((state) => state.accounts);
+  const exchangeRates = useFinanceStore((state) => state.exchangeRates);
+  const exchangeRatesBaseCurrency = useFinanceStore((state) => state.exchangeRatesBaseCurrency);
 
   const insets = useSafeAreaInsets();
   const styles = useMemo(() => createStyles(theme, insets), [theme, insets]);
 
   // Calculate budget progress based on transactions
   const budgetsWithProgress = useMemo(() => {
+    const { convertCurrency } = require("../../lib/currency");
+    
     if (__DEV__) {
       console.log('[Budget Progress] Calculating for', budgetGoals.length, 'budgets with', transactions.length, 'transactions');
       console.log('[Budget Progress] Sample transaction categories:', transactions.slice(0, 3).map(t => ({ cat: t.category, type: t.type })));
@@ -150,6 +157,14 @@ export default function BudgetsScreen() {
     return budgetGoals.map(goal => {
         const goalStartDate = new Date(goal.createdAt);
         const now = new Date();
+        
+        // Get the budget's account
+        const budgetAccount = accounts.find(a => a.id === goal.accountId);
+        if (!budgetAccount) {
+          return { ...goal, currentSpending: 0, progress: 0 };
+        }
+        
+        const budgetCurrency = budgetAccount.currency || currency;
         
         // Calculate period dates
         let periodStart: Date;
@@ -177,29 +192,56 @@ export default function BudgetsScreen() {
           return { ...goal, currentSpending: 0, progress: 0 };
         }
         
-        // Filter transactions matching budget
+        // Filter transactions matching budget (account + category)
         const matchingTransactions = transactions.filter(t => {
           const txDate = new Date(t.date);
           const inDateRange = txDate >= periodStart && txDate <= periodEnd;
           const isExpense = t.type === 'expense';
           const matchesCategory = doesCategoryMatchBudget(t.category, goal.category, categories, __DEV__);
+          const matchesAccount = t.accountId === goal.accountId;
           
-          return isExpense && matchesCategory && inDateRange;
+          return isExpense && matchesCategory && matchesAccount && inDateRange;
         });
         
-        const spending = matchingTransactions.reduce((sum, t) => sum + Math.abs(getTransactionAmountInBaseCurrency(t)), 0);
+        // Calculate spending with currency conversion
+        const spending = matchingTransactions.reduce((sum, t) => {
+          let transactionCurrency = t.currency;
+          if (!transactionCurrency && t.accountId) {
+            const txAccount = accounts.find(a => a.id === t.accountId);
+            transactionCurrency = txAccount?.currency || currency;
+          }
+          if (!transactionCurrency) {
+            transactionCurrency = currency;
+          }
+          
+          let amount = Math.abs(t.amount);
+          
+          // Convert to budget currency if needed
+          if (transactionCurrency !== budgetCurrency && Object.keys(exchangeRates).length > 0) {
+            amount = convertCurrency(
+              amount,
+              transactionCurrency,
+              budgetCurrency,
+              exchangeRates,
+              exchangeRatesBaseCurrency || currency
+            );
+          }
+          
+          return sum + amount;
+        }, 0);
+        
         const progress = goal.target > 0 ? Math.min((spending / goal.target) * 100, 100) : 0;
         
         // Debug logging
         if (__DEV__) {
-          console.log(`[Budget Result] ${goal.name} (${goal.category}):`, {
+          console.log(`[Budget Result] ${goal.name} (${goal.category}) - Account: ${budgetAccount.name}:`, {
             matchingTxCount: matchingTransactions.length,
             spending,
             target: goal.target,
+            budgetCurrency,
             progress: `${progress}%`,
             periodStart: periodStart.toISOString(),
             periodEnd: periodEnd.toISOString(),
-            totalExpenses: transactions.filter(t => t.type === 'expense' && new Date(t.date) >= periodStart && new Date(t.date) <= periodEnd).length
           });
         }
         
@@ -209,7 +251,7 @@ export default function BudgetsScreen() {
           progress: Math.round(progress)
         };
     });
-  }, [budgetGoals, transactions, categories, getTransactionAmountInBaseCurrency]);
+  }, [budgetGoals, transactions, categories, accounts, currency, exchangeRates, exchangeRatesBaseCurrency]);
 
   const groupedCategories = useMemo(() => {
     const parentCategories = categories.filter((category) => !category.parentCategoryId);
@@ -253,11 +295,17 @@ export default function BudgetsScreen() {
       return;
     }
 
+    if (!selectedAccount) {
+      Alert.alert("Heads up", "Please select an account to track for this budget goal.");
+      return;
+    }
+
     await addBudgetGoal({
       name: goalName.trim(),
       target: targetValue,
       period: goalPeriod,
       category: selectedCategory.name,
+      accountId: selectedAccount.id,
       isRepeating,
       createdAt: new Date().toISOString(),
     });
@@ -265,6 +313,7 @@ export default function BudgetsScreen() {
     setGoalName("");
     setGoalTarget("");
     setSelectedCategory(null);
+    setSelectedAccount(null);
     setIsRepeating(true);
     Alert.alert("Success", "Budget goal created successfully.");
   };
@@ -319,7 +368,7 @@ export default function BudgetsScreen() {
                 <View style={[styles.fieldGroup, styles.flex]}>
                   <Text style={styles.label}>Target amount</Text>
                   <View style={styles.amountInputContainer}>
-                    <Text style={styles.currencySymbol}>{currency}</Text>
+                    <Text style={styles.currencySymbol}>{selectedAccount?.currency || currency}</Text>
                     <TextInput
                       value={goalTarget}
                       onChangeText={(value) => setGoalTarget(formatRawAmountInput(value, separators, groupingFormatter))}
@@ -378,6 +427,34 @@ export default function BudgetsScreen() {
               </View>
 
               <View style={styles.fieldGroup}>
+                <Text style={styles.label}>Account</Text>
+                <Pressable
+                  style={styles.categorySelector}
+                  onPress={() => setAccountModalVisible(true)}
+                >
+                  <View style={styles.categorySelectorContent}>
+                    {selectedAccount ? (
+                      <>
+                        <View style={styles.categoryIconSmall}>
+                          <Ionicons
+                            name="wallet"
+                            size={14}
+                            color={theme.colors.text}
+                          />
+                        </View>
+                        <Text style={styles.categorySelectorText}>
+                          {selectedAccount.name} ({selectedAccount.currency || currency})
+                        </Text>
+                      </>
+                    ) : (
+                      <Text style={styles.categorySelectorPlaceholder}>Choose an account</Text>
+                    )}
+                  </View>
+                  <Ionicons name="chevron-forward" size={20} color={theme.colors.textMuted} />
+                </Pressable>
+              </View>
+
+              <View style={styles.fieldGroup}>
                 <View style={styles.switchRow}>
                   <View style={styles.flex}>
                     <Text style={styles.label}>Repeating budget</Text>
@@ -418,6 +495,8 @@ export default function BudgetsScreen() {
               <View style={styles.goalsList}>
                 {budgetsWithProgress.map((goal) => {
                   const category = categories.find((c) => c.name === goal.category);
+                  const goalAccount = accounts.find((a) => a.id === goal.accountId);
+                  const goalCurrency = goalAccount?.currency || currency;
                   const spending = goal.currentSpending ?? 0;
                   const progress = goal.progress ?? 0;
                   const remaining = Math.max(goal.target - spending, 0);
@@ -443,6 +522,11 @@ export default function BudgetsScreen() {
                             <View style={styles.goalMetaBadge}>
                               <Ionicons name="pricetag" size={11} color={theme.colors.textMuted} />
                               <Text style={styles.goalMetaText}>{goal.category}</Text>
+                            </View>
+                            <Text style={styles.goalMetaDivider}>•</Text>
+                            <View style={styles.goalMetaBadge}>
+                              <Ionicons name="wallet" size={11} color={theme.colors.textMuted} />
+                              <Text style={styles.goalMetaText}>{accounts.find(a => a.id === goal.accountId)?.name || 'Unknown'}</Text>
                             </View>
                             <Text style={styles.goalMetaDivider}>•</Text>
                             <View style={styles.goalMetaBadge}>
@@ -486,7 +570,7 @@ export default function BudgetsScreen() {
                       <View style={styles.progressSection}>
                         <View style={styles.progressHeader}>
                           <Text style={styles.progressText}>
-                            {formatCurrency(spending, currency)} of {formatCurrency(goal.target, currency)}
+                            {formatCurrency(spending, goalCurrency)} of {formatCurrency(goal.target, goalCurrency)}
                           </Text>
                           <Text style={[styles.progressPercentage, isOverBudget && styles.progressPercentageOver]}>
                             {progress}%
@@ -505,12 +589,12 @@ export default function BudgetsScreen() {
                           <View style={styles.progressWarning}>
                             <Ionicons name="warning" size={14} color={theme.colors.danger} />
                             <Text style={styles.progressWarningText}>
-                              Over budget by {formatCurrency(spending - goal.target, currency)}
+                              Over budget by {formatCurrency(spending - goal.target, goalCurrency)}
                             </Text>
                           </View>
                         ) : (
                           <Text style={styles.progressRemaining}>
-                            {formatCurrency(remaining, currency)} remaining
+                            {formatCurrency(remaining, goalCurrency)} remaining
                           </Text>
                         )}
                       </View>
@@ -655,6 +739,74 @@ export default function BudgetsScreen() {
                         </View>
                       )}
                     </View>
+                  );
+                })
+              )}
+            </View>
+          </ScrollView>
+        </SafeAreaView>
+      </Modal>
+
+      <Modal
+        visible={accountModalVisible}
+        animationType="slide"
+        onRequestClose={() => setAccountModalVisible(false)}
+        presentationStyle="pageSheet"
+      >
+        <SafeAreaView style={styles.modal}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Select account</Text>
+            <Pressable
+              onPress={() => setAccountModalVisible(false)}
+              style={styles.modalClose}
+            >
+              <Ionicons name="close" size={24} color={theme.colors.text} />
+            </Pressable>
+          </View>
+
+          <ScrollView
+            contentContainerStyle={styles.modalContent}
+            showsVerticalScrollIndicator={false}
+          >
+            <View style={styles.categoryHeroCard}>
+              <View style={styles.categoryHeroIcon}>
+                <Ionicons name="wallet" size={32} color={theme.colors.primary} />
+              </View>
+              <Text style={styles.categoryHeroTitle}>Pick an account</Text>
+              <Text style={styles.categoryHeroSubtitle}>
+                Choose which account to track spending from
+              </Text>
+            </View>
+
+            <View style={styles.categoryGroupGrid}>
+              {accounts.filter(a => !a.isArchived).length === 0 ? (
+                <Text style={styles.helperText}>No accounts available.</Text>
+              ) : (
+                accounts.filter(a => !a.isArchived).map((account) => {
+                  const isSelected = selectedAccount?.id === account.id;
+                  const accountCurrency = account.currency || currency;
+                  return (
+                    <Pressable
+                      key={account.id}
+                      style={[styles.categoryGroupCard, styles.parentRow]}
+                      onPress={() => {
+                        setSelectedAccount(account);
+                        setAccountModalVisible(false);
+                      }}
+                    >
+                      <View style={styles.parentAvatar}>
+                        <Ionicons name="wallet" size={20} color={theme.colors.text} />
+                      </View>
+                      <View style={styles.flex}>
+                        <Text style={styles.parentName}>{account.name}</Text>
+                        <Text style={styles.metaText}>{accountCurrency}</Text>
+                      </View>
+                      {isSelected ? (
+                        <Ionicons name="checkmark-circle" size={22} color={theme.colors.primary} />
+                      ) : (
+                        <Ionicons name="chevron-forward" size={20} color={theme.colors.textMuted} />
+                      )}
+                    </Pressable>
                   );
                 })
               )}

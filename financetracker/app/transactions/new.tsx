@@ -10,6 +10,11 @@ export default function NewTransactionModal() {
   const addRecurringTransaction = useFinanceStore(
     (state) => state.addRecurringTransaction,
   );
+  const selectedAccountId = useFinanceStore((state) => state.selectedAccountId);
+  const accounts = useFinanceStore((state) => state.accounts);
+
+  // Prefer the user's currently selected account, then fallback to the first active account
+  const initialAccountId = selectedAccountId ?? accounts.find((a) => !a.isArchived)?.id ?? accounts[0]?.id;
 
   return (
     <ErrorBoundary>
@@ -21,6 +26,7 @@ export default function NewTransactionModal() {
           await addTransaction(transaction);
           router.back();
         }}
+        initialValues={initialAccountId ? { accountId: initialAccountId } : undefined}
         enableRecurringOption
         onSubmitRecurring={async (transaction, config) => {
           await addRecurringTransaction({

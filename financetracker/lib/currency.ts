@@ -89,9 +89,13 @@ export const formatCurrency = (
       minimumFractionDigits,
     }).format(value);
   } catch {
-    // Fallback for invalid currency codes
+    // Fallback for invalid currency codes with thousand separators
     const symbol = getCurrencySymbol(currency);
-    const formatted = Math.abs(value).toFixed(maximumFractionDigits);
+    const absValue = Math.abs(value);
+    const formatted = absValue.toLocaleString("en-US", {
+      minimumFractionDigits,
+      maximumFractionDigits,
+    });
     return value < 0 ? `-${symbol}${formatted}` : `${symbol}${formatted}`;
   }
 };

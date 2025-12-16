@@ -34,7 +34,8 @@ export default function BudgetDetailScreen() {
   const dateFormat = useFinanceStore((state) => state.preferences.dateFormat);
   const accounts = useFinanceStore((state) => state.accounts);
   const removeBudgetGoal = useFinanceStore((state) => state.removeBudgetGoal);
-  const getTransactionAmountInBaseCurrency = useFinanceStore((state) => state.getTransactionAmountInBaseCurrency);
+  const exchangeRates = useFinanceStore((state) => state.exchangeRates);
+  const exchangeRatesBaseCurrency = useFinanceStore((state) => state.exchangeRatesBaseCurrency);
 
   const insets = useSafeAreaInsets();
   const styles = useMemo(() => createStyles(theme, insets), [theme, insets]);
@@ -42,7 +43,9 @@ export default function BudgetDetailScreen() {
   const budget = budgetGoals.find((g) => g.id === id);
 
   // Calculate period dates
-  const { periodStart, periodEnd, matchingTransactions, spending, progress, isOverBudget } = useMemo(() => {
+  const { periodStart, periodEnd, matchingTransactions, spending, progress, isOverBudget, budgetAccount, budgetCurrency } = useMemo(() => {
+    const { convertCurrency } = require("../../lib/currency");
+    
     if (!budget) {
       return {
         periodStart: new Date(),
@@ -51,8 +54,27 @@ export default function BudgetDetailScreen() {
         spending: 0,
         progress: 0,
         isOverBudget: false,
+        budgetAccount: null,
+        budgetCurrency: currency,
       };
     }
+
+    // Get the budget's account
+    const account = accounts.find(a => a.id === budget.accountId);
+    if (!account) {
+      return {
+        periodStart: new Date(),
+        periodEnd: new Date(),
+        matchingTransactions: [],
+        spending: 0,
+        progress: 0,
+        isOverBudget: false,
+        budgetAccount: null,
+        budgetCurrency: currency,
+      };
+    }
+
+    const accountCurrency = account.currency || currency;
 
     const now = new Date();
     let start: Date;
@@ -73,16 +95,44 @@ export default function BudgetDetailScreen() {
       end = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
     }
 
+    // Filter by both account and category
     const matching = transactions.filter(t => {
       const txDate = new Date(t.date);
       const inDateRange = txDate >= start && txDate <= end;
       const isExpense = t.type === 'expense';
       const matchesCategory = doesCategoryMatchBudget(t.category, budget.category, categories);
+      const matchesAccount = t.accountId === budget.accountId;
       
-      return isExpense && matchesCategory && inDateRange;
+      return isExpense && matchesCategory && matchesAccount && inDateRange;
     });
 
-    const totalSpending = matching.reduce((sum, t) => sum + Math.abs(getTransactionAmountInBaseCurrency(t)), 0);
+    // Calculate spending with currency conversion
+    const totalSpending = matching.reduce((sum, t) => {
+      let transactionCurrency = t.currency;
+      if (!transactionCurrency && t.accountId) {
+        const txAccount = accounts.find(a => a.id === t.accountId);
+        transactionCurrency = txAccount?.currency || currency;
+      }
+      if (!transactionCurrency) {
+        transactionCurrency = currency;
+      }
+      
+      let amount = Math.abs(t.amount);
+      
+      // Convert to budget currency if needed
+      if (transactionCurrency !== accountCurrency && Object.keys(exchangeRates).length > 0) {
+        amount = convertCurrency(
+          amount,
+          transactionCurrency,
+          accountCurrency,
+          exchangeRates,
+          exchangeRatesBaseCurrency || currency
+        );
+      }
+      
+      return sum + amount;
+    }, 0);
+
     const progressPercent = budget.target > 0 ? Math.min((totalSpending / budget.target) * 100, 100) : 0;
     const over = totalSpending > budget.target;
 
@@ -93,8 +143,10 @@ export default function BudgetDetailScreen() {
       spending: totalSpending,
       progress: Math.round(progressPercent),
       isOverBudget: over,
+      budgetAccount: account,
+      budgetCurrency: accountCurrency,
     };
-  }, [budget, transactions, categories, getTransactionAmountInBaseCurrency]);
+  }, [budget, transactions, categories, accounts, currency, exchangeRates, exchangeRatesBaseCurrency]);
 
   const handleDelete = () => {
     if (!budget) return;
@@ -174,6 +226,11 @@ export default function BudgetDetailScreen() {
                 </View>
                 <Text style={styles.metaDivider}>•</Text>
                 <View style={styles.metaBadge}>
+                  <Ionicons name="wallet" size={12} color={theme.colors.textMuted} />
+                  <Text style={styles.metaText}>{budgetAccount?.name || 'Unknown'}</Text>
+                </View>
+                <Text style={styles.metaDivider}>•</Text>
+                <View style={styles.metaBadge}>
                   <Ionicons name="calendar" size={12} color={theme.colors.textMuted} />
                   <Text style={styles.metaText}>{budget.period}ly</Text>
                 </View>
@@ -202,10 +259,10 @@ export default function BudgetDetailScreen() {
           <View style={styles.progressSection}>
             <View style={styles.progressHeader}>
               <Text style={styles.spendingText}>
-                {formatCurrency(spending, currency)}
+                {formatCurrency(spending, budgetCurrency)}
               </Text>
               <Text style={styles.targetText}>
-                of {formatCurrency(budget.target, currency)}
+                of {formatCurrency(budget.target, budgetCurrency)}
               </Text>
             </View>
             
@@ -227,12 +284,12 @@ export default function BudgetDetailScreen() {
                 <View style={styles.warningBadge}>
                   <Ionicons name="warning" size={14} color={theme.colors.danger} />
                   <Text style={styles.warningText}>
-                    Over by {formatCurrency(spending - budget.target, currency)}
+                    Over by {formatCurrency(spending - budget.target, budgetCurrency)}
                   </Text>
                 </View>
               ) : (
                 <Text style={styles.remainingText}>
-                  {formatCurrency(remaining, currency)} remaining
+                  {formatCurrency(remaining, budgetCurrency)} remaining
                 </Text>
               )}
             </View>
@@ -251,8 +308,30 @@ export default function BudgetDetailScreen() {
           {matchingTransactions.length > 0 ? (
             <View style={styles.transactionsList}>
               {matchingTransactions.map((transaction) => {
+                const { convertCurrency } = require("../../lib/currency");
                 const txCategory = categories.find(c => c.id === transaction.category);
                 const account = accounts.find(a => a.id === transaction.accountId);
+                
+                // Get transaction currency and convert to budget currency
+                let txCurrency = transaction.currency;
+                if (!txCurrency && transaction.accountId) {
+                  const txAccount = accounts.find(a => a.id === transaction.accountId);
+                  txCurrency = txAccount?.currency || currency;
+                }
+                if (!txCurrency) {
+                  txCurrency = currency;
+                }
+
+                let amount = Math.abs(transaction.amount);
+                if (txCurrency !== budgetCurrency && Object.keys(exchangeRates).length > 0) {
+                  amount = convertCurrency(
+                    amount,
+                    txCurrency,
+                    budgetCurrency,
+                    exchangeRates,
+                    exchangeRatesBaseCurrency || currency
+                  );
+                }
                 
                 return (
                   <Pressable
@@ -284,7 +363,7 @@ export default function BudgetDetailScreen() {
                       </View>
                     </View>
                     <Text style={styles.transactionAmount}>
-                      {currency}{getTransactionAmountInBaseCurrency(transaction).toFixed(2)}
+                      {formatCurrency(amount, budgetCurrency)}
                     </Text>
                   </Pressable>
                 );
