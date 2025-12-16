@@ -597,12 +597,16 @@ const createStyles = (
       borderRadius: theme.radii.md,
       backgroundColor: theme.colors.primary,
       paddingHorizontal: theme.spacing.lg,
-      justifyContent: "center",
+      paddingVertical: theme.spacing.sm,
+      flexDirection: "row",
       alignItems: "center",
+      justifyContent: "center",
+      gap: theme.spacing.xs,
     },
     secondaryButtonText: {
       color: theme.colors.text,
       fontWeight: "600",
+      fontSize: 14,
     },
     themeRow: {
       flexDirection: "row",

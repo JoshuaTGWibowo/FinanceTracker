@@ -206,11 +206,6 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>) =>
       backgroundColor: theme.colors.success,
       alignItems: "center",
       justifyContent: "center",
-      shadowColor: theme.colors.success,
-      shadowOpacity: Platform.OS === "ios" ? 0.35 : 0.18,
-      shadowRadius: 10,
-      shadowOffset: { width: 0, height: 6 },
-      elevation: 4,
     },
     addButtonLabel: {
       fontSize: 10,
