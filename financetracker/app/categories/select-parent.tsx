@@ -22,6 +22,7 @@ export default function SelectParentScreen() {
     const search = query.trim().toLowerCase();
     return items
       .filter((category) => category.type === (draft?.type ?? "expense"))
+      .filter((category) => !category.parentCategoryId) // Only show top-level categories
       .filter((category) => (search ? category.name.toLowerCase().includes(search) : true))
       .filter((category) => category.id !== draft?.id);
   }, [draft?.id, draft?.type, items, query]);

@@ -540,6 +540,8 @@ export function TransactionForm({
 
   const handleOpenCreateCategory = () => {
     const categoryType = transactionType === "income" ? "income" : "expense";
+    setCategoryModalVisible(false);
+    setCategorySearch("");
     router.push(`/categories/new?type=${categoryType}`);
   };
 

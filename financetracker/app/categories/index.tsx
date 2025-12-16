@@ -53,7 +53,7 @@ export default function CategoriesScreen() {
 
     const parents = candidates.filter((category) => !category.parentCategoryId);
     const orphans = candidates.filter(
-      (category) => category.parentCategoryId && !parents.find((parent) => parent.id === category.parentCategoryId),
+      (category) => category.parentCategoryId && !candidates.find((c) => c.id === category.parentCategoryId),
     );
 
     const groups = [
@@ -432,6 +432,20 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>) =>
       marginTop: 8,
       borderWidth: 2,
       borderColor: theme.colors.surface,
+    },
+    grandchildrenList: {
+      paddingLeft: 24,
+    },
+    grandchildRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: theme.spacing.sm,
+      paddingVertical: theme.spacing.xs,
+    },
+    grandchildConnector: {
+      width: 24,
+      alignItems: "center",
+      position: "relative" as const,
     },
     childIcon: {
       width: 30,
