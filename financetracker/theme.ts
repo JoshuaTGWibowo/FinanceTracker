@@ -62,6 +62,188 @@ const lightColors: Colors = {
   border: "#CBD5E1",
 };
 
+const oceanColors: Colors = {
+  background: "#0A1628",
+  surface: "#0F1F3D",
+  surfaceElevated: "#1A2F4F",
+  primary: "#06B6D4",
+  primaryMuted: "#0891B2",
+  accent: "#22D3EE",
+  text: "#F0F9FF",
+  textMuted: "#93C5FD",
+  success: "#34D399",
+  danger: "#FB7185",
+  border: "#1E3A5F",
+};
+
+const sunsetColors: Colors = {
+  background: "#1A0B1E",
+  surface: "#2D1B3D",
+  surfaceElevated: "#3D2652",
+  primary: "#F472B6",
+  primaryMuted: "#EC4899",
+  accent: "#FBCFE8",
+  text: "#FDF4FF",
+  textMuted: "#E9D5FF",
+  success: "#A78BFA",
+  danger: "#FB923C",
+  border: "#4C1D95",
+};
+
+const forestColors: Colors = {
+  background: "#0C1410",
+  surface: "#1A2920",
+  surfaceElevated: "#233B30",
+  primary: "#10B981",
+  primaryMuted: "#059669",
+  accent: "#34D399",
+  text: "#F0FDF4",
+  textMuted: "#86EFAC",
+  success: "#4ADE80",
+  danger: "#FCA5A5",
+  border: "#1F3B2E",
+};
+
+const lavenderColors: Colors = {
+  background: "#1C1525",
+  surface: "#2A1F3D",
+  surfaceElevated: "#3D2A5A",
+  primary: "#A78BFA",
+  primaryMuted: "#8B5CF6",
+  accent: "#C4B5FD",
+  text: "#FAF5FF",
+  textMuted: "#DDD6FE",
+  success: "#34D399",
+  danger: "#F472B6",
+  border: "#4C1D95",
+};
+
+const midnightColors: Colors = {
+  background: "#0A0E27",
+  surface: "#151B3E",
+  surfaceElevated: "#1F2850",
+  primary: "#818CF8",
+  primaryMuted: "#6366F1",
+  accent: "#A5B4FC",
+  text: "#F1F5F9",
+  textMuted: "#94A3B8",
+  success: "#22D3EE",
+  danger: "#FB7185",
+  border: "#1E3A8A",
+};
+
+const coralColors: Colors = {
+  background: "#1A0F0A",
+  surface: "#2D1B14",
+  surfaceElevated: "#442820",
+  primary: "#FB923C",
+  primaryMuted: "#F97316",
+  accent: "#FDBA74",
+  text: "#FFF7ED",
+  textMuted: "#FED7AA",
+  success: "#4ADE80",
+  danger: "#EF4444",
+  border: "#7C2D12",
+};
+
+const arcticColors: Colors = {
+  background: "#0C1821",
+  surface: "#162838",
+  surfaceElevated: "#1F3A52",
+  primary: "#67E8F9",
+  primaryMuted: "#06B6D4",
+  accent: "#A5F3FC",
+  text: "#ECFEFF",
+  textMuted: "#99F6E4",
+  success: "#6EE7B7",
+  danger: "#FCA5A5",
+  border: "#164E63",
+};
+
+const autumnColors: Colors = {
+  background: "#1C1410",
+  surface: "#2D221A",
+  surfaceElevated: "#443226",
+  primary: "#FBBF24",
+  primaryMuted: "#F59E0B",
+  accent: "#FCD34D",
+  text: "#FFFBEB",
+  textMuted: "#FDE68A",
+  success: "#84CC16",
+  danger: "#F87171",
+  border: "#78350F",
+};
+
+const crimsonColors: Colors = {
+  background: "#0A0404",
+  surface: "#1A0909",
+  surfaceElevated: "#2D1212",
+  primary: "#DC2626",
+  primaryMuted: "#B91C1C",
+  accent: "#EF4444",
+  text: "#FEF2F2",
+  textMuted: "#FCA5A5",
+  success: "#22C55E",
+  danger: "#F87171",
+  border: "#7F1D1D",
+};
+
+const pastelColors: Colors = {
+  background: "#FAF5FF",
+  surface: "#FFFFFF",
+  surfaceElevated: "#F3E8FF",
+  primary: "#D946EF",
+  primaryMuted: "#C026D3",
+  accent: "#E879F9",
+  text: "#3B0764",
+  textMuted: "#86198F",
+  success: "#4ADE80",
+  danger: "#FB7185",
+  border: "#F5D0FE",
+};
+
+const mintColors: Colors = {
+  background: "#ECFDF5",
+  surface: "#FFFFFF",
+  surfaceElevated: "#D1FAE5",
+  primary: "#10B981",
+  primaryMuted: "#059669",
+  accent: "#34D399",
+  text: "#064E3B",
+  textMuted: "#047857",
+  success: "#22C55E",
+  danger: "#EF4444",
+  border: "#A7F3D0",
+};
+
+const roseColors: Colors = {
+  background: "#FFF1F2",
+  surface: "#FFFFFF",
+  surfaceElevated: "#FFE4E6",
+  primary: "#F43F5E",
+  primaryMuted: "#E11D48",
+  accent: "#FB7185",
+  text: "#4C0519",
+  textMuted: "#881337",
+  success: "#10B981",
+  danger: "#DC2626",
+  border: "#FECDD3",
+};
+
+const slateColors: Colors = {
+  background: "#0F172A",
+  surface: "#1E293B",
+  surfaceElevated: "#334155",
+  primary: "#64748B",
+  primaryMuted: "#475569",
+  accent: "#94A3B8",
+  text: "#F1F5F9",
+  textMuted: "#CBD5E1",
+  success: "#22D3EE",
+  danger: "#F87171",
+  border: "#475569",
+};
+
 const buildTypography = (colors: Colors, screen: ReturnType<typeof useScreenSize>) => ({
   title: {
     fontSize: responsiveFontSize(screen.isSmallDevice ? 24 : 28),
@@ -152,7 +334,55 @@ const buildComponents = (colors: Colors, screen: ReturnType<typeof useScreenSize
 });
 
 const buildTheme = (mode: ThemeMode, screen: ReturnType<typeof useScreenSize>) => {
-  const colors = mode === "light" ? lightColors : darkColors;
+  let colors: Colors;
+  switch (mode) {
+    case "light":
+      colors = lightColors;
+      break;
+    case "ocean":
+      colors = oceanColors;
+      break;
+    case "sunset":
+      colors = sunsetColors;
+      break;
+    case "forest":
+      colors = forestColors;
+      break;
+    case "lavender":
+      colors = lavenderColors;
+      break;
+    case "midnight":
+      colors = midnightColors;
+      break;
+    case "coral":
+      colors = coralColors;
+      break;
+    case "arctic":
+      colors = arcticColors;
+      break;
+    case "autumn":
+      colors = autumnColors;
+      break;
+    case "crimson":
+      colors = crimsonColors;
+      break;
+    case "pastel":
+      colors = pastelColors;
+      break;
+    case "mint":
+      colors = mintColors;
+      break;
+    case "rose":
+      colors = roseColors;
+      break;
+    case "slate":
+      colors = slateColors;
+      break;
+    case "dark":
+    default:
+      colors = darkColors;
+      break;
+  }
   return {
     colors,
     spacing,

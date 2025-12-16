@@ -126,7 +126,7 @@ export const DEFAULT_CATEGORIES: Category[] = [
 
 export const DEFAULT_ACCOUNT_ID = "account-main";
 
-export type ThemeMode = "light" | "dark";
+export type ThemeMode = "light" | "dark" | "ocean" | "sunset" | "forest" | "lavender" | "midnight" | "coral" | "arctic" | "autumn" | "crimson" | "pastel" | "mint" | "rose" | "slate";
 
 export interface RecurringTransaction {
   id: string;

@@ -65,6 +65,7 @@ export default function AccountScreen() {
   const [currency, setCurrency] = useState(profile.currency);
   const [isLoadingMockData, setIsLoadingMockData] = useState(false);
   const [currencyExpanded, setCurrencyExpanded] = useState(false);
+  const [themeExpanded, setThemeExpanded] = useState(false);
 
   const insets = useSafeAreaInsets();
   const styles = useMemo(() => createStyles(theme, insets), [theme, insets]);
@@ -286,30 +287,119 @@ export default function AccountScreen() {
           </View>
 
           <View style={[theme.components.surface, styles.sectionCard]}>
-            <Text style={styles.sectionTitle}>Theme</Text>
-            <View style={styles.themeRow}>
-              {(["dark", "light"] as ThemeMode[]).map((mode) => {
-                const active = themeMode === mode;
-                return (
-                  <Pressable
-                    key={mode}
-                    style={[styles.themeChip, active && styles.themeChipActive]}
-                    onPress={() => void setThemeMode(mode)}
-                    accessibilityRole="button"
-                    accessibilityState={{ selected: active }}
-                  >
-                    <Ionicons
-                      name={mode === "dark" ? "moon" : "sunny"}
-                      size={18}
-                      color={active ? theme.colors.text : theme.colors.textMuted}
-                    />
-                    <Text style={[styles.themeChipText, active && styles.themeChipTextActive]}>
-                      {mode === "dark" ? "Dark" : "Light"}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
+            <Pressable 
+              style={styles.accordionHeader}
+              onPress={() => setThemeExpanded(!themeExpanded)}
+            >
+              <View style={styles.accordionHeaderLeft}>
+                <View style={styles.accordionIconContainer}>
+                  <Ionicons name="color-palette-outline" size={20} color={theme.colors.primary} />
+                </View>
+                <View>
+                  <Text style={styles.sectionTitle}>Theme</Text>
+                  <Text style={styles.accordionSubtitle}>
+                    {(() => {
+                      switch(themeMode) {
+                        case "light": return "Light";
+                        case "dark": return "Dark";
+                        case "ocean": return "Ocean";
+                        case "sunset": return "Sunset";
+                        case "forest": return "Forest";
+                        case "lavender": return "Lavender";
+                        case "midnight": return "Midnight";
+                        case "coral": return "Coral";
+                        case "arctic": return "Arctic";
+                        case "autumn": return "Autumn";
+                        case "crimson": return "Crimson";
+                        case "pastel": return "Pastel";
+                        case "mint": return "Mint";
+                        case "rose": return "Rose";
+                        case "slate": return "Slate";
+                      }
+                    })()}
+                  </Text>
+                </View>
+              </View>
+              <Ionicons 
+                name={themeExpanded ? "chevron-up" : "chevron-down"} 
+                size={20} 
+                color={theme.colors.textMuted} 
+              />
+            </Pressable>
+            
+            {themeExpanded && (
+              <View style={styles.accordionContent}>
+                <View style={styles.themeGrid}>
+                  {(["light", "dark", "ocean", "sunset", "forest", "lavender", "midnight", "coral", "arctic", "autumn", "crimson", "pastel", "mint", "rose", "slate"] as ThemeMode[]).map((mode) => {
+                    const active = themeMode === mode;
+                    const getThemeIcon = () => {
+                      switch(mode) {
+                        case "light": return "sunny";
+                        case "dark": return "moon";
+                        case "ocean": return "water";
+                        case "sunset": return "partly-sunny";
+                        case "forest": return "leaf";
+                        case "lavender": return "flower";
+                        case "midnight": return "moon-outline";
+                        case "coral": return "flame";
+                        case "arctic": return "snow";
+                        case "autumn": return "leaf-outline";
+                        case "crimson": return "fitness";
+                        case "pastel": return "heart";
+                        case "mint": return "sparkles";
+                        case "rose": return "rose";
+                        case "slate": return "layers";
+                      }
+                    };
+                    const getThemeLabel = () => {
+                      switch(mode) {
+                        case "light": return "Light";
+                        case "dark": return "Dark";
+                        case "ocean": return "Ocean";
+                        case "sunset": return "Sunset";
+                        case "forest": return "Forest";
+                        case "lavender": return "Lavender";
+                        case "midnight": return "Midnight";
+                        case "coral": return "Coral";
+                        case "arctic": return "Arctic";
+                        case "autumn": return "Autumn";
+                        case "crimson": return "Crimson";
+                        case "pastel": return "Pastel";
+                        case "mint": return "Mint";
+                        case "rose": return "Rose";
+                        case "slate": return "Slate";
+                      }
+                    };
+                    return (
+                      <Pressable
+                        key={mode}
+                        style={[styles.themeCard, active && styles.themeCardActive]}
+                        onPress={() => {
+                          void setThemeMode(mode);
+                          setThemeExpanded(false);
+                        }}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected: active }}
+                      >
+                        <Ionicons
+                          name={getThemeIcon()}
+                          size={24}
+                          color={active ? theme.colors.primary : theme.colors.textMuted}
+                        />
+                        <Text style={[styles.themeCardText, active && styles.themeCardTextActive]}>
+                          {getThemeLabel()}
+                        </Text>
+                        {active && (
+                          <View style={styles.themeCardCheckmark}>
+                            <Ionicons name="checkmark-circle" size={16} color={theme.colors.primary} />
+                          </View>
+                        )}
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
+            )}
           </View>
 
           <View style={[theme.components.surface, styles.sectionCard]}>
@@ -612,6 +702,73 @@ const createStyles = (
       flexDirection: "row",
       gap: theme.spacing.sm,
       flexWrap: "wrap",
+    },
+    themeGrid: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: theme.spacing.md,
+      marginTop: theme.spacing.sm,
+    },
+    themeCard: {
+      flex: 1,
+      minWidth: "30%",
+      alignItems: "center",
+      gap: theme.spacing.xs,
+      paddingVertical: theme.spacing.lg,
+      paddingHorizontal: theme.spacing.sm,
+      borderRadius: theme.radii.md,
+      borderWidth: 2,
+      borderColor: theme.colors.border,
+      backgroundColor: theme.colors.surface,
+      position: "relative",
+    },
+    themeCardActive: {
+      borderColor: theme.colors.primary,
+      backgroundColor: `${theme.colors.primary}12`,
+    },
+    themeCardText: {
+      fontSize: 13,
+      fontWeight: "600",
+      color: theme.colors.textMuted,
+    },
+    themeCardTextActive: {
+      color: theme.colors.text,
+    },
+    themeCardCheckmark: {
+      position: "absolute",
+      top: 6,
+      right: 6,
+    },
+    accordionHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      paddingVertical: theme.spacing.xs,
+    },
+    accordionHeaderLeft: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: theme.spacing.md,
+      flex: 1,
+    },
+    accordionIconContainer: {
+      width: 40,
+      height: 40,
+      borderRadius: theme.radii.lg,
+      backgroundColor: `${theme.colors.primary}22`,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    accordionSubtitle: {
+      fontSize: 13,
+      color: theme.colors.textMuted,
+      marginTop: 2,
+    },
+    accordionContent: {
+      marginTop: theme.spacing.md,
+      paddingTop: theme.spacing.md,
+      borderTopWidth: 1,
+      borderTopColor: theme.colors.border,
     },
     themeChip: {
       flexDirection: "row",
